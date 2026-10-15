@@ -1,4 +1,4 @@
-import { format, plural, useT } from '../i18n/i18n.ts'
+import { plural, useT } from '../i18n/i18n.ts'
 import { Button } from '../ui/Button.tsx'
 import { Dialog } from '../ui/Dialog.tsx'
 import { CloseLibraryDialog } from './CloseLibraryDialog.tsx'
@@ -38,7 +38,7 @@ export function ImportConfirmDialog() {
         </>
       }
     >
-      <p>{format(t.packImport.confirmBody, values)}</p>
+      <p>{plural(t, t.packImport.confirmBody, count, values)}</p>
     </Dialog>
   )
 }

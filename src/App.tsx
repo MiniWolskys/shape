@@ -77,6 +77,11 @@ export function App() {
   // The screen lives in the URL: Back, Forward and reloads follow it (I10).
   useEffect(() => startHashRouting(), [])
 
+  // A new screen starts at its top, not where the last one was scrolled to.
+  useEffect(() => {
+    document.documentElement.scrollTop = 0
+  }, [screen.name])
+
   useEffect(() => {
     // init returns the same promise while it runs, so StrictMode's second call is harmless.
     useWorkspace

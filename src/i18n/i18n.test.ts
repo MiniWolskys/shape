@@ -65,9 +65,18 @@ describe('dictionaries', () => {
       expect(Object.keys(dict.mcColors).sort()).toEqual([...MC_COLORS].sort())
     }
   })
-  it('uses non-breaking spaces before : ; ! ? and % in French', () => {
+  it('follows French typography: non-breaking spaces before : ; ! ? % and inside « »', () => {
     for (const [path, value] of leaves(fr)) {
-      expect(value as string, path).not.toMatch(/ [:;!?%]/)
+      const text = value as string
+      expect(text, path).not.toMatch(/ [:;!?%»]/)
+      expect(text, path).not.toMatch(/« /)
+      expect(text, path).not.toMatch(/«(?! )/)
+      expect(text, path).not.toMatch(/(?<! )»/)
+    }
+  })
+  it('uses the typographic apostrophe in French, never the straight one', () => {
+    for (const [path, value] of leaves(fr)) {
+      expect(value as string, path).not.toContain("'")
     }
   })
 })

@@ -79,6 +79,36 @@ describe('HomeScreen', () => {
     expect(within(heading).getByText('Shape').tagName).toBe('EM')
   })
 
+  it('explains how it works in three steps, the library pack and the mod (I12, I20)', () => {
+    renderHome()
+    const how = screen.getByRole('region', { name: 'How it works' })
+    expect(
+      within(how)
+        .getAllByRole('heading', { level: 3 })
+        .map((h) => h.textContent),
+    ).toEqual(['Make a painting', 'Collect them in a library', 'Export one file for your server'])
+    expect(how).toHaveTextContent('A library pack is the .zip Shape exports')
+    expect(how).toHaveTextContent('Transparent Paintings mod')
+  })
+
+  it('names the file to drop only once one was exported (I19)', async () => {
+    renderHome()
+    expect(screen.getByText('a library pack .zip')).toBeInTheDocument()
+    act(() => useWorkspace.getState().createLibrary('Ours', 'ours'))
+    expect(screen.getByText('a library pack .zip')).toBeInTheDocument()
+    act(() =>
+      useWorkspace.setState((s) => ({ library: s.library && { ...s.library, version: 3 } })),
+    )
+    expect(screen.getByText('ours-v3.zip')).toBeInTheDocument()
+  })
+
+  it('says where a new painting goes when a library is open (I19)', () => {
+    renderHome()
+    expect(screen.getByText('No library needed. Add it to one later.')).toBeInTheDocument()
+    act(() => useWorkspace.getState().createLibrary('Ours', 'ours'))
+    expect(screen.getByText('Goes into Ours.')).toBeInTheDocument()
+  })
+
   it('shows the wall showcase', () => {
     renderHome()
     expect(screen.getByRole('img', { name: /Gothic arch · 3×4 blocks/ })).toBeInTheDocument()
@@ -187,6 +217,12 @@ describe('HomeScreen', () => {
     renderHome()
     expect(screen.getByText('Resume where you left off')).toBeInTheDocument()
     expect(screen.getByText(/Our paintings v7 · 2 paintings in progress/)).toBeInTheDocument()
+    // Returning players find it first (I19).
+    const resumeButton = screen.getByRole('button', { name: /Resume where you left off/ })
+    const create = screen.getByRole('button', { name: 'Create a painting' })
+    expect(resumeButton.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
     await userEvent.click(screen.getByRole('button', { name: /Resume where you left off/ }))
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
   })
@@ -197,6 +233,16 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Resume where you left off')).toBeInTheDocument()
     act(() => useWorkspace.getState().closeLibrary())
     expect(screen.queryByText('Resume where you left off')).not.toBeInTheDocument()
+  })
+
+  it('says when the latest painting was saved (I19)', async () => {
+    const minutesAgo = new Date(Date.now() - 5 * 60_000).toISOString()
+    const p = { ...createPainting({ title: 'Solo' }, now, () => 0.4), updatedAt: minutesAgo }
+    await startWith({ library: null, loose: [p], assets: {} })
+    renderHome()
+    expect(screen.getByText(/saved 5 minutes ago/)).toBeInTheDocument()
+    act(() => useLanguage.setState({ language: 'fr' }))
+    expect(screen.getByText(/enregistré il y a 5 minutes/)).toBeInTheDocument()
   })
 
   it('offers Resume for work started in this visit', () => {
@@ -299,10 +345,10 @@ describe('HomeScreen', () => {
   it('titles the sample paintings in the current language', async () => {
     renderHome()
     act(() => useLanguage.setState({ language: 'fr' }))
-    await userEvent.click(screen.getByRole('button', { name: "Essayer la bibliothèque d'exemple" }))
+    await userEvent.click(screen.getByRole('button', { name: 'Essayer la démo' }))
     expect(useWorkspace.getState().library?.paintings.map((p) => p.title)).toEqual([
       'Chapelle au couchant',
-      'Rose de nuit',
+      'Rosace de nuit',
       'Fenêtre de printemps',
       'Oculus de givre',
     ])
@@ -313,9 +359,7 @@ describe('HomeScreen', () => {
     act(() => useLanguage.setState({ language: 'fr' }))
     const heading = screen.getByRole('heading', { level: 1 })
     expect(within(heading).getByText('Façonnez').tagName).toBe('EM')
-    expect(heading).toHaveTextContent(
-      "Façonnez n'importe quelle image en un tableau que l'on peut traverser du regard.",
-    )
+    expect(heading).toHaveTextContent('Façonnez vos images en tableaux-fenêtres.')
     expect(screen.getByRole('button', { name: 'Créer un tableau' })).toBeInTheDocument()
   })
 })

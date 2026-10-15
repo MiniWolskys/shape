@@ -557,6 +557,8 @@ export function CanvasStage({
           />
         </div>
       </div>
+      {/* Names the mod behind "see-through" (I12); always there, so the canvas never moves. */}
+      <p className={styles.modNote}>{t.editor.modNote}</p>
 
       <div
         ref={area}
