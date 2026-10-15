@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import {
 } from 'react'
 import { format, useT } from '../../i18n/i18n.ts'
 import type { Raster } from '../../imaging/raster.ts'
+import { brushFootprint } from '../../imaging/tools.ts'
 import { renderWallPreview } from '../../imaging/wall.ts'
 import { withoutMod } from '../../imaging/window.ts'
 import { useEditor, type BackdropChoice, type CanvasView } from '../../state/editor.ts'
@@ -23,6 +25,7 @@ import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
 import { Segmented } from '../../ui/Segmented.tsx'
 import styles from './CanvasStage.module.css'
 import { IMAGE_TYPES, loadPicture } from './pictureActions.ts'
+import { anchoredScroll, anchorPoint, nextZoom } from './stageZoom.ts'
 
 export type PixelPhase = 'down' | 'move' | 'up'
 
@@ -46,9 +49,14 @@ export interface CanvasStageProps {
   footer?: ReactNode
   /** Controls floating over the canvas's top-left corner (the pixel tools), in the Editor view. */
   tools?: ReactNode
+  /** Side of the brush in painting pixels: its outline follows the pointer over the painting. */
+  brush?: number
+  /** One line under the canvas, in the Editor view: how the current tool works. */
+  hint?: ReactNode
+  /** Floats over the bottom of the canvas in the Editor view (the selection bar). */
+  floating?: ReactNode
 }
 
-const ZOOM_STEPS = [0.25, 0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64]
 /** Room kept around the painting when fitting it. */
 const FIT_MARGIN = 32
 /** Extra room on the left for the tools column (matches the CSS padding). */
@@ -63,11 +71,6 @@ function fitScale(raster: Raster, box: { width: number; height: number }): numbe
   )
   if (!Number.isFinite(contain) || contain <= 0) return 1
   return contain >= 1 ? Math.floor(contain) : contain
-}
-
-function nextZoom(scale: number, direction: 1 | -1): number {
-  if (direction > 0) return ZOOM_STEPS.find((z) => z > scale + 1e-6) ?? scale
-  return [...ZOOM_STEPS].reverse().find((z) => z < scale - 1e-6) ?? scale
 }
 
 /** Painting pixel under the pointer; clamped to the painting only when asked. */
@@ -86,6 +89,15 @@ function pixelAt(
   return { x: Math.min(width - 1, Math.max(0, x)), y: Math.min(height - 1, Math.max(0, y)) }
 }
 
+/** Focus is somewhere Space types into. */
+function typesSpace(target: EventTarget | null): boolean {
+  if (target instanceof HTMLInputElement) {
+    return !['button', 'checkbox', 'radio', 'range'].includes(target.type)
+  }
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true
+  return target instanceof HTMLElement && target.isContentEditable
+}
+
 /** Size of an element, kept up to date while it resizes. */
 function useBoxSize(ref: { current: HTMLElement | null }) {
   const [size, setSize] = useState({ width: 640, height: 480 })
@@ -101,7 +113,17 @@ function useBoxSize(ref: { current: HTMLElement | null }) {
   return size
 }
 
-export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProps) {
+type ZoomTo = (next: number, at?: { x: number; y: number }) => void
+
+export function CanvasStage({
+  onPixel,
+  overlay,
+  footer,
+  tools,
+  brush,
+  hint,
+  floating,
+}: CanvasStageProps) {
   const t = useT()
   const painting = useEditor((s) => s.painting)
   const view = useEditor((s) => s.view)
@@ -112,9 +134,23 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
   const empty = useEditor((s) => s.painting?.recipe.source === null && s.edits === null)
   const rendered = useRenderedPainting()
   const area = useRef<HTMLDivElement>(null)
+  const surface = useRef<HTMLDivElement>(null)
+  const paintingBox = useRef<HTMLDivElement>(null)
+  const brushOutline = useRef<HTMLDivElement>(null)
   const box = useBoxSize(area)
   const drawing = useRef(false)
   const lastPixel = useRef({ x: 0, y: 0 })
+  /** The painting pixel under the pointer, for the brush outline (null off the painting). */
+  const hover = useRef<{ x: number; y: number } | null>(null)
+  /** A zoom waiting for its layout: the painting point to bring back under a screen point. */
+  const anchor = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
+  /** Space held over the canvas ('ready'), or the view being dragged ('active'). */
+  const [pan, setPan] = useState<'ready' | 'active' | null>(null)
+  const panning = useRef<{ id: number; x: number; y: number; left: number; top: number } | null>(
+    null,
+  )
+  const pointerOver = useRef(false)
+  const spaceHeld = useRef(false)
 
   const material = painting?.recipe.frame.material ?? 'dark_oak'
   const kind: BackdropKind = backdrop === 'auto' ? autoBackdrop(material) : backdrop
@@ -140,8 +176,56 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
   const fitBox = withTools ? { width: box.width - TOOLS_ROOM, height: box.height } : box
   const fit = shown ? fitScale(shown, fitBox) : 1
   const scale = zoom > 0 ? zoom : fit
+  const zoomable = view !== 'wall'
+  const showsBrush = brush !== undefined && onPixel !== undefined && view === 'edit'
 
-  // Ctrl + wheel zooms; React wheel listeners are passive, so this one is attached by hand.
+  /**
+   * Zooms to `next`, keeping the painting point under `at` (client coordinates) where it is: the
+   * pointer for the wheel, the middle of the view for the buttons (I8).
+   */
+  const zoomTo = useRef<ZoomTo>(() => {})
+  useEffect(() => {
+    zoomTo.current = (next, at) => {
+      const view = surface.current?.getBoundingClientRect()
+      const box = paintingBox.current?.getBoundingClientRect()
+      if (view && box && next !== scale) {
+        const point = at ?? { x: view.left + view.width / 2, y: view.top + view.height / 2 }
+        anchor.current = {
+          x: point.x,
+          y: point.y,
+          px: anchorPoint({ paintingStart: box.left, scale, anchor: point.x }),
+          py: anchorPoint({ paintingStart: box.top, scale, anchor: point.y }),
+        }
+      }
+      useEditor.getState().setZoom(next)
+    }
+  })
+
+  // Once the new size is laid out, the view scrolls the anchored point back into place.
+  useLayoutEffect(() => {
+    const wanted = anchor.current
+    anchor.current = null
+    const view = surface.current
+    const box = paintingBox.current?.getBoundingClientRect()
+    if (!wanted || !view || !box) return
+    view.scrollLeft = anchoredScroll({
+      scroll: view.scrollLeft,
+      paintingStart: box.left,
+      scale,
+      point: wanted.px,
+      anchor: wanted.x,
+    })
+    view.scrollTop = anchoredScroll({
+      scroll: view.scrollTop,
+      paintingStart: box.top,
+      scale,
+      point: wanted.py,
+      anchor: wanted.y,
+    })
+  }, [scale])
+
+  // Ctrl + wheel zooms at the pointer; React wheel listeners are passive, so this one is
+  // attached by hand.
   const scaleRef = useRef(scale)
   useEffect(() => {
     scaleRef.current = scale
@@ -152,11 +236,61 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
     function onWheel(event: WheelEvent) {
       if (!(event.ctrlKey || event.metaKey) || useEditor.getState().view === 'wall') return
       event.preventDefault()
-      useEditor.getState().setZoom(nextZoom(scaleRef.current, event.deltaY < 0 ? 1 : -1))
+      const next = nextZoom(scaleRef.current, event.deltaY < 0 ? 1 : -1)
+      zoomTo.current(next, { x: event.clientX, y: event.clientY })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
+
+  // Space held with the pointer over the canvas makes a hand: dragging moves the view.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== ' ' || !pointerOver.current || typesSpace(event.target)) return
+      // Neither scroll the page nor press the focused button.
+      event.preventDefault()
+      if (spaceHeld.current) return
+      spaceHeld.current = true
+      setPan((p) => p ?? 'ready')
+    }
+    function onKeyUp(event: KeyboardEvent) {
+      if (event.key !== ' ' || !spaceHeld.current) return
+      event.preventDefault()
+      spaceHeld.current = false
+      if (!panning.current) setPan(null)
+    }
+    function onBlur() {
+      spaceHeld.current = false
+      if (!panning.current) setPan(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [])
+
+  /** Puts the brush outline over the pixels the brush would paint, or hides it. */
+  function placeBrush() {
+    const el = brushOutline.current
+    if (!el) return
+    const at = hover.current
+    if (!at || brush === undefined || pan !== null) {
+      el.style.display = 'none'
+      return
+    }
+    const footprint = brushFootprint(at.x, at.y, brush)
+    el.style.display = 'block'
+    el.style.transform = `translate(${footprint.x0 * scale}px, ${footprint.y0 * scale}px)`
+    el.style.width = `${brush * scale}px`
+    el.style.height = `${brush * scale}px`
+  }
+
+  // A new brush size or zoom moves the outline without waiting for the pointer.
+  useEffect(placeBrush)
 
   if (!painting) return null
 
@@ -172,7 +306,46 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
     { value: 'sky', label: t.editor.backdrop.sky },
   ]
   const editor = useEditor.getState()
-  const zoomable = view !== 'wall'
+
+  /** Starts dragging the view: middle button, or the left one while Space is held. */
+  function startPan(event: ReactPointerEvent<HTMLElement>) {
+    const el = surface.current
+    if (!zoomable || !el) return
+    if (!(event.button === 1 || (event.button === 0 && spaceHeld.current))) return
+    // The painting under the pointer must not take this press.
+    event.preventDefault()
+    event.stopPropagation()
+    panning.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      left: el.scrollLeft,
+      top: el.scrollTop,
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    setPan('active')
+  }
+
+  function movePan(event: ReactPointerEvent<HTMLElement>) {
+    const drag = panning.current
+    const el = surface.current
+    if (!drag || drag.id !== event.pointerId || !el) return
+    el.scrollLeft = drag.left - (event.clientX - drag.x)
+    el.scrollTop = drag.top - (event.clientY - drag.y)
+  }
+
+  function endPan(event: ReactPointerEvent<HTMLElement>) {
+    if (panning.current?.id !== event.pointerId) return
+    panning.current = null
+    setPan(spaceHeld.current ? 'ready' : null)
+  }
+
+  /** Remembers the painting pixel under the pointer for the brush outline. */
+  function trackHover(event: ReactPointerEvent<HTMLElement>) {
+    if (!showsBrush || !shown) return
+    hover.current = pixelAt(event, shown.width, shown.height, false)
+    placeBrush()
+  }
 
   /**
    * Strokes always end with one 'up': on pointer up, cancel, or a lost pointer capture (which
@@ -216,10 +389,18 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
     } as CSSProperties
     content = (
       <div
+        ref={paintingBox}
         className={styles.painting}
         style={{ width: shown.width * scale, height: shown.height * scale }}
         onPointerDown={(e) => handlePointer(e, 'down')}
-        onPointerMove={(e) => handlePointer(e, 'move')}
+        onPointerMove={(e) => {
+          trackHover(e)
+          handlePointer(e, 'move')
+        }}
+        onPointerLeave={() => {
+          hover.current = null
+          placeBrush()
+        }}
         onPointerUp={(e) => handlePointer(e, 'up')}
         onPointerCancel={(e) => handlePointer(e, 'up', true)}
         onLostPointerCapture={(e) => handlePointer(e, 'up', true)}
@@ -239,6 +420,7 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
           />
         )}
         {view === 'edit' && overlay && <div className={styles.overlay}>{overlay(geometry)}</div>}
+        {showsBrush && <div ref={brushOutline} className={styles.brush} aria-hidden="true" />}
       </div>
     )
   }
@@ -265,65 +447,91 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
           onChange={editor.setView}
         />
         <div className={styles.spacer} />
-        {zoomable && (
-          <div className={styles.zoom}>
-            <button
-              type="button"
-              className={styles.chip}
-              aria-pressed={showGrid}
-              onClick={editor.toggleGrid}
-            >
-              {t.editor.pixelGrid}
-            </button>
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label={t.editor.zoomOut}
-              onClick={() => editor.setZoom(nextZoom(scale, -1))}
-            >
-              <Icon name="minus" />
-            </button>
-            <button
-              type="button"
-              className={styles.chip}
-              aria-pressed={zoom === 0}
-              title={t.editor.zoomFit}
-              onClick={() => editor.setZoom(0)}
-            >
-              <span className="visually-hidden">{t.editor.zoomFit}, </span>
-              {format(t.editor.zoomLevel, { percent: Math.round(scale * 100) })}
-            </button>
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label={t.editor.zoomIn}
-              onClick={() => editor.setZoom(nextZoom(scale, 1))}
-            >
-              <Icon name="plus" />
-            </button>
-          </div>
-        )}
-        {view !== 'wall' && (
-          <div className={styles.backdrop}>
-            <span className={styles.label}>{t.editor.backdrop.label}</span>
-            <Segmented
-              label={t.editor.backdrop.label}
-              options={backdropOptions}
-              value={backdrop}
-              onChange={editor.setBackdrop}
-            />
-          </div>
-        )}
+        {/* Both groups stay in place in every view, so the canvas never moves (M5). */}
+        <div className={styles.zoom} title={zoomable ? t.editor.zoomHint : undefined}>
+          <button
+            type="button"
+            className={styles.chip}
+            aria-pressed={showGrid}
+            disabled={!zoomable}
+            onClick={editor.toggleGrid}
+          >
+            {t.editor.pixelGrid}
+          </button>
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={t.editor.zoomOut}
+            disabled={!zoomable}
+            onClick={() => zoomTo.current(nextZoom(scale, -1))}
+          >
+            <Icon name="minus" />
+          </button>
+          <span className={styles.zoomValue} data-disabled={!zoomable || undefined}>
+            <span className="visually-hidden">{t.editor.zoom} </span>
+            {format(t.editor.zoomLevel, { percent: Math.round(scale * 100) })}
+          </span>
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={t.editor.zoomIn}
+            disabled={!zoomable}
+            onClick={() => zoomTo.current(nextZoom(scale, 1))}
+          >
+            <Icon name="plus" />
+          </button>
+          <button
+            type="button"
+            className={styles.chip}
+            disabled={!zoomable || zoom === 0}
+            onClick={() => editor.setZoom(0)}
+          >
+            {t.editor.zoomFit}
+          </button>
+        </div>
+        <div className={styles.backdrop}>
+          <span className={styles.label}>{t.editor.backdrop.label}</span>
+          <Segmented
+            label={t.editor.backdrop.label}
+            options={backdropOptions}
+            value={backdrop}
+            disabled={!zoomable}
+            onChange={editor.setBackdrop}
+          />
+        </div>
       </div>
 
-      <div ref={area} className={styles.area} data-view={view} data-tools={withTools || undefined}>
-        <Backdrop kind={view === 'wall' ? 'mid' : kind} className={styles.surface}>
+      <div
+        ref={area}
+        className={styles.area}
+        data-view={view}
+        data-tools={withTools || undefined}
+        data-pan={pan ?? undefined}
+        onPointerEnter={() => {
+          pointerOver.current = true
+        }}
+        onPointerLeave={() => {
+          pointerOver.current = false
+        }}
+        onPointerDownCapture={startPan}
+        onPointerMove={movePan}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+        onLostPointerCapture={endPan}
+        onMouseDown={(event) => {
+          // No browser autoscroll on a middle click: the middle button drags the view.
+          if (event.button === 1) event.preventDefault()
+        }}
+      >
+        <Backdrop ref={surface} kind={view === 'wall' ? 'mid' : kind} className={styles.surface}>
           <div className={styles.center}>{content}</div>
         </Backdrop>
         {withTools && <div className={styles.tools}>{tools}</div>}
+        {view === 'edit' && floating && <div className={styles.floating}>{floating}</div>}
       </div>
 
       <p className={styles.foot}>
+        {hint && view === 'edit' && <span className={styles.hint}>{hint}</span>}
         {rendered.failed && (
           <span className={styles.failed} role="alert">
             {t.editor.renderFailed}

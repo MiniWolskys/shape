@@ -76,6 +76,7 @@ describe('editor steps', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     useLanguage.setState({ language: 'en' })
     useToasts.setState({ toasts: [] })
+    useEditor.setState({ brush: 1 })
   })
   afterEach(() => vi.restoreAllMocks())
 
@@ -95,8 +96,10 @@ describe('editor steps', () => {
     })
 
     it('draws a thumbnail of this painting for every shape once idle', async () => {
-      await open(flatPainting(), 'window')
+      const { container } = await open(flatPainting({ id: 'thumbs_idle_abc' }), 'window')
       const shapes = screen.getByRole('group', { name: 'Window shape' })
+      // Until then, each tile shows the outline of its shape (I9).
+      expect(container.querySelectorAll('[data-placeholder]')).toHaveLength(13)
       await vi.waitFor(() => expect(within(shapes).getAllByRole('img')).toHaveLength(13))
     })
 
@@ -154,12 +157,60 @@ describe('editor steps', () => {
       await open(flatPainting(), 'pixels')
       act(() => useEditor.getState().setTool('wand'))
       click()
-      expect(screen.getByText('96 px selected', { selector: 'p *' })).toBeInTheDocument()
+      expect(screen.getByText('96 px selected', { selector: 'p' })).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Transparent' }))
       expect(useEditor.getState().color).toEqual([0, 0, 0, 0])
       await userEvent.click(screen.getByRole('button', { name: 'Apply to selection' }))
       const out = rendered()
       for (let i = 3; i < out.data.length; i += 4) expect(out.data[i]).toBe(0)
+    })
+
+    it('the floating selection bar makes the selection transparent in one click (I7)', async () => {
+      await open(flatPainting(), 'pixels', { assets: { pic: encodePng(halves()) } })
+      act(() => useEditor.getState().setTool('wand'))
+      mockRect(8, 12)
+      expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull()
+      click(0, 0)
+      const bar = screen.getByRole('toolbar', { name: 'Selection' })
+      expect(within(bar).getByText('48 px selected')).toBeInTheDocument()
+      await userEvent.click(within(bar).getByRole('button', { name: 'Make transparent' }))
+      const out = rendered()
+      expect(out.data[3]).toBe(0)
+      expect(out.data[11 * 8 * 4 + 3]).toBe(255)
+      expect(useEditor.getState().past).toHaveLength(1)
+      // The colour in use is untouched, and the bar fills with it too.
+      act(() => useEditor.getState().setColor([0, 255, 0, 255]))
+      await userEvent.click(within(bar).getByRole('button', { name: 'Fill with color' }))
+      expect(Array.from(rendered().data.slice(0, 4))).toEqual([0, 255, 0, 255])
+      await userEvent.click(within(bar).getByRole('button', { name: 'Clear' }))
+      expect(useEditor.getState().selection).toBeNull()
+      expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull()
+    })
+
+    it('Fit is its own button, off while fitted; the wall view keeps the toolbar in place', async () => {
+      await open(flatPainting(), 'pixels')
+      const fitButton = screen.getByRole('button', { name: 'Fit' })
+      expect(fitButton).toBeDisabled()
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+      expect(useEditor.getState().zoom).toBeGreaterThan(0)
+      expect(fitButton).toBeEnabled()
+      await userEvent.click(fitButton)
+      expect(useEditor.getState().zoom).toBe(0)
+      act(() => useEditor.getState().setView('wall'))
+      expect(screen.getByRole('button', { name: 'Zoom in' })).toBeDisabled()
+      expect(screen.getByRole('radio', { name: 'Sky' })).toBeDisabled()
+    })
+
+    it('says how the current tool works under the canvas', async () => {
+      await open(flatPainting(), 'pixels')
+      act(() => useEditor.getState().setTool('wand'))
+      expect(
+        screen.getByText('Magic wand — click an area to select it, Shift adds. (W)'),
+      ).toBeInTheDocument()
+      // The tool options sit in one slot: the wand shows its tolerance in percent there.
+      expect(screen.getByRole('spinbutton', { name: 'Tolerance (%)' })).toHaveValue(12)
+      act(() => useEditor.getState().setTool('pencil'))
+      expect(screen.getByRole('radiogroup', { name: 'Brush size' })).toBeInTheDocument()
     })
 
     it('Apply to selection is disabled without a selection; Escape clears it', async () => {
@@ -356,6 +407,41 @@ describe('editor steps', () => {
       expect(Array.from(mask?.slice(0, 8) ?? [])).toEqual([1, 1, 1, 1, 1, 1, 1, 1])
       expect(useEditor.getState().past).toHaveLength(1)
       await vi.waitFor(() => expect(wall).toHaveBeenCalled())
+    })
+
+    it('a bigger brush paints its whole square, shown at once over the last render', async () => {
+      await open(flatPainting(), 'pixels')
+      act(() => {
+        useEditor.getState().setTool('pencil')
+        useEditor.getState().setBrush(4)
+        useEditor.getState().setColor([0, 0, 255, 255])
+      })
+      mockRect(8, 12)
+      const el = surface()
+      fireEvent.pointerDown(el, { button: 0, pointerId: 1, clientX: 4, clientY: 4 })
+      const mask = useEditor.getState().edits?.mask
+      expect(mask?.reduce((n, v) => n + v, 0)).toBe(16)
+      expect([mask?.[2 * 8 + 2], mask?.[5 * 8 + 5], mask?.[6 * 8 + 6]]).toEqual([1, 1, 0])
+      // The stroke preview already shows every pixel of the square, exactly as a render would.
+      expect(cachedRender()?.data).toEqual(rendered().data)
+      fireEvent.pointerMove(el, { pointerId: 1, clientX: 4, clientY: 9 })
+      fireEvent.pointerUp(el, { pointerId: 1, clientX: 4, clientY: 9 })
+      expect(useEditor.getState().edits?.mask.reduce((n, v) => n + v, 0)).toBe(4 * 9)
+      expect(useEditor.getState().past).toHaveLength(1)
+    })
+
+    it('[ and ] step the brush size through 1, 2, 4 and 8 px', async () => {
+      await open(flatPainting(), 'pixels')
+      act(() => useEditor.getState().setBrush(1))
+      await userEvent.keyboard(']]')
+      expect(useEditor.getState().brush).toBe(4)
+      await userEvent.keyboard(']]]')
+      expect(useEditor.getState().brush).toBe(8)
+      await userEvent.keyboard('[[')
+      expect(useEditor.getState().brush).toBe(4)
+      expect(screen.getByRole('radio', { name: '4 px' })).toBeChecked()
+      await userEvent.click(screen.getByRole('radio', { name: '2 px' }))
+      expect(useEditor.getState().brush).toBe(2)
     })
 
     it('the eraser paints transparent pixels', async () => {

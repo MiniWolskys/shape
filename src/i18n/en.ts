@@ -1,4 +1,5 @@
 import type { DyeId, FrameMaterial, McColor, ShapeId } from '../domain/types.ts'
+import type { Tool } from '../state/editor.ts'
 
 export const en = {
   locale: 'en',
@@ -156,7 +157,10 @@ export const en = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     zoomFit: 'Fit',
-    zoomLevel: 'Zoom {percent} %',
+    zoom: 'Zoom',
+    zoomLevel: '{percent} %',
+    zoomHint:
+      'Ctrl + wheel zooms at the pointer. Hold Space and drag, or drag with the middle button, to move around.',
     pixelGrid: 'Pixel grid',
     transparentPixels: 'Transparent pixels:',
     renderFailed: 'This painting could not be drawn. Change a setting to try again.',
@@ -226,6 +230,13 @@ export const en = {
       toolFailed: 'The painting could not be drawn, so this tool can’t be used now.',
       tools: 'Tools',
       toolHint: '{tool} ({key})',
+      toolHelp: '{tool} — {how} ({key})',
+      brushSize: 'Brush size',
+      brushValue: '{size} px',
+      selection: 'Selection',
+      makeTransparent: 'Make transparent',
+      fillWithColor: 'Fill with color',
+      clear: 'Clear',
       tolerance: 'Tolerance',
       contiguous: 'Contiguous',
       color: 'Color',
@@ -260,6 +271,14 @@ export const en = {
       neverChanges: 'never changes',
       maxLength: 'Up to {count} characters.',
     },
+    toolHow: {
+      pencil: 'drag to paint with the color. [ and ] change the size.',
+      fill: 'click an area to paint it with the color.',
+      replace: 'click a color to repaint it everywhere.',
+      wand: 'click an area to select it, Shift adds.',
+      eyedropper: 'click the painting to pick its color.',
+      eraser: 'drag to make pixels transparent. [ and ] change the size.',
+    } satisfies Record<Tool, string>,
     tools: {
       pencil: 'Pencil',
       fill: 'Fill',

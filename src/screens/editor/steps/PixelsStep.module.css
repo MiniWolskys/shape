@@ -136,12 +136,14 @@
 }
 
 .apply {
-  flex: 1;
+  flex: 1 1 auto;
   justify-content: center;
 }
 
+/* The in-game preview keeps its room while it is drawn, so nothing below jumps. */
 .wall {
   display: grid;
+  min-height: 126px;
   margin: 0;
   padding: 8px;
   place-items: center;
@@ -149,4 +151,35 @@
   border-radius: var(--radius);
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+/* Tool options: one fixed-height slot whatever the tool, so the colour picker never moves (M5). */
+.options {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 104px;
+}
+
+/* The selection bar floating over the canvas (I7). */
+.selectionBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.selectionCount {
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

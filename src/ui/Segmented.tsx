@@ -5,6 +5,8 @@ interface SegmentedProps<T extends string> {
   label: string
   options: Array<{ value: T; label: string }>
   value: T
+  /** Shown but out of use (kept in place so the layout doesn't move). */
+  disabled?: boolean
   onChange(v: T): void
 }
 
@@ -15,6 +17,7 @@ export function Segmented<T extends string>({
   label,
   options,
   value,
+  disabled,
   onChange,
 }: SegmentedProps<T>) {
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
@@ -45,7 +48,13 @@ export function Segmented<T extends string>({
 
   const hasSelection = options.some((o) => o.value === value)
   return (
-    <div role="radiogroup" aria-label={label} className={styles.group} onKeyDown={onKeyDown}>
+    <div
+      role="radiogroup"
+      aria-label={label}
+      aria-disabled={disabled || undefined}
+      className={styles.group}
+      onKeyDown={disabled ? undefined : onKeyDown}
+    >
       {options.map((option, index) => {
         const checked = option.value === value
         const focusable = checked || (!hasSelection && index === 0)
@@ -59,6 +68,7 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={checked}
             tabIndex={focusable ? 0 : -1}
+            disabled={disabled}
             className={styles.option}
             onClick={() => select(index)}
           >

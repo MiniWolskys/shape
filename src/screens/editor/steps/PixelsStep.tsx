@@ -10,13 +10,14 @@ import {
 import { DYE_IDS } from '../../../domain/types.ts'
 import { format, plural, useT } from '../../../i18n/i18n.ts'
 import type { RGBA } from '../../../imaging/raster.ts'
-import { maskSize } from '../../../imaging/tools.ts'
+import { BRUSH_SIZES, maskSize } from '../../../imaging/tools.ts'
 import { renderWallPreview } from '../../../imaging/wall.ts'
-import { useEditor, type Tool } from '../../../state/editor.ts'
+import { DEFAULT_TOLERANCE, useEditor, type Tool } from '../../../state/editor.ts'
 import { endStroke, useRenderedPainting } from '../../../state/useRenderedPainting.ts'
 import { Button } from '../../../ui/Button.tsx'
 import { Icon } from '../../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../../ui/PaintingCanvas.tsx'
+import { Segmented } from '../../../ui/Segmented.tsx'
 import { Slider } from '../../../ui/Slider.tsx'
 import { CanvasStage, type StageGeometry } from '../CanvasStage.tsx'
 import {
@@ -48,15 +49,21 @@ const TOOLS: Array<{ tool: Tool; key: string }> = [
   { tool: 'eraser', key: 'E' },
 ]
 
+const toolKey = (tool: Tool) => TOOLS.find((entry) => entry.tool === tool)?.key ?? ''
+
 /** Tools that pick pixels by colour use the tolerance (and, but replace, contiguity). */
 const BY_COLOR = new Set<Tool>(['fill', 'replace', 'wand'])
+/** Tools that paint with the square brush. */
+const BRUSHED = new Set<Tool>(['pencil', 'eraser'])
 
-const WALL_PREVIEW = { width: 290, height: 170 }
+/** The in-game preview stays compact, so the inspector shows it without scrolling (N4). */
+const WALL_PREVIEW = { width: 290, height: 110 }
 
 /** The canvas of the Colors & pixels step: tools column, tool handling, selection outline. */
 export function PixelsStage() {
   const t = useT()
   const tool = useEditor((s) => s.tool)
+  const brush = useEditor((s) => s.brush)
   const selection = useEditor((s) => s.selection)
   const count = useMemo(() => (selection ? maskSize(selection) : 0), [selection])
   const ctx = useRef<ToolContext>({ stroke: newStroke(), previousTool: 'pencil', shift: false })
@@ -98,9 +105,18 @@ export function PixelsStage() {
     </div>
   )
 
+  const hint = format(t.editor.pixels.toolHelp, {
+    tool: t.editor.tools[tool],
+    how: t.editor.toolHow[tool],
+    key: toolKey(tool),
+  })
+
   return (
     <CanvasStage
       tools={tools}
+      brush={BRUSHED.has(tool) ? brush : undefined}
+      hint={hint}
+      floating={selection && count > 0 && <SelectionBar selection={selection} count={count} />}
       onPixel={(x, y, phase, event) => {
         ctx.current.shift = event.shiftKey
         applyToolAt(x, y, phase, ctx.current)
@@ -108,15 +124,35 @@ export function PixelsStage() {
       overlay={(geometry) =>
         selection && <SelectionOutline selection={selection} geometry={geometry} />
       }
-      footer={
-        count > 0 && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span>{plural(t, t.editor.pixels.selected, count)}</span>
-          </>
-        )
-      }
     />
+  )
+}
+
+/**
+ * What to do with the selection, right next to it (I7): make it see-through (the headline
+ * job), fill it with the current colour, or let it go.
+ */
+function SelectionBar({ selection, count }: { selection: Uint8Array; count: number }) {
+  const t = useT()
+  const color = useEditor((s) => s.color)
+  return (
+    <div className={own.selectionBar} role="toolbar" aria-label={t.editor.pixels.selection}>
+      <span className={own.selectionCount}>{plural(t, t.editor.pixels.selected, count)}</span>
+      <Button variant="primary" onClick={() => paintSelection(selection, TRANSPARENT)}>
+        {t.editor.pixels.makeTransparent}
+      </Button>
+      <Button onClick={() => paintSelection(selection, color)}>
+        <i
+          className={own.chip}
+          style={{ '--swatch': cssColor(color) } as CSSProperties}
+          aria-hidden="true"
+        />
+        {t.editor.pixels.fillWithColor}
+      </Button>
+      <Button variant="ghost" onClick={() => useEditor.getState().setSelection(null)}>
+        {t.editor.pixels.clear}
+      </Button>
+    </div>
   )
 }
 
@@ -146,15 +182,77 @@ function SelectionOutline({
   )
 }
 
+/**
+ * The options of the current tool, in a slot of fixed height: switching tools never moves the
+ * colour picker below (M5).
+ */
+function ToolOptions() {
+  const t = useT()
+  const id = useId()
+  const tool = useEditor((s) => s.tool)
+  const brush = useEditor((s) => s.brush)
+  const tolerance = useEditor((s) => s.tolerance)
+  const contiguous = useEditor((s) => s.contiguous)
+  const editor = useEditor.getState()
+
+  let options = <p className={styles.hint}>{t.editor.toolHow[tool]}</p>
+  if (BRUSHED.has(tool)) {
+    options = (
+      <Segmented
+        label={t.editor.pixels.brushSize}
+        options={BRUSH_SIZES.map((size) => ({
+          value: String(size),
+          label: format(t.editor.pixels.brushValue, { size }),
+        }))}
+        value={String(brush)}
+        onChange={(size) => editor.setBrush(Number(size))}
+      />
+    )
+  } else if (BY_COLOR.has(tool)) {
+    options = (
+      <>
+        <div onPointerUp={() => editor.endGesture()}>
+          <Slider
+            id={`${id}-tolerance`}
+            label={t.editor.pixels.tolerance}
+            min={0}
+            max={100}
+            value={tolerance}
+            defaultValue={DEFAULT_TOLERANCE}
+            unit="%"
+            onChange={editor.setTolerance}
+          />
+        </div>
+        {tool !== 'replace' && (
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={contiguous}
+              onChange={(event) => editor.setContiguous(event.currentTarget.checked)}
+            />
+            {t.editor.pixels.contiguous}
+          </label>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <section className={own.options} aria-labelledby={`${id}-tool`}>
+      <h2 id={`${id}-tool`} className={styles.subheading}>
+        {t.editor.tools[tool]}
+      </h2>
+      {options}
+    </section>
+  )
+}
+
 /** The inspector of the Colors & pixels step. */
 export function PixelsPanel() {
   const t = useT()
   const id = useId()
   const painting = useEditor((s) => s.painting)
-  const tool = useEditor((s) => s.tool)
   const color = useEditor((s) => s.color)
-  const tolerance = useEditor((s) => s.tolerance)
-  const contiguous = useEditor((s) => s.contiguous)
   const selection = useEditor((s) => s.selection)
   const count = useMemo(() => (selection ? maskSize(selection) : 0), [selection])
   const rendered = useRenderedPainting()
@@ -186,43 +284,24 @@ export function PixelsPanel() {
 
   return (
     <>
-      {BY_COLOR.has(tool) && (
-        <section className={styles.section} aria-label={t.editor.tools[tool]}>
-          <div onPointerUp={() => editor.endGesture()}>
-            <Slider
-              id={`${id}-tolerance`}
-              label={t.editor.pixels.tolerance}
-              min={0}
-              max={100}
-              value={tolerance}
-              onChange={editor.setTolerance}
-            />
-          </div>
-          {tool !== 'replace' && (
-            <label className={styles.check}>
-              <input
-                type="checkbox"
-                checked={contiguous}
-                onChange={(event) => editor.setContiguous(event.currentTarget.checked)}
-              />
-              {t.editor.pixels.contiguous}
-            </label>
-          )}
-        </section>
-      )}
+      {/* First, so the result of an edit is in view without scrolling (N4). */}
+      <figure className={own.wall}>
+        {wall && (
+          <PaintingCanvas raster={wall} fit={WALL_PREVIEW} label={t.editor.pixels.wallPreview} />
+        )}
+      </figure>
+
+      <ToolOptions />
 
       <section className={styles.section} aria-labelledby={`${id}-color`}>
-        <h2 id={`${id}-color`} className={styles.heading}>
+        <h2 id={`${id}-color`} className={styles.subheading}>
           {t.editor.pixels.color}
         </h2>
         <ColorPicker color={color} onChange={editor.setColor} />
-      </section>
-
-      <section className={styles.section} aria-labelledby={`${id}-presets`}>
         <h3 id={`${id}-presets`} className={styles.subheading}>
           {t.editor.pixels.presets}
         </h3>
-        <div className={own.presets}>
+        <div className={own.presets} role="group" aria-labelledby={`${id}-presets`}>
           {presets.map((p) => (
             <button
               key={p.key}
@@ -266,7 +345,6 @@ export function PixelsPanel() {
         </p>
         <div className={styles.row}>
           <Button
-            variant="primary"
             className={own.apply}
             disabled={!selection || count === 0}
             onClick={() => {
@@ -275,17 +353,16 @@ export function PixelsPanel() {
           >
             {t.editor.pixels.applyToSelection}
           </Button>
-          <Button disabled={!selection} onClick={() => editor.setSelection(null)}>
+          <Button
+            variant="ghost"
+            className={own.apply}
+            disabled={!selection}
+            onClick={() => editor.setSelection(null)}
+          >
             {t.editor.pixels.clearSelection}
           </Button>
         </div>
       </section>
-
-      {wall && (
-        <figure className={own.wall}>
-          <PaintingCanvas raster={wall} fit={WALL_PREVIEW} label={t.editor.pixels.wallPreview} />
-        </figure>
-      )}
     </>
   )
 }

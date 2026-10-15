@@ -5,7 +5,7 @@
 
 .area {
   position: relative;
-  height: 150px;
+  height: 120px;
   border-radius: var(--radius);
   background:
     linear-gradient(to top, var(--picker-black), transparent),
@@ -84,6 +84,7 @@
 
 .fields {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }

@@ -25,3 +25,12 @@
   background: var(--accent);
   color: var(--accent-ink);
 }
+
+.option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.option:disabled:hover {
+  color: var(--muted);
+}

@@ -81,8 +81,12 @@
   display: grid;
   align-content: start;
   gap: 14px;
+  min-width: 0;
   min-height: 0;
+  /* Never sideways (I22); the scrollbar keeps its room, so the fit zoom never changes (M5). */
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 18px;
   border-left: 1px solid var(--line);
 }
