@@ -15,13 +15,36 @@ export function zipDeterministic(files: Record<string, Uint8Array>): Uint8Array 
   return zipSync(sorted)
 }
 
-export function unzipEntries(bytes: Uint8Array): Record<string, Uint8Array> {
+/** No entry Shape reads comes near this: a 2048 px RGBA picture is at most about 17 MB. */
+export const MAX_ENTRY_BYTES = 64 * 1024 * 1024
+
+/**
+ * The zip's entries that `keep` accepts (all by default), inflated. Nothing else is inflated,
+ * so a large or hostile zip can't freeze the tab; a kept entry larger than `maxEntryBytes`
+ * refuses the whole file.
+ */
+export function unzipEntries(
+  bytes: Uint8Array,
+  options: { keep?: (name: string) => boolean; maxEntryBytes?: number } = {},
+): Record<string, Uint8Array> {
+  const { keep = () => true, maxEntryBytes = MAX_ENTRY_BYTES } = options
+  let tooLarge: string | null = null
   try {
-    return unzipSync(bytes)
+    return unzipSync(bytes, {
+      filter(file) {
+        if (!keep(file.name)) return false
+        if (file.originalSize > maxEntryBytes) {
+          tooLarge = file.name
+          throw new Error(`${file.name} is too large`)
+        }
+        return true
+      },
+    })
   } catch (e) {
-    throw new ShapeError(
-      'not-a-library-pack',
-      `This file is not a Shape library pack (it is not a readable zip: ${e instanceof Error ? e.message : String(e)}).`,
-    )
+    const why =
+      tooLarge === null
+        ? `it is not a readable zip: ${e instanceof Error ? e.message : String(e)}`
+        : `${tooLarge} is too large`
+    throw new ShapeError('not-a-library-pack', `This file is not a Shape library pack (${why}).`)
   }
 }

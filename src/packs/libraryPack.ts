@@ -326,7 +326,10 @@ function parseLibrary(bytes: Uint8Array): Library {
 
 /** Reads a library pack back into a library and its assets (images and edit layers only). */
 export function readLibraryPack(bytes: Uint8Array): { library: Library; assets: Assets } {
-  const entries = unzipEntries(bytes)
+  // Only what a library pack is read from: the textures and server packs are never inflated.
+  const entries = unzipEntries(bytes, {
+    keep: (name) => name === LIBRARY_ENTRY || /^(?:images|edits)\/[^/]+\.png$/.test(name),
+  })
   const json = entries[LIBRARY_ENTRY]
   if (!json) throw notALibraryPack(`there is no ${LIBRARY_ENTRY} inside`)
   const library = parseLibrary(json)

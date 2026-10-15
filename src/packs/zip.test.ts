@@ -37,6 +37,19 @@ describe('deterministic zip', () => {
     expect(new TextDecoder().decode(bytes.subarray(30, 30 + nameLength))).toBe('a.txt')
   })
 
+  it('inflates only the entries asked for, and refuses one that is too large (minor 3)', () => {
+    const bytes = zipDeterministic({ 'keep.txt': enc('k'), 'skip.bin': enc('x'.repeat(5000)) })
+    const kept = unzipEntries(bytes, { keep: (name) => name.startsWith('keep') })
+    expect(Object.keys(kept)).toEqual(['keep.txt'])
+    let error: unknown
+    try {
+      unzipEntries(bytes, { keep: () => true, maxEntryBytes: 1000 })
+    } catch (e) {
+      error = e
+    }
+    expect(error).toMatchObject({ code: 'not-a-library-pack' })
+  })
+
   it('throws not-a-library-pack on bytes that are not a zip', () => {
     let error: unknown
     try {
