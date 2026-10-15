@@ -31,7 +31,8 @@ export interface StageGeometry {
 export interface CanvasStageProps {
   /**
    * Called with painting pixel coordinates while the pointer is pressed on the painting in the
-   * Editor view: once with 'down', with 'move' while dragging (clamped to the painting), then 'up'.
+   * Editor view: once with 'down' (always on the painting), with 'move' while dragging, then 'up'.
+   * Moves and 'up' are not clamped: a drag past the edge reports pixels outside the painting.
    */
   onPixel?(x: number, y: number, phase: PixelPhase, event: ReactPointerEvent<HTMLElement>): void
   /** Drawn over the painting in the Editor view, sized to it (e.g. a selection outline). */
@@ -64,15 +65,20 @@ function nextZoom(scale: number, direction: 1 | -1): number {
   return [...ZOOM_STEPS].reverse().find((z) => z < scale - 1e-6) ?? scale
 }
 
-/** Painting pixel under the pointer, clamped to the painting. */
-function pixelAt(event: ReactPointerEvent<HTMLElement>, width: number, height: number) {
+/** Painting pixel under the pointer; clamped to the painting only when asked. */
+function pixelAt(
+  event: ReactPointerEvent<HTMLElement>,
+  width: number,
+  height: number,
+  clamp: boolean,
+) {
   const rect = event.currentTarget.getBoundingClientRect()
   const fx = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0
   const fy = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0
-  return {
-    x: Math.min(width - 1, Math.max(0, Math.floor(fx * width))),
-    y: Math.min(height - 1, Math.max(0, Math.floor(fy * height))),
-  }
+  const x = Math.floor(fx * width)
+  const y = Math.floor(fy * height)
+  if (!clamp) return { x, y }
+  return { x: Math.min(width - 1, Math.max(0, x)), y: Math.min(height - 1, Math.max(0, y)) }
 }
 
 /** Size of an element, kept up to date while it resizes. */
@@ -172,7 +178,9 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
       useEditor.getState().endGesture()
       event.currentTarget.setPointerCapture?.(event.pointerId)
     } else if (!drawing.current) return
-    const { x, y } = atLastPixel ? lastPixel.current : pixelAt(event, shown.width, shown.height)
+    const { x, y } = atLastPixel
+      ? lastPixel.current
+      : pixelAt(event, shown.width, shown.height, phase === 'down')
     lastPixel.current = { x, y }
     if (phase === 'up') drawing.current = false
     onPixel(x, y, phase, event)

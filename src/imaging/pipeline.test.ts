@@ -4,6 +4,7 @@ import type { Painting } from '../domain/types.ts'
 import { createEditLayer } from './edits.ts'
 import { renderPainting, renderPicture } from './pipeline.ts'
 import { createRaster, getPixel, setPixel } from './raster.ts'
+import { withoutMod } from './window.ts'
 
 const painting = (patch: Partial<Painting> = {}): Painting => ({
   ...createPainting({ title: 'Test', pixelsPerBlock: 16 }, new Date(0), () => 0.5),
@@ -90,7 +91,8 @@ describe('pipeline', () => {
     setPixel(edits.values, 4, 4, [0, 0, 0, 0])
     edits.mask[4 * 8 + 4] = 1
     const out = renderPainting(createRaster(16, 16, [255, 0, 0, 255]), edits, painting())
-    expect(getPixel(out, 8, 8)).toEqual([0, 0, 0, 0])
+    // R12: see-through pixels carry the frame colour.
+    expect(getPixel(out, 8, 8)).toEqual([74, 47, 28, 0])
     expect(getPixel(out, 6, 6)).toEqual([255, 0, 0, 255])
   })
   it('is deterministic for a given painting', () => {
@@ -101,5 +103,40 @@ describe('pipeline', () => {
       recipe: { ...p.recipe, window: { shape: 'stained_glass', glassOpacity: 1 } },
     }
     expect(renderPainting(src, null, shaped).data).toEqual(renderPainting(src, null, shaped).data)
+  })
+
+  describe('R12: see-through pixels take the frame colour', () => {
+    const gilded = (p: Painting): Painting => ({
+      ...p,
+      recipe: { ...p.recipe, frame: { material: 'gilded', thickness: 2 } },
+    })
+
+    it('a transparent pixel edit renders as frame RGB with alpha 0', () => {
+      const edits = createEditLayer(16, 16)
+      edits.mask[8 * 16 + 8] = 1 // values stay [0,0,0,0]
+      const out = renderPainting(createRaster(16, 16, [255, 0, 0, 255]), edits, gilded(painting()))
+      expect(getPixel(out, 8, 8)).toEqual([208, 164, 58, 0])
+      expect(getPixel(withoutMod(out), 8, 8)).toEqual([208, 164, 58, 255])
+    })
+
+    it('a transparent source pixel renders as frame RGB too (dark oak without frame)', () => {
+      const src = createRaster(16, 16, [255, 0, 0, 255])
+      setPixel(src, 8, 8, [10, 20, 30, 0])
+      const p = painting()
+      const none = {
+        ...p,
+        recipe: { ...p.recipe, frame: { material: 'none' as const, thickness: 0 } },
+      }
+      expect(getPixel(renderPainting(src, null, none), 8, 8)).toEqual([74, 47, 28, 0])
+      expect(getPixel(renderPainting(src, null, gilded(p)), 8, 8)).toEqual([208, 164, 58, 0])
+    })
+
+    it('leaves partly transparent pixels alone', () => {
+      const edits = createEditLayer(16, 16)
+      edits.mask[0] = 1
+      edits.values.data.set([170, 210, 255, 64], 0)
+      const out = renderPainting(createRaster(16, 16, [255, 0, 0, 255]), edits, painting())
+      expect(getPixel(out, 0, 0)).toEqual([170, 210, 255, 64])
+    })
   })
 })

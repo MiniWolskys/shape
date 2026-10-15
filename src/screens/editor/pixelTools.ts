@@ -1,3 +1,4 @@
+import { create } from 'zustand'
 import { createEditLayer, resampleEdits, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster, RGBA } from '../../imaging/raster.ts'
 import { eyedropper, paintMask, pencil, selectSimilar } from '../../imaging/tools.ts'
@@ -49,9 +50,52 @@ function union(a: Uint8Array | null, b: Uint8Array): Uint8Array {
   return out
 }
 
+/** Whether a pencil or eraser stroke is in progress (previews that can wait pause meanwhile). */
+export const useStroke = create<{ active: boolean }>(() => ({ active: false }))
+
+type Point = [number, number]
+
+/** A pencil or eraser stroke in progress. */
+export interface Stroke {
+  /** Last pixel already painted, or null between strokes. */
+  last: Point | null
+  /** Pixels reached since, painted on the next animation frame. */
+  pending: Point[]
+  color: RGBA
+  cancelFrame: (() => void) | null
+}
+
+export const newStroke = (): Stroke => ({
+  last: null,
+  pending: [],
+  color: TRANSPARENT,
+  cancelFrame: null,
+})
+
+function nextFrame(task: () => void): () => void {
+  if (typeof requestAnimationFrame === 'function') {
+    const handle = requestAnimationFrame(task)
+    return () => cancelAnimationFrame(handle)
+  }
+  const handle = setTimeout(task, 16)
+  return () => clearTimeout(handle)
+}
+
+/** Paints the pixels the stroke reached since the last frame, in one edit. */
+function flushStroke(stroke: Stroke): void {
+  stroke.cancelFrame?.()
+  stroke.cancelFrame = null
+  const { last, pending } = stroke
+  const end = pending.at(-1)
+  if (!last || !end) return
+  stroke.pending = []
+  stroke.last = end
+  const base = editableLayer()
+  if (base) useEditor.getState().setEdits(pencil(base, [last, ...pending], stroke.color), STROKE)
+}
+
 export interface ToolContext {
-  /** Last pixel of the pencil stroke in progress. */
-  stroke: { last: [number, number] | null }
+  stroke: Stroke
   /** Where the eyedropper goes back to once it picked a colour. */
   previousTool: Tool
   /** Shift held: the wand adds to the selection. */
@@ -67,21 +111,32 @@ export function applyToolAt(x: number, y: number, phase: PixelPhase, ctx: ToolCo
   const { tool } = editor
 
   if (tool === 'pencil' || tool === 'eraser') {
-    const color = tool === 'eraser' ? TRANSPARENT : editor.color
-    const { last } = ctx.stroke
-    if (phase === 'down' || !last) {
-      if (phase === 'up') return
-      ctx.stroke.last = [x, y]
+    const stroke = ctx.stroke
+    if (phase === 'down') {
+      // The dot under the pointer shows at once; moves are batched per animation frame.
+      stroke.cancelFrame?.()
+      Object.assign(stroke, newStroke(), {
+        last: [x, y],
+        color: tool === 'eraser' ? TRANSPARENT : editor.color,
+      })
+      useStroke.setState({ active: true })
       const base = editableLayer()
-      if (base) editor.setEdits(pencil(base, [[x, y]], color), STROKE)
+      if (base) editor.setEdits(pencil(base, [[x, y]], stroke.color), STROKE)
       return
     }
-    if (last[0] !== x || last[1] !== y) {
-      const base = editableLayer()
-      if (base) editor.setEdits(pencil(base, [last, [x, y]], color), STROKE)
-      ctx.stroke.last = [x, y]
+    if (!stroke.last) return
+    const reached = stroke.pending.at(-1) ?? stroke.last
+    if (reached[0] !== x || reached[1] !== y) stroke.pending.push([x, y])
+    if (phase === 'up') {
+      flushStroke(stroke)
+      stroke.last = null
+      useStroke.setState({ active: false })
+    } else if (!stroke.cancelFrame && stroke.pending.length > 0) {
+      stroke.cancelFrame = nextFrame(() => {
+        stroke.cancelFrame = null
+        flushStroke(stroke)
+      })
     }
-    if (phase === 'up') ctx.stroke.last = null
     return
   }
 

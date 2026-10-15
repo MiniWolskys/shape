@@ -12,6 +12,9 @@ import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
 import { useToasts } from '../../ui/toastStore.ts'
+import * as wallModule from '../../imaging/wall.ts'
+import * as windowModule from '../../imaging/window.ts'
+import { cachedRender } from '../../state/useRenderedPainting.ts'
 import { EditorScreen } from './EditorScreen.tsx'
 
 const now = new Date('2026-10-15T12:00:00Z')
@@ -95,6 +98,20 @@ describe('editor steps', () => {
       await open(flatPainting(), 'window')
       const shapes = screen.getByRole('group', { name: 'Window shape' })
       await vi.waitFor(() => expect(within(shapes).getAllByRole('img')).toHaveLength(13))
+    })
+
+    it('one failing thumbnail does not stop the others', async () => {
+      const real = windowModule.applyWindow
+      vi.spyOn(windowModule, 'applyWindow').mockImplementation((picture, o) => {
+        if (o.shape === 'oculus') throw new Error('broken shape')
+        return real(picture, o)
+      })
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await open(flatPainting({ id: 'thumb_fail_abc' }), 'window')
+      const shapes = screen.getByRole('group', { name: 'Window shape' })
+      await vi.waitFor(() => expect(within(shapes).getAllByRole('img')).toHaveLength(12))
+      expect(within(screen.getByRole('button', { name: 'Oculus' })).queryByRole('img')).toBeNull()
+      expect(logged).toHaveBeenCalled()
     })
 
     it('frame material "No frame" disables the thickness slider', async () => {
@@ -189,6 +206,50 @@ describe('editor steps', () => {
       expect(useEditor.getState().edits).toBeNull()
     })
 
+    it('a stroke leaving the painting does not paint along its edge', async () => {
+      await open(flatPainting(), 'pixels')
+      act(() => useEditor.getState().setTool('pencil'))
+      mockRect(8, 12)
+      const el = surface()
+      fireEvent.pointerDown(el, { button: 0, pointerId: 1, clientX: 2, clientY: 0 })
+      fireEvent.pointerMove(el, { pointerId: 1, clientX: 20, clientY: 5 })
+      fireEvent.pointerMove(el, { pointerId: 1, clientX: 20, clientY: 10 })
+      fireEvent.pointerUp(el, { pointerId: 1, clientX: 20, clientY: 10 })
+      const mask = useEditor.getState().edits?.mask
+      expect(mask?.[2]).toBe(1)
+      // Nothing along the right edge below where the stroke left the painting.
+      for (let y = 5; y < 12; y++) expect(mask?.[y * 8 + 7]).toBe(0)
+    })
+
+    it('coalesces a stroke to one edit per frame and pauses the wall preview', async () => {
+      await open(flatPainting(), 'pixels')
+      act(() => useEditor.getState().setTool('pencil'))
+      mockRect(8, 12)
+      const frames: FrameRequestCallback[] = []
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => frames.push(cb))
+      const wall = vi.spyOn(wallModule, 'renderWallPreview')
+      let commits = 0
+      const stop = useEditor.subscribe((s, prev) => {
+        if (s.edits !== prev.edits) commits++
+      })
+      const el = surface()
+      fireEvent.pointerDown(el, { button: 0, pointerId: 1, clientX: 0, clientY: 0 })
+      for (let x = 1; x < 6; x++)
+        fireEvent.pointerMove(el, { pointerId: 1, clientX: x, clientY: 0 })
+      expect(commits).toBe(1) // the dot under the pointer, at once
+      act(() => frames.splice(0).forEach((cb) => cb(0)))
+      expect(commits).toBe(2) // all five moves in one frame
+      expect(wall).not.toHaveBeenCalled()
+      fireEvent.pointerMove(el, { pointerId: 1, clientX: 6, clientY: 0 })
+      fireEvent.pointerUp(el, { pointerId: 1, clientX: 7, clientY: 0 })
+      expect(commits).toBe(3) // up flushes what is left
+      stop()
+      const mask = useEditor.getState().edits?.mask
+      expect(Array.from(mask?.slice(0, 8) ?? [])).toEqual([1, 1, 1, 1, 1, 1, 1, 1])
+      expect(useEditor.getState().past).toHaveLength(1)
+      await vi.waitFor(() => expect(wall).toHaveBeenCalled())
+    })
+
     it('the eraser paints transparent pixels', async () => {
       await open(flatPainting(), 'pixels')
       act(() => useEditor.getState().setTool('eraser'))
@@ -270,6 +331,13 @@ describe('editor steps', () => {
       expect(screen.getByText(p.id)).toBeInTheDocument()
       expect(screen.getByText('Never changes')).toBeInTheDocument()
     })
+  })
+
+  it('closing the editor forgets the shared render', async () => {
+    const view = await open(flatPainting(), 'pixels')
+    expect(cachedRender()).not.toBeNull()
+    view.unmount()
+    expect(cachedRender()).toBeNull()
   })
 
   describe('unreadable edits', () => {

@@ -1,6 +1,7 @@
-import type { Painting } from '../domain/types.ts'
+import type { FrameMaterial, Painting } from '../domain/types.ts'
 import { adjust } from './adjust.ts'
 import { applyEdits, isEmptyLayer, resampleEdits, type EditLayer } from './edits.ts'
+import { FRAME_MATERIALS } from './materials.ts'
 import { quantize } from './quantize.ts'
 import { createRaster, type Raster, type RGBA } from './raster.ts'
 import { resample } from './resample.ts'
@@ -60,10 +61,27 @@ export function renderPainting(
     pixelsPerBlock: p.pixelsPerBlock,
     seed: hashString(p.id),
   })
-  if (!edits || isEmptyLayer(edits)) return shaped
+  if (!edits || isEmptyLayer(edits)) return seeThroughToFrame(shaped, recipe.frame.material)
   const sized =
     edits.values.width === shaped.width && edits.values.height === shaped.height
       ? edits
       : resampleEdits(edits, shaped.width, shaped.height)
-  return applyEdits(shaped, sized)
+  return seeThroughToFrame(applyEdits(shaped, sized), recipe.frame.material)
+}
+
+/**
+ * R12: every fully transparent pixel, however it got there (shape cut, edit, eraser or the
+ * picture itself), carries the frame colour, so players without the mod see the frame there.
+ * Mutates `r`, which is always a fresh raster here.
+ */
+function seeThroughToFrame(r: Raster, material: FrameMaterial): Raster {
+  const [fr, fg, fb] = FRAME_MATERIALS[material].color
+  const d = r.data
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] !== 0) continue
+    d[i] = fr
+    d[i + 1] = fg
+    d[i + 2] = fb
+  }
+  return r
 }

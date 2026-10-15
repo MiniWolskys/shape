@@ -44,6 +44,16 @@ function renderShared(spec: TextureSpec, source: Raster | null, edits: EditLayer
   return raster
 }
 
+// Closing the editor drops the last render, so a closed painting's raster isn't kept alive.
+useEditor.subscribe((state) => {
+  if (!state.painting) last = null
+})
+
+/** The render kept for reuse, if any (for tests). */
+export function cachedRender(): Raster | null {
+  return last?.raster ?? null
+}
+
 /** Views derived from a render, shared like the render itself. */
 const derived = new WeakMap<Raster, RenderedPainting>()
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, type CSSProperties } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { DYE_IDS } from '../../../domain/types.ts'
 import { format, useT } from '../../../i18n/i18n.ts'
 import type { RGBA } from '../../../imaging/raster.ts'
@@ -21,7 +21,14 @@ import {
   TRANSPARENT,
 } from '../color.ts'
 import { ColorPicker } from '../ColorPicker.tsx'
-import { applyToolAt, outlinePath, paintSelection, type ToolContext } from '../pixelTools.ts'
+import {
+  applyToolAt,
+  newStroke,
+  outlinePath,
+  paintSelection,
+  useStroke,
+  type ToolContext,
+} from '../pixelTools.ts'
 import styles from './steps.module.css'
 import own from './PixelsStep.module.css'
 
@@ -45,7 +52,17 @@ export function PixelsStage() {
   const tool = useEditor((s) => s.tool)
   const selection = useEditor((s) => s.selection)
   const count = useMemo(() => (selection ? maskSize(selection) : 0), [selection])
-  const ctx = useRef<ToolContext>({ stroke: { last: null }, previousTool: 'pencil', shift: false })
+  const ctx = useRef<ToolContext>({ stroke: newStroke(), previousTool: 'pencil', shift: false })
+
+  // Leaving the step mid-stroke: drop the frame still to come and let previews resume.
+  useEffect(() => {
+    const stroke = ctx.current.stroke
+    return () => {
+      stroke.cancelFrame?.()
+      stroke.cancelFrame = null
+      useStroke.setState({ active: false })
+    }
+  }, [])
 
   // The eyedropper goes back to whichever tool was in use before it.
   useEffect(() => {
@@ -137,9 +154,13 @@ export function PixelsPanel() {
   const blocksW = painting?.width ?? 1
   const blocksH = painting?.height ?? 1
   const ppb = painting?.pixelsPerBlock ?? 1
+  // The wall preview waits for the end of a stroke: it would cost as much as the stroke itself.
+  const stroking = useStroke((s) => s.active)
+  const [wallSource, setWallSource] = useState(rendered.raster)
+  if (!stroking && wallSource !== rendered.raster) setWallSource(rendered.raster)
   const wall = useMemo(
-    () => rendered.raster && renderWallPreview(rendered.raster, blocksW, blocksH, ppb),
-    [rendered.raster, blocksW, blocksH, ppb],
+    () => wallSource && renderWallPreview(wallSource, blocksW, blocksH, ppb),
+    [wallSource, blocksW, blocksH, ppb],
   )
   if (!painting) return null
 

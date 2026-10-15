@@ -113,11 +113,11 @@ export function useShapeThumbnails(): Partial<Record<ShapeId, Raster>> {
       try {
         picture ??= renderPicture(s, { ...p, pixelsPerBlock: thumbnailPpb(p) })
         store(`${key}|${shape}`, renderShape(picture, p, shape))
+        setDrawn((n) => n + 1)
       } catch (error) {
+        // That shape stays blank; the others still get drawn.
         console.error(`Could not draw the ${shape} thumbnail`, error)
-        return
       }
-      setDrawn((n) => n + 1)
       if (missing.length > 0) cancel = whenIdle(step)
     }
     cancel = whenIdle(step)
