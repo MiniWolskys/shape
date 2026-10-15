@@ -16,8 +16,8 @@ interface SliderProps {
 }
 
 /**
- * A range slider with its value in an editable number field (M4): typing sets an exact value,
- * kept within the range; an empty or unreadable field goes back to the value when it loses focus.
+ * A range slider with its value in an editable number field (M4): a typed value is taken on Enter
+ * or when the field loses focus, kept within the range; an empty or unreadable one is dropped.
  */
 export function Slider({
   id,
@@ -68,15 +68,8 @@ export function Slider({
             value={draft ?? String(value)}
             disabled={disabled}
             aria-label={unit ? `${label} (${unit})` : label}
-            onChange={(event) => {
-              const text = event.currentTarget.value
-              setDraft(text)
-              const typed = Number(text)
-              // Values in range take effect at once; others wait for Enter or leaving the field.
-              if (text.trim() !== '' && Number.isFinite(typed) && typed >= min && typed <= max) {
-                if (within(typed) !== value) onChange(within(typed))
-              }
-            }}
+            // Typed values take effect on Enter or leaving the field: one value, one undo step.
+            onChange={(event) => setDraft(event.currentTarget.value)}
             onBlur={commit}
             onKeyDown={(event) => {
               if (event.key === 'Enter') commit()

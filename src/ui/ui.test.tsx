@@ -110,15 +110,20 @@ describe('Slider', () => {
     expect(screen.getByRole('spinbutton', { name: 'Size' })).toHaveValue(3)
   })
 
-  it('takes an exact value typed in its number field, kept within its range', async () => {
+  it('takes an exact value typed in its number field on Enter or leaving it, in range', async () => {
     const onChange = vi.fn()
     render(<Harness onChange={onChange} />)
     const field = screen.getByRole('spinbutton', { name: 'Frame thickness (px)' })
     await userEvent.clear(field)
     await userEvent.type(field, '7')
+    // Nothing changes while typing: one value, one undo step.
+    expect(onChange).not.toHaveBeenCalled()
+    await userEvent.keyboard('{Enter}')
+    expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange).toHaveBeenLastCalledWith(7)
     await userEvent.clear(field)
-    await userEvent.type(field, '50{Enter}')
+    await userEvent.type(field, '50')
+    await userEvent.tab()
     expect(onChange).toHaveBeenLastCalledWith(8)
     expect(field).toHaveValue(8)
     // An empty field goes back to the value on blur, without a change.
