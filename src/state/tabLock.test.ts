@@ -11,56 +11,7 @@ import {
   type LockManagerLike,
   type TabStatus,
 } from './tabLock.ts'
-
-interface Request {
-  callback: (lock: unknown) => Promise<void> | void
-  resolve: () => void
-  reject: (error: unknown) => void
-}
-
-/** A Web Locks manager for one exclusive lock name, shared by the fake tabs. */
-function fakeLocks(): LockManagerLike {
-  let holder: Request | null = null
-  const queue: Request[] = []
-
-  function grant(request: Request) {
-    holder = request
-    Promise.resolve(request.callback({ name: 'shape-workspace' })).then(
-      () => {
-        if (holder === request) {
-          holder = null
-          request.resolve()
-          next()
-        }
-      },
-      (error: unknown) => request.reject(error),
-    )
-  }
-  function next() {
-    const waiting = queue.shift()
-    if (waiting) grant(waiting)
-  }
-
-  return {
-    request(_name, options, callback) {
-      return new Promise((resolve, reject) => {
-        const request: Request = { callback, resolve: () => resolve(undefined), reject }
-        if (options.steal) {
-          const stolen = holder
-          holder = null
-          stolen?.reject(new DOMException('The lock was stolen', 'AbortError'))
-          grant(request)
-        } else if (holder === null && queue.length === 0) {
-          grant(request)
-        } else if (options.ifAvailable) {
-          Promise.resolve(callback(null)).then(() => resolve(undefined), reject)
-        } else {
-          queue.push(request)
-        }
-      })
-    },
-  }
-}
+import { fakeLocks } from '../test/fakeLocks.ts'
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -110,6 +61,40 @@ describe('webLockDriver (R38)', () => {
   })
 })
 
+describe('webLockDriver edge cases', () => {
+  it('works alone when the lock cannot be had at all, instead of never opening', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const broken: LockManagerLike = {
+      request: () => Promise.reject(new DOMException('Access denied', 'SecurityError')),
+    }
+    const a = tab(webLockDriver(broken))
+    await settle()
+    expect(a.now()).toBe('active')
+    expect(error).toHaveBeenCalled()
+    error.mockRestore()
+  })
+
+  it('a double "Use here" never leaves the new holder showing the notice', async () => {
+    const locks = fakeLocks()
+    const a = tab(webLockDriver(locks))
+    await settle()
+    const request = vi.spyOn(locks, 'request')
+    const b = tab(webLockDriver(locks))
+    await settle()
+    b.driver.takeOver()
+    b.driver.takeOver()
+    await settle()
+    await settle()
+    expect(b.now()).toBe('active')
+    expect(a.now()).toBe('elsewhere')
+    expect(b.seen.slice(b.seen.indexOf('active'))).toEqual(['active'])
+    // Once active, "Use here" asks for nothing more.
+    const asked = request.mock.calls.length
+    b.driver.takeOver()
+    expect(request.mock.calls.length).toBe(asked)
+  })
+})
+
 /** BroadcastChannels between fake tabs: a message reaches every other channel. */
 function fakeChannels() {
   const all: ChannelLike[] = []
@@ -152,6 +137,33 @@ describe('channelDriver (no Web Locks)', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(b.now()).toBe('active')
     expect(a.now()).toBe('elsewhere')
+  })
+})
+
+describe('channelDriver take over', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('waits for the old tab to finish its save before becoming active', async () => {
+    vi.useFakeTimers()
+    const channel = fakeChannels()
+    let finish: () => void = () => {}
+    const saving = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const old = channelDriver(channel(), { id: 'a' })
+    const seenOld: TabStatus[] = []
+    old.start((s) => seenOld.push(s), { settle: () => saving })
+    await vi.advanceTimersByTimeAsync(ANSWER_MS)
+    const b = tab(channelDriver(channel(), { id: 'b' }))
+    await vi.advanceTimersByTimeAsync(ANSWER_MS)
+    expect(b.now()).toBe('elsewhere')
+    b.driver.takeOver()
+    await vi.advanceTimersByTimeAsync(ANSWER_MS * 10)
+    expect(seenOld.at(-1)).toBe('elsewhere')
+    expect(b.now()).toBe('waiting')
+    finish()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(b.now()).toBe('active')
   })
 })
 

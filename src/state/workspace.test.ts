@@ -11,6 +11,9 @@ import { readLibraryPack, writeLibraryPack } from '../packs/libraryPack.ts'
 import { encodePng } from '../packs/png.ts'
 import { createRaster } from '../imaging/raster.ts'
 import { memoryStorage } from '../storage/persistence.ts'
+import { fakeLocks } from '../test/fakeLocks.ts'
+import { withWorkspaceIo } from './tabLock.ts'
+import type { Workspace } from '../domain/types.ts'
 import type { WorkspaceStorage } from '../storage/persistence.ts'
 import { createWorkspaceStore } from './workspace.ts'
 
@@ -834,6 +837,39 @@ describe('demo flag (R23)', () => {
     expect(s.getState().library?.paintings.map((p) => p.id)).toEqual(ids)
     expect(s.getState().demo).toBe(false)
     expect(s.getState().demoIds).toEqual([])
+  })
+})
+
+describe('storage reads and writes between tabs (R38)', () => {
+  it('a tab taking over reads the storage only once the save in flight of the old tab is done', async () => {
+    const locks = fakeLocks()
+    const ioLock = <T>(task: () => Promise<T>) => withWorkspaceIo(task, locks)
+    const shared = memoryStorage()
+    let finishSave: () => void = () => {}
+    const save = vi.fn(
+      (w: Workspace) =>
+        new Promise<void>((resolve) => {
+          finishSave = () => void shared.save(w).then(resolve)
+        }),
+    )
+    const old = createWorkspaceStore({ ...shared, save }, { ioLock })
+    await old.getState().init()
+    old.getState().createPainting()
+    void old.getState().persistNow()
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    // Another tab took over: this one stops, with its save still in flight.
+    old.getState().suspend()
+    const next = createWorkspaceStore(shared, { ioLock })
+    const loading = next.getState().init()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(next.getState().ready).toBe(false)
+    finishSave()
+    await loading
+    expect(next.getState().loose).toHaveLength(1)
+    // Nothing more from the old tab, even a save already asked for.
+    old.getState().createPainting()
+    await old.getState().persistNow()
+    expect(save).toHaveBeenCalledTimes(1)
   })
 })
 

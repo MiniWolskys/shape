@@ -16,6 +16,7 @@ import {
 import type { Assets, Library, Painting, Workspace } from '../domain/types.ts'
 import { readLibraryPack } from '../packs/libraryPack.ts'
 import { idbStorage } from '../storage/persistence.ts'
+import { withWorkspaceIo } from './tabLock.ts'
 import type { WorkspaceStorage } from '../storage/persistence.ts'
 
 const AUTOSAVE_MS = 600
@@ -94,6 +95,8 @@ export interface WorkspaceState extends Workspace {
    * owns the stored workspace now. Only a new `init` saves again.
    */
   suspend(): void
+  /** Resolves once the save in flight, if any, has finished. */
+  whenSaved(): Promise<void>
   /**
    * Takes over what an export changed (version, `exportedAt` — now if it has none — and the
    * paintings it published) into the open library as it is now. Ignored when that library is
@@ -202,8 +205,17 @@ function askToPersist(): void {
 
 export function createWorkspaceStore(
   initialStorage: WorkspaceStorage,
-  options: { flushOnHide?: boolean; persistStorage?: boolean } = {},
+  options: {
+    flushOnHide?: boolean
+    persistStorage?: boolean
+    /**
+     * Runs each read and write of the storage (R38): with withWorkspaceIo, a tab that takes over
+     * reads only once the old tab's save in flight is done. Runs them as they come by default.
+     */
+    ioLock?: <T>(task: () => Promise<T>) => Promise<T>
+  } = {},
 ) {
+  const io = options.ioLock ?? (<T>(task: () => Promise<T>) => task())
   let storage = initialStorage
   let timer: ReturnType<typeof setTimeout> | undefined
   let unsubscribe: (() => void) | undefined
@@ -240,9 +252,15 @@ export function createWorkspaceStore(
 
     const flush = async () => {
       if (suspended) return
-      const { library, loose, assets, demo, demoIds } = get()
       try {
-        await storage.save({ library, loose, assets, demo, demoIds })
+        const saved = await io(async () => {
+          // Another tab may have taken over while this save waited for the storage.
+          if (suspended) return false
+          const { library, loose, assets, demo, demoIds } = get()
+          await storage.save({ library, loose, assets, demo, demoIds })
+          return true
+        })
+        if (!saved) return
         if (get().saveError !== null) set({ saveError: null })
         if (options.persistStorage && !persistAsked) {
           persistAsked = true
@@ -327,7 +345,7 @@ export function createWorkspaceStore(
         clearTimeout(timer)
         initializing = (async () => {
           try {
-            const loaded = await storage.load()
+            const loaded = await io(() => storage.load())
             set({
               library: loaded?.library ?? null,
               loose: loaded?.loose ?? [],
@@ -551,6 +569,10 @@ export function createWorkspaceStore(
         return requestFlush()
       },
 
+      whenSaved() {
+        return saving ?? Promise.resolve()
+      },
+
       suspend() {
         suspended = true
         unsubscribe?.()
@@ -630,4 +652,5 @@ export type WorkspaceStore = ReturnType<typeof createWorkspaceStore>
 export const useWorkspace: WorkspaceStore = createWorkspaceStore(idbStorage, {
   flushOnHide: true,
   persistStorage: true,
+  ioLock: (task) => withWorkspaceIo(task),
 })

@@ -194,6 +194,8 @@ export function App() {
         onRegained: () => window.location.reload(),
         takeOverOnStart: takeTakeOverRequest(),
         reloadToTakeOver: requestTakeOverAndReload,
+        // Without Web Locks, the next tab reads the storage once this save in flight is done.
+        settle: () => useWorkspace.getState().whenSaved(),
       }),
     [],
   )
