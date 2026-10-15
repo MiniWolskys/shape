@@ -15,7 +15,7 @@ import { brushFootprint } from '../../imaging/tools.ts'
 import { renderWallPreview } from '../../imaging/wall.ts'
 import { withoutMod } from '../../imaging/window.ts'
 import { useEditor, type BackdropChoice, type CanvasView } from '../../state/editor.ts'
-import { useRenderedPainting } from '../../state/useRenderedPainting.ts'
+import { strokeDrawn, useRenderedPainting } from '../../state/useRenderedPainting.ts'
 import { autoBackdrop, type BackdropKind } from '../../ui/backdrop.ts'
 import { Backdrop } from '../../ui/Backdrop.tsx'
 import { Button } from '../../ui/Button.tsx'
@@ -410,6 +410,10 @@ export function CanvasStage({
           raster={shown}
           scale={scale}
           label={view === 'nomod' ? t.editor.nomodLabel : t.editor.canvasLabel}
+          // A stroke drawn in place: only what it changed is drawn again (the no-mod view is a
+          // new raster each time, drawn whole).
+          dirty={view === 'edit' ? rendered.dirty : null}
+          onDrawn={strokeDrawn}
         />
         {showGrid && (
           <div

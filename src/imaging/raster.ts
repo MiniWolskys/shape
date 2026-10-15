@@ -4,6 +4,14 @@ export interface Raster {
   data: Uint8ClampedArray
 }
 
+/** A rectangle of raster pixels, inclusive on both ends. */
+export interface PixelBox {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
 export type RGB = readonly [number, number, number]
 export type RGBA = readonly [number, number, number, number]
 

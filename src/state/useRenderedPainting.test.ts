@@ -13,6 +13,7 @@ import {
   currentRaster,
   endStroke,
   previewStroke,
+  strokeDrawn,
   useRenderedPainting,
 } from './useRenderedPainting.ts'
 
@@ -107,6 +108,25 @@ describe('useRenderedPainting', () => {
     act(() => endStroke())
     expect(result.current.raster).not.toBe(preview)
     expect(result.current.raster?.data).toEqual(expected().data)
+  })
+
+  it('says which area a stroke changed since the canvas last drew it', () => {
+    act(() => useEditor.getState().open(painting, picture(), null))
+    const { result } = renderHook(() => useRenderedPainting())
+    expect(result.current.dirty).toBeNull()
+    act(() => beginStroke())
+    const layer = pencil(createEditLayer(16, 16), [[2, 3]], [1, 2, 3, 255])
+    act(() => previewStroke(layer, { x0: 2, y0: 3, x1: 4, y1: 5 }))
+    expect(result.current.dirty).toEqual({ x0: 2, y0: 3, x1: 4, y1: 5 })
+    // Not drawn yet: the next area adds to it, clamped to the painting.
+    act(() => previewStroke(layer, { x0: 10, y0: -2, x1: 20, y1: 1 }))
+    expect(result.current.dirty).toEqual({ x0: 2, y0: 0, x1: 15, y1: 5 })
+    act(() => strokeDrawn())
+    act(() => previewStroke(layer, { x0: 7, y0: 7, x1: 8, y1: 8 }))
+    expect(result.current.dirty).toEqual({ x0: 7, y0: 7, x1: 8, y1: 8 })
+    // A real render is drawn whole.
+    act(() => endStroke())
+    expect(result.current.dirty).toBeNull()
   })
 
   it('forgets the render when the editor closes', () => {

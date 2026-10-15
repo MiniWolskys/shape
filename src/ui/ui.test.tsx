@@ -241,6 +241,50 @@ describe('PaintingCanvas', () => {
     }
   })
 
+  it('draws only the changed area of the same pixels, without copying them', () => {
+    const putImageData = vi.fn()
+    class FakeImageData {
+      readonly data: Uint8ClampedArray
+      readonly width: number
+      readonly height: number
+      constructor(data: Uint8ClampedArray, width: number, height: number) {
+        this.data = data
+        this.width = width
+        this.height = height
+      }
+    }
+    vi.stubGlobal('ImageData', FakeImageData)
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(() => ({ putImageData }) as unknown as CanvasRenderingContext2D)
+    try {
+      const raster = createRaster(8, 4, [10, 20, 30, 255])
+      const onDrawn = vi.fn()
+      const view = render(<PaintingCanvas raster={raster} label="P" onDrawn={onDrawn} />)
+      expect(putImageData).toHaveBeenLastCalledWith(expect.any(FakeImageData), 0, 0)
+      const image = putImageData.mock.calls[0]?.[0] as FakeImageData
+      // The canvas reads the raster's own pixels.
+      expect(image.data).toBe(raster.data)
+      expect(onDrawn).toHaveBeenCalledTimes(1)
+      // The same pixels, changed in a box: only that box is drawn.
+      const box = { x0: 1, y0: 2, x1: 3, y1: 3 }
+      view.rerender(
+        <PaintingCanvas raster={{ ...raster }} dirty={box} label="P" onDrawn={onDrawn} />,
+      )
+      expect(putImageData).toHaveBeenLastCalledWith(image, 0, 0, 1, 2, 3, 2)
+      expect(onDrawn).toHaveBeenCalledTimes(2)
+      // New pixels are drawn whole, whatever the box says.
+      const next = createRaster(8, 4)
+      view.rerender(<PaintingCanvas raster={next} dirty={box} label="P" onDrawn={onDrawn} />)
+      const last = putImageData.mock.lastCall ?? []
+      expect(last).toHaveLength(3)
+      expect((last[0] as FakeImageData).data).toBe(next.data)
+    } finally {
+      getContext.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('fits within a box using an integer scale when it can', () => {
     const getContext = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')

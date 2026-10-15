@@ -4,7 +4,7 @@ import type { Painting } from '../domain/types.ts'
 import type { EditLayer } from '../imaging/edits.ts'
 import { FRAME_MATERIALS } from '../imaging/materials.ts'
 import { createStagedRenderer } from '../imaging/pipeline.ts'
-import type { Raster } from '../imaging/raster.ts'
+import type { PixelBox, Raster } from '../imaging/raster.ts'
 import type { RenderMessage, RenderReply } from '../workers/protocol.ts'
 import { createRenderHost } from '../workers/renderHost.ts'
 import { useEditor } from './editor.ts'
@@ -27,6 +27,12 @@ export interface RenderedPainting {
   drawing: boolean
   /** The last render failed: what is on screen is older than the painting (retried on change). */
   failed: boolean
+  /**
+   * While a stroke is drawn: the area (inclusive pixels) of `raster` changed since the canvas
+   * last drew it (see `strokeDrawn`); `raster` then holds the same pixels as before. Null when
+   * the raster is new and must be drawn whole.
+   */
+  dirty: PixelBox | null
 }
 
 /** What the editor shows: the last render (or a stroke drawn over it) and what it was made of. */
@@ -35,7 +41,14 @@ interface Shown extends RenderedPainting {
   job: RenderJob | null
 }
 
-const EMPTY: Shown = { raster: null, transparent: 0, drawing: false, failed: false, job: null }
+const EMPTY: Shown = {
+  raster: null,
+  transparent: 0,
+  drawing: false,
+  failed: false,
+  dirty: null,
+  job: null,
+}
 
 /**
  * The last render, shared by every caller: the stage, the inspector previews and the pixel
@@ -117,7 +130,7 @@ function getScheduler(): RenderScheduler {
     rendered({ raster, transparent, job }: RenderResult) {
       // A stroke draws over what is on screen; its own render follows when it ends.
       if (useStroke.getState().active) return
-      useShown.setState({ raster, transparent, drawing: false, failed: false, job })
+      useShown.setState({ raster, transparent, drawing: false, failed: false, dirty: null, job })
     },
     failed(message: string) {
       console.error('Could not render the painting', message)
@@ -214,8 +227,9 @@ export function useRenderedPainting(): RenderedPainting {
   const transparent = useShown((s) => s.transparent)
   const drawing = useShown((s) => s.drawing)
   const failed = useShown((s) => s.failed)
+  const dirty = useShown((s) => s.dirty)
   useEffect(follow, [])
-  return { raster, transparent, drawing, failed }
+  return { raster, transparent, drawing, failed, dirty }
 }
 
 /** The stroke being drawn over the last render. */
@@ -227,6 +241,8 @@ let stroke: {
   frame: readonly [number, number, number]
   /** The job the base render was exactly made of (null if it was already out of date). */
   base: RenderJob | null
+  /** The area changed since the canvas last drew the stroke. */
+  undrawn: PixelBox | null
 } | null = null
 
 /** Starts a pencil or eraser stroke: from now on it is drawn over a copy of the last render. */
@@ -246,6 +262,7 @@ export function beginStroke(): void {
     transparent: shown.transparent,
     frame: FRAME_MATERIALS[painting.recipe.frame.material].color,
     base: shown.job && sameJob(shown.job, current) ? current : null,
+    undrawn: null,
   }
 }
 
@@ -264,6 +281,17 @@ export function previewStroke(
   const y0 = Math.max(0, box.y0)
   const x1 = Math.min(s.width - 1, box.x1)
   const y1 = Math.min(s.height - 1, box.y1)
+  if (x1 >= x0 && y1 >= y0) {
+    const u = s.undrawn
+    s.undrawn = u
+      ? {
+          x0: Math.min(u.x0, x0),
+          y0: Math.min(u.y0, y0),
+          x1: Math.max(u.x1, x1),
+          y1: Math.max(u.y1, y1),
+        }
+      : { x0, y0, x1, y1 }
+  }
   const values = layer.values.data
   const pixels = s.width * s.height
   const [fr, fg, fb] = s.frame
@@ -285,8 +313,14 @@ export function previewStroke(
     raster: { width: s.width, height: s.height, data: s.data },
     transparent: s.transparent,
     drawing: true,
+    dirty: s.undrawn,
     job: s.base && { ...s.base, edits: layer },
   })
+}
+
+/** The canvas drew the stroke as it is: the next stroke frame starts a new dirty area. */
+export function strokeDrawn(): void {
+  if (stroke) stroke.undrawn = null
 }
 
 /** Ends the stroke; the painting renders again with its edits. */
