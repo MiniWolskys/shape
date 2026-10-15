@@ -25,6 +25,19 @@ function sample() {
 }
 
 describe('library pack', () => {
+  it('downloads the last version again: same bytes, no publish, no new version (C5)', async () => {
+    const { lib, p, assets } = sample()
+    const first = await writeLibraryPack(lib, [p.id], assets, now)
+    const later = new Date('2026-10-16T09:00:00Z')
+    const again = await writeLibraryPack(first.library, [], assets, later, undefined, {
+      again: true,
+    })
+    expect(again.fileName).toBe('ourpaintings-v1.zip')
+    expect(again.library).toEqual(first.library)
+    expect(again.sha1).toBe(first.sha1)
+    expect(again.bytes).toEqual(first.bytes)
+  })
+
   it('reports each painting as it starts rendering', async () => {
     const { lib, p, assets } = sample()
     const second = { ...p, id: `${p.id}_b`, title: 'Dawn' }

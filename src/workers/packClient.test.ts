@@ -59,7 +59,7 @@ describe('buildLibraryPack', () => {
       [2, 2],
     ])
     expect(received).toEqual([
-      { library: lib, selectedIds: ['a'], assets: {}, now: now.toISOString() },
+      { library: lib, selectedIds: ['a'], assets: {}, now: now.toISOString(), again: false },
     ])
     expect(here).not.toHaveBeenCalled()
   })
@@ -98,6 +98,6 @@ describe('buildLibraryPack', () => {
     const here = vi.spyOn(libraryPack, 'writeLibraryPack').mockResolvedValue(result)
     const onProgress = vi.fn()
     expect(await buildLibraryPack(lib, ['a'], {}, now, onProgress)).toBe(result)
-    expect(here).toHaveBeenCalledWith(lib, ['a'], {}, now, onProgress)
+    expect(here).toHaveBeenCalledWith(lib, ['a'], {}, now, onProgress, { again: false })
   })
 })

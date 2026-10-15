@@ -1,200 +1,49 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ShapeError } from '../../domain/errors.ts'
-import { exportSet, whatsNew } from '../../domain/library.ts'
-import type { Assets, Library, Painting } from '../../domain/types.ts'
-import { validateForExport, type Issue } from '../../domain/validate.ts'
-import type { Dictionary } from '../../i18n/en.ts'
-import { currentDictionary, format, plural, useT } from '../../i18n/i18n.ts'
-import { serverPropertiesLines, type LibraryPackResult } from '../../packs/libraryPack.ts'
+import { readyToExport, whatsNew } from '../../domain/library.ts'
+import type { Library } from '../../domain/types.ts'
+import { validateForExport } from '../../domain/validate.ts'
+import { currentDictionary, format, useT } from '../../i18n/i18n.ts'
 import { setLeaveGuard, useNavigation } from '../../state/navigation.ts'
-import { useThumbnail } from '../../state/thumbnails.ts'
 import { useWorkspace } from '../../state/workspace.ts'
-import { Backdrop } from '../../ui/Backdrop.tsx'
 import { Button } from '../../ui/Button.tsx'
 import { copyText, selectText } from '../../ui/clipboard.ts'
 import { downloadBytes } from '../../ui/download.ts'
 import { errorMessage } from '../../ui/errors.ts'
-import { Icon } from '../../ui/Icon.tsx'
-import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
 import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
 import { buildLibraryPack } from '../../workers/packClient.ts'
+import { discordText } from './exportText.ts'
 import styles from './ExportScreen.module.css'
+import { exportPlan } from './exportPlan.ts'
+import { PackPanel, type Phase } from './PackPanel.tsx'
+import { SelectionPanel } from './SelectionPanel.tsx'
+import { ServerPanel } from './ServerPanel.tsx'
 
-/** Published paintings shown before the "+ n more published" toggle. */
-const PUBLISHED_SHOWN = 5
-const THUMB_BOX = { width: 36, height: 36 }
-
-type Phase =
-  | { kind: 'choose' }
-  | { kind: 'busy'; done: number; total: number }
-  | { kind: 'done'; result: LibraryPackResult }
-
-const isNew = (p: Painting) => p.status !== 'published'
-const readyIds = (lib: Library) =>
-  new Set(lib.paintings.filter((p) => p.status === 'ready').map((p) => p.id))
-const titleOf = (p: Painting | undefined, t: Dictionary) =>
-  p && p.title.trim() !== '' ? p.title : t.library.untitled
-
-function issueMessage(issue: Issue, lib: Library, t: Dictionary): string {
-  const painting = lib.paintings.find((p) => p.id === issue.paintingId)
-  const values = { title: titleOf(painting, t), id: issue.paintingId ?? '' }
-  switch (issue.code) {
-    case 'no-image':
-      return format(t.export.issue.noImage, values)
-    case 'duplicate-id':
-      return format(t.export.issue.duplicateId, values)
-    case 'no-title':
-      return format(t.export.issue.noTitle, values)
-    case 'no-author':
-      return format(t.export.issue.noAuthor, values)
-    case 'nothing-new':
-      return format(t.export.issue.nothingNew, { version: lib.version })
-  }
-}
-
-function newsLine(p: Painting, t: Dictionary): string {
-  const title = titleOf(p, t)
-  return p.author.trim() === '' ? title : format(t.export.whatsNewItem, { title, author: p.author })
-}
-
-/** `**Library vN**` then one `- title by author` line per painting new in that version. */
-function discordText(lib: Library, version: number, t: Dictionary): string {
-  const news = whatsNew(lib, version)
-  const lines = news.map((p) =>
-    p.author.trim() === ''
-      ? `- ${titleOf(p, t)}`
-      : format(t.export.discordLine, { title: titleOf(p, t), author: p.author }),
-  )
-  if (lines.length === 0) lines.push(`- ${t.export.nothingNew}`)
-  return [`**${lib.name} v${version}**`, ...lines].join('\n')
-}
-
-/** Publishes the selection now and builds the library pack, off the page when possible. */
-function buildPack(
-  lib: Library,
-  ids: string[],
-  assets: Assets,
-  onProgress: (done: number, total: number) => void,
-  signal: AbortSignal,
-): Promise<LibraryPackResult> {
-  return buildLibraryPack(lib, ids, assets, new Date(), onProgress, signal)
-}
-
-const kilobytes = (bytes: number) => Math.max(1, Math.round(bytes / 1024))
-
-function Thumb({ painting }: { painting: Painting }) {
-  const raster = useThumbnail(painting)
-  return (
-    <Backdrop kind="mid" className={styles.thumb}>
-      {raster && raster !== 'failed' ? (
-        <PaintingCanvas raster={raster} fit={THUMB_BOX} label="" />
-      ) : (
-        <Icon name="image" size={18} className={styles.thumbIcon} />
-      )}
-    </Backdrop>
-  )
-}
-
-interface PickProps {
-  painting: Painting
-  checked: boolean
-  disabled: boolean
-  meta: string
-  hint?: string
-  locked?: boolean
-  onToggle?: () => void
-}
-
-function Pick({ painting, checked, disabled, meta, hint, locked, onToggle }: PickProps) {
-  const t = useT()
-  const titleId = useId()
-  return (
-    <li>
-      <label className={`${styles.pick} ${locked ? styles.locked : ''}`}>
-        <input
-          type="checkbox"
-          className={styles.checkbox}
-          checked={checked}
-          disabled={disabled}
-          aria-labelledby={titleId}
-          onChange={onToggle}
-        />
-        {locked && <Icon name="lock" size={12} className={styles.lockIcon} />}
-        <Thumb painting={painting} />
-        <span className={styles.pickText}>
-          <b id={titleId}>{titleOf(painting, t)}</b>
-          <span className={styles.muted}>{meta}</span>
-          {hint && <span className={styles.hint}>{hint}</span>}
-        </span>
-      </label>
-    </li>
-  )
-}
-
-/** How long a copy button says "Copied ✓" (M1). */
-const COPIED_MS = 2000
-
-/** A copy button that says "Copied ✓" for 2 s once `onCopy` resolves true (M1). */
-function CopyButton({
-  label,
-  onCopy,
-  disabled,
-  className,
-  children,
-}: {
-  /** The accessible name, when the visible text alone is not enough. */
-  label?: string
-  onCopy(): Promise<boolean>
-  disabled?: boolean
-  className?: string
-  children: ReactNode
-}) {
-  const t = useT()
-  const [copied, setCopied] = useState(false)
-  useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), COPIED_MS)
-    return () => clearTimeout(timer)
-  }, [copied])
-  return (
-    <>
-      <Button
-        icon="copy"
-        aria-label={label}
-        className={className}
-        disabled={disabled}
-        onClick={() => {
-          void onCopy().then((ok) => {
-            if (ok) setCopied(true)
-          })
-        }}
-      >
-        {copied ? t.common.copiedCheck : children}
-      </Button>
-      {/* `label` names the button, so the confirmation is announced on its own. */}
-      <span role="status" className="visually-hidden">
-        {copied ? t.common.copied : ''}
-      </span>
-    </>
-  )
-}
+const readyIds = (lib: Library) => new Set(readyToExport(lib).map((p) => p.id))
 
 export function ExportScreen() {
   const t = useT()
   const go = useNavigation((s) => s.go)
   const library = useWorkspace((s) => s.library)
+  const demo = useWorkspace((s) => s.demo)
   const hasLoose = useWorkspace((s) => s.loose.length > 0)
 
   useEffect(() => {
-    if (library) return
+    if (library && !demo) return
     // StrictMode runs effects twice; only the first run still sees the export screen.
     if (useNavigation.getState().screen.name !== 'export') return
+    if (library) {
+      // The demo is never exported (R23).
+      toast(t.library.demoBanner)
+      go({ name: 'library' }, { replace: true })
+      return
+    }
     toast(t.export.needsLibrary)
     go(hasLoose ? { name: 'library' } : { name: 'home' }, { replace: true })
-  }, [library, hasLoose, go, t])
+  }, [library, demo, hasLoose, go, t])
 
-  if (!library) return null
+  if (!library || demo) return null
   return <ExportView library={library} />
 }
 
@@ -204,16 +53,10 @@ function ExportView({ library }: { library: Library }) {
   const assets = useWorkspace((s) => s.assets)
   const [selected, setSelected] = useState(() => readyIds(library))
   const [phase, setPhase] = useState<Phase>({ kind: 'choose' })
-  const [showAllPublished, setShowAllPublished] = useState(false)
-  const sha1Ref = useRef<HTMLElement>(null)
-  const propertiesRef = useRef<HTMLPreElement>(null)
   /** The build in progress; leaving the screen stops it. */
   const building = useRef<AbortController | null>(null)
   useEffect(() => () => building.current?.abort(), [])
 
-  const newPaintings = library.paintings.filter(isNew)
-  const published = library.paintings.filter((p) => !isNew(p))
-  const selectedIds = newPaintings.filter((p) => selected.has(p.id)).map((p) => p.id)
   const done = phase.kind === 'done' ? phase.result : null
   const busy = phase.kind === 'busy'
 
@@ -227,16 +70,24 @@ function ExportView({ library }: { library: Library }) {
     return () => setLeaveGuard(null)
   }, [busy])
 
-  const issues = done ? [] : validateForExport(library, selectedIds, assets)
+  const selectedIds = library.paintings
+    .filter((p) => p.status !== 'published' && selected.has(p.id))
+    .map((p) => p.id)
+  const plan = phase.kind === 'done' ? phase.plan : exportPlan(library, selectedIds)
+  const again = plan.kind === 'again'
+  // "Nothing new" is what the plan and its button already say.
+  const issues = done
+    ? []
+    : validateForExport(library, again ? [] : selectedIds, assets).filter(
+        (i) => i.code !== 'nothing-new',
+      )
   const blocking = issues.some((i) => i.blocking)
-  const fromVersion = done ? done.library.version - 1 : library.version
-  const toVersion = fromVersion + 1
-  const total = done ? exportSet(done.library, []).length : exportSet(library, selectedIds).length
-  const news = done
-    ? whatsNew(done.library, done.library.version)
-    : newPaintings.filter((p) => selected.has(p.id))
-  const fileName = done ? done.fileName : `${library.namespace}-v${toVersion}.zip`
-  const ns = library.namespace
+  const shown = done ? done.library : library
+  const version = done ? done.library.version : again ? library.version : library.version + 1
+  const news =
+    done || again
+      ? whatsNew(shown, version)
+      : library.paintings.filter((p) => selectedIds.includes(p.id))
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -249,25 +100,29 @@ function ExportView({ library }: { library: Library }) {
 
   async function runExport() {
     const state = useWorkspace.getState()
-    if (!state.library) return
+    if (!state.library || busy) return
     const build = new AbortController()
     building.current = build
+    const planned = plan
     setPhase({ kind: 'busy', done: 0, total: 0 })
     try {
-      const result = await buildPack(
+      const result = await buildLibraryPack(
         state.library,
-        selectedIds,
+        planned.kind === 'again' ? [] : selectedIds,
         state.assets,
+        new Date(),
         (done, total) => {
           if (!build.signal.aborted) setPhase({ kind: 'busy', done, total })
         },
         build.signal,
+        planned.kind === 'again',
       )
       // Left the screen meanwhile: no late download, and the library stays as it is.
       if (build.signal.aborted) return
       downloadBytes(result.bytes, result.fileName, 'application/zip')
-      useWorkspace.getState().applyExport(result.library)
-      setPhase({ kind: 'done', result })
+      // Downloading a version again publishes nothing (C5).
+      if (planned.kind !== 'again') useWorkspace.getState().applyExport(result.library)
+      setPhase({ kind: 'done', result, plan: planned })
     } catch (error) {
       if (build.signal.aborted) return
       if (error instanceof ShapeError && error.code === 'export-failed') {
@@ -286,22 +141,22 @@ function ExportView({ library }: { library: Library }) {
     setPhase({ kind: 'choose' })
   }
 
-  /** Copies `text`; when that fails, selects `source` for a manual copy and says so. */
+  /** Copies `text`; when that fails, selects `source` (if any) for a manual copy and says so. */
   async function copy(text: string, source: HTMLElement | null): Promise<boolean> {
     if (await copyText(text)) return true
-    if (source) selectText(source)
-    toast(t.export.copyFailed, 'error')
+    if (source) {
+      selectText(source)
+      toast(t.export.copyFailed, 'error')
+    } else {
+      toast(t.export.copyBlocked, 'error')
+    }
     return false
   }
 
-  const visiblePublished = showAllPublished ? published : published.slice(0, PUBLISHED_SHOWN)
-  const hiddenCount = published.length - PUBLISHED_SHOWN
-
   let checks = { label: t.export.checksPassed, tone: styles.ok }
-  if (blocking) checks = { label: t.export.checksBlocked, tone: styles.danger }
-  else if (issues.length > 0) checks = { label: t.export.checksWarnings, tone: styles.warn }
-
-  const properties = serverPropertiesLines(done ? done.sha1 : '…', t.export.linkPlaceholder)
+  if (blocking || plan.kind === 'nothing') {
+    checks = { label: t.export.checksBlocked, tone: styles.danger }
+  } else if (issues.length > 0) checks = { label: t.export.checksWarnings, tone: styles.warn }
 
   return (
     <div className={styles.page}>
@@ -324,230 +179,31 @@ function ExportView({ library }: { library: Library }) {
         right={!done && <span className={`${styles.chip} ${checks.tone}`}>{checks.label}</span>}
       />
       <main className={styles.columns}>
-        <section className={styles.panel} aria-labelledby="export-what">
-          <h2 id="export-what" className={styles.h2}>
-            {t.export.whatGoesIn}
-          </h2>
-          <h3 className={styles.label}>{t.export.newChoose}</h3>
-          {newPaintings.length === 0 ? (
-            <p className={styles.muted}>{t.export.noNew}</p>
-          ) : (
-            <ul className={styles.picks}>
-              {newPaintings.map((p) => (
-                <Pick
-                  key={p.id}
-                  painting={p}
-                  checked={selected.has(p.id)}
-                  disabled={phase.kind !== 'choose'}
-                  meta={format(t.export.pickMeta, {
-                    author: p.author,
-                    width: p.width,
-                    height: p.height,
-                  })}
-                  hint={p.status === 'draft' ? t.export.draftNotReady : undefined}
-                  onToggle={() => toggle(p.id)}
-                />
-              ))}
-            </ul>
-          )}
-          {published.length > 0 && (
-            <>
-              <h3 className={styles.label}>{t.export.publishedAlways}</h3>
-              <ul className={styles.picks}>
-                {visiblePublished.map((p) => (
-                  <Pick
-                    key={p.id}
-                    painting={p}
-                    checked
-                    disabled
-                    locked
-                    meta={
-                      p.publishedIn === undefined
-                        ? ''
-                        : format(t.export.since, { version: p.publishedIn })
-                    }
-                  />
-                ))}
-              </ul>
-              {hiddenCount > 0 && (
-                <button
-                  type="button"
-                  className={styles.more}
-                  onClick={() => setShowAllPublished((v) => !v)}
-                >
-                  {showAllPublished
-                    ? t.export.showLess
-                    : plural(t, t.export.morePublished, hiddenCount)}
-                </button>
-              )}
-            </>
-          )}
-        </section>
-
-        <section className={styles.panel} aria-label={t.export.downloadPack}>
-          <div className={styles.version}>
-            <span className={styles.muted}>
-              {format(t.export.version, { version: fromVersion })}
-            </span>
-            <span aria-hidden="true">→</span>
-            <span className={styles.accent}>
-              {format(t.export.version, { version: toVersion })}
-            </span>
-            <small className={styles.counts}>
-              <span>{plural(t, t.export.newCount, news.length)}</span>
-              <span>{format(t.export.totalCount, { count: total })}</span>
-            </small>
-          </div>
-
-          <div className={styles.file}>
-            <Icon name="download" size={26} />
-            <div className={styles.fileText}>
-              <b>{fileName}</b>
-              <span className={styles.muted}>
-                {done
-                  ? format(t.export.fileHintSize, {
-                      size: format(t.export.kilobytes, { size: kilobytes(done.bytes.length) }),
-                    })
-                  : t.export.fileHint}
-              </span>
-            </div>
-          </div>
-
-          <dl className={styles.inside} aria-label={t.export.inside}>
-            <div>
-              <dt>{t.export.insideLibrary}</dt>
-              <dd>{plural(t, t.export.insideLibraryDetail, library.paintings.length)}</dd>
-            </div>
-            <div>
-              <dt>{t.export.insideDatapack}</dt>
-              <dd>{`${ns}-datapack.zip`}</dd>
-            </div>
-            <div>
-              <dt>{t.export.insideResources}</dt>
-              <dd>{`${ns}-resources.zip`}</dd>
-            </div>
-            <div>
-              <dt>{t.export.insideSha1}</dt>
-              <dd>{t.export.insideSha1Detail}</dd>
-            </div>
-          </dl>
-
-          {issues.length > 0 && (
-            <ul className={styles.issues} aria-label={t.export.issues}>
-              {issues.map((issue, i) => (
-                <li
-                  key={`${issue.code}:${issue.paintingId ?? i}`}
-                  className={issue.blocking ? styles.blocking : styles.warning}
-                >
-                  {issueMessage(issue, library, t)}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {done ? (
-            <div className={styles.done} role="status">
-              <p>
-                <Icon name="check" size={16} className={styles.okIcon} />{' '}
-                {format(t.export.done, { file: done.fileName })}
-              </p>
-              <div className={styles.row}>
-                <Button
-                  icon="download"
-                  onClick={() => downloadBytes(done.bytes, done.fileName, 'application/zip')}
-                >
-                  {t.export.downloadAgain}
-                </Button>
-                <Button variant="ghost" onClick={startAgain}>
-                  {t.export.exportAgain}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <Button
-                variant="primary"
-                size="lg"
-                icon="download"
-                className={styles.download}
-                disabled={blocking || busy}
-                aria-busy={busy}
-                onClick={() => void runExport()}
-              >
-                {phase.kind === 'busy'
-                  ? phase.total > 0
-                    ? format(t.export.rendering, { done: phase.done, total: phase.total })
-                    : t.export.exporting
-                  : t.export.downloadPack}
-              </Button>
-              {blocking && <p className={styles.blockedHint}>{t.export.blockedHint}</p>}
-            </>
-          )}
-
-          <h3 className={styles.label}>{format(t.export.whatsNew, { version: toVersion })}</h3>
-          {news.length === 0 ? (
-            <p className={styles.muted}>{t.export.nothingNew}</p>
-          ) : (
-            <ul className={styles.news}>
-              {news.map((p) => (
-                <li key={p.id}>{newsLine(p, t)}</li>
-              ))}
-            </ul>
-          )}
-          {done && (
-            <CopyButton
-              className={styles.discord}
-              onCopy={() => copy(discordText(done.library, done.library.version, t), null)}
-            >
-              {t.export.copyDiscord}
-            </CopyButton>
-          )}
-        </section>
-
-        <section className={styles.panel} aria-labelledby="export-server">
-          <h2 id="export-server" className={styles.h2}>
-            {t.export.putOnServer}
-          </h2>
-          <h3 className={styles.label}>{t.export.sha1Label}</h3>
-          <div className={styles.row}>
-            {done ? (
-              <code ref={sha1Ref} className={styles.code} data-testid="sha1">
-                {done.sha1}
-              </code>
-            ) : (
-              <span className={`${styles.code} ${styles.pending}`}>{t.export.sha1Pending}</span>
-            )}
-            <CopyButton
-              label={t.export.copySha1}
-              disabled={!done}
-              onCopy={() => (done ? copy(done.sha1, sha1Ref.current) : Promise.resolve(false))}
-            >
-              {t.common.copy}
-            </CopyButton>
-          </div>
-          <h3 className={styles.label}>{t.export.serverProperties}</h3>
-          <pre ref={propertiesRef} className={styles.code} data-testid="server-properties">
-            {properties}
-          </pre>
-          <div>
-            <CopyButton
-              label={t.export.copyProperties}
-              disabled={!done}
-              onCopy={() => copy(properties, propertiesRef.current)}
-            >
-              {t.common.copy}
-            </CopyButton>
-          </div>
-          <ol className={styles.steps}>
-            <li>{t.export.serverSteps.step1}</li>
-            <li>{t.export.serverSteps.step2}</li>
-            <li>{t.export.serverSteps.step3}</li>
-            <li>{t.export.serverSteps.step4}</li>
-          </ol>
-          <p className={styles.never} role="note">
-            {t.export.neverDelete}
-          </p>
-        </section>
+        <SelectionPanel
+          library={library}
+          selected={selected}
+          locked={phase.kind !== 'choose'}
+          onToggle={toggle}
+        />
+        <PackPanel
+          library={shown}
+          plan={plan}
+          phase={phase}
+          version={version}
+          news={news}
+          issues={issues}
+          onExport={() => void runExport()}
+          onDownloadAgain={() => {
+            if (done) downloadBytes(done.bytes, done.fileName, 'application/zip')
+          }}
+          onStartAgain={startAgain}
+          onCopyDiscord={() =>
+            done
+              ? copy(discordText(done.library, done.library.version, t), null)
+              : Promise.resolve(false)
+          }
+        />
+        <ServerPanel namespace={library.namespace} sha1={done?.sha1 ?? null} copy={copy} />
       </main>
     </div>
   )

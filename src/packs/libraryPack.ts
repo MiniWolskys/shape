@@ -96,6 +96,9 @@ function assetEntries(p: Painting): [key: string, path: string][] {
  * images and edit layers, the rendered textures, and the two server packs with the resource
  * pack's SHA1 and a README. `onProgress(done, total)` is called as each painting starts
  * rendering (done counts from 1).
+ *
+ * With `again`, nothing is published and the version stays: the library's current version is
+ * built once more, so an unchanged library gives the very same bytes and SHA1 (C5).
  */
 export async function writeLibraryPack(
   lib: Library,
@@ -103,8 +106,11 @@ export async function writeLibraryPack(
   assets: Assets,
   now: Date,
   onProgress?: (done: number, total: number) => void,
+  options: { again?: boolean } = {},
 ): Promise<LibraryPackResult> {
-  const library = { ...publish(lib, selectedIds, now), exportedAt: now.toISOString() }
+  const library = options.again
+    ? lib
+    : { ...publish(lib, selectedIds, now), exportedAt: now.toISOString() }
   const paintings = exportSet(library, selectedIds)
   const ns = library.namespace
 

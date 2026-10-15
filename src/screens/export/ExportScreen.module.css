@@ -93,7 +93,6 @@
 }
 
 .pick {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -124,10 +123,16 @@
   opacity: 0.55;
 }
 
+/* The checkbox and, for published paintings, its lock, side by side (M8). */
+.checkCell {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  min-width: 33px;
+}
+
 .lockIcon {
-  position: absolute;
-  top: 4px;
-  left: 4px;
   color: var(--muted);
 }
 
@@ -269,6 +274,22 @@
 .download {
   justify-content: center;
   width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+.note {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: var(--raised);
+  font-size: 13px;
+}
+
+.startAgain {
+  justify-self: start;
+  padding-left: 0;
 }
 
 .blockedHint {
@@ -326,6 +347,21 @@
   font-size: 12px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+/* server.properties lines never wrap mid-key (I21): they scroll sideways instead. */
+.properties {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.steps code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .pending {

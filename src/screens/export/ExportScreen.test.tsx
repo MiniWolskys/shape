@@ -64,7 +64,9 @@ function renderExport() {
   )
 }
 
-const downloadButton = () => screen.getByRole('button', { name: 'Download library pack' })
+/** The main button: it says what it will do (C5). */
+const downloadButton = () =>
+  screen.getByRole('button', { name: /^(Publish|Update|Download|Publier|Mettre|Retélécharger)/ })
 const checkbox = (name: string) => screen.getByRole('checkbox', { name })
 
 describe('ExportScreen', () => {
@@ -94,7 +96,7 @@ describe('ExportScreen', () => {
     renderExport()
     expect(checkbox('Sunset Chapel')).toBeChecked()
     expect(checkbox('Night Rose')).not.toBeChecked()
-    expect(screen.getByText('draft, not ready')).toBeInTheDocument()
+    expect(screen.getByText('draft, not ticked by itself')).toBeInTheDocument()
     expect(checkbox('Frost Oculus')).toBeChecked()
     expect(checkbox('Frost Oculus')).toBeDisabled()
     expect(screen.getByText('since v3')).toBeInTheDocument()
@@ -102,6 +104,97 @@ describe('ExportScreen', () => {
     expect(screen.getByText('v8')).toBeInTheDocument()
     expect(screen.getByText('ours-v8.zip')).toBeInTheDocument()
     expect(screen.getByText('Appears after download')).toBeInTheDocument()
+  })
+
+  it('leaves a ready painting without a picture unticked (R16)', async () => {
+    const blank = painting('Blank', 'Sam')
+    await startWith(
+      library([
+        painting('Sunset Chapel', 'Sam'),
+        { ...blank, recipe: { ...blank.recipe, source: null } },
+      ]),
+    )
+    renderExport()
+    expect(checkbox('Sunset Chapel')).toBeChecked()
+    expect(checkbox('Blank')).not.toBeChecked()
+  })
+
+  it('says on the button what it publishes, and that it is for good (C5)', async () => {
+    await startWith(
+      library([painting('Sunset Chapel', 'Sam'), painting('Night Rose', 'Alex', 'draft')]),
+    )
+    renderExport()
+    expect(downloadButton()).toHaveTextContent('Publish 1 and download v8')
+    expect(
+      screen.getByText("Published paintings can't be resized or deleted later."),
+    ).toBeInTheDocument()
+    await userEvent.click(checkbox('Night Rose'))
+    expect(downloadButton()).toHaveTextContent('Publish 2 and download v8')
+  })
+
+  it('lists published paintings changed since the last export in their own group (I25)', async () => {
+    const changed = {
+      ...painting('Frost Oculus', 'Zoé', 'published', 3),
+      updatedAt: '2026-10-15T14:00:00.000Z',
+    }
+    await startWith({
+      ...library([changed, painting('Autumn Door', 'Sam', 'published', 2)]),
+      exportedAt: '2026-10-15T13:00:00.000Z',
+    })
+    renderExport()
+    const group = screen.getByRole('list', { name: 'Changed since v7' })
+    expect(within(group).getByRole('checkbox', { name: 'Frost Oculus' })).toBeChecked()
+    expect(within(group).queryByRole('checkbox', { name: 'Autumn Door' })).toBeNull()
+    expect(downloadButton()).toHaveTextContent('Update 1 and download v8')
+  })
+
+  it('downloads the same version again when nothing is new, without a new version (C5)', async () => {
+    const save = vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
+    await startWith(library([painting('Old', 'Sam', 'published', 2)]))
+    renderExport()
+    expect(downloadButton()).toHaveTextContent('Download v7 again')
+    expect(screen.queryByText(/can't be resized or deleted later/)).toBeNull()
+    expect(screen.getByText('ours-v7.zip')).toBeInTheDocument()
+    await userEvent.click(downloadButton())
+    expect(await screen.findByText('Your download of ours-v7.zip started.')).toBeInTheDocument()
+    expect(save.mock.calls[0]?.[1]).toBe('ours-v7.zip')
+    expect(useWorkspace.getState().library?.version).toBe(7)
+  })
+
+  it('gives the very same file when the last version is downloaded again', async () => {
+    const save = vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    renderExport()
+    await userEvent.click(downloadButton())
+    await screen.findByTestId('sha1')
+    await userEvent.click(screen.getByRole('button', { name: 'Start another export' }))
+    expect(downloadButton()).toHaveTextContent('Download v8 again')
+    await userEvent.click(downloadButton())
+    await screen.findByText('Your download of ours-v8.zip started.')
+    const [first, second] = save.mock.calls
+    expect(second?.[1]).toBe('ours-v8.zip')
+    expect(second?.[0]).toEqual(first?.[0])
+    expect(useWorkspace.getState().library?.version).toBe(8)
+  })
+
+  it('has nothing to download before the first painting is ticked', async () => {
+    await startWith(library([painting('Night Rose', 'Alex', 'draft')], 0))
+    renderExport()
+    expect(downloadButton()).toBeDisabled()
+    expect(screen.getByText('Tick at least one painting to export.')).toBeInTheDocument()
+  })
+
+  it('keeps the demo out of exports (R23)', async () => {
+    const lib = library([painting('Sunset Chapel', 'Sam')])
+    const storage = memoryStorage()
+    await storage.save({ library: { ...lib, namespace: 'sample' }, loose: [], assets, demo: true })
+    await useWorkspace.getState().init(storage)
+    renderExport()
+    await act(async () => {})
+    expect(useNavigation.getState().screen).toEqual({ name: 'library' })
+    expect(
+      screen.getByText('This is a demo library — create your own to export.'),
+    ).toBeInTheDocument()
   })
 
   it('collapses published paintings after five', async () => {
@@ -124,17 +217,12 @@ describe('ExportScreen', () => {
       ]),
     )
     renderExport()
+    expect(downloadButton()).toBeEnabled()
+    await userEvent.click(checkbox('Night Rose'))
     expect(screen.getByText('"Night Rose" has no picture.')).toBeInTheDocument()
     expect(downloadButton()).toBeDisabled()
     await userEvent.click(checkbox('Night Rose'))
     expect(screen.queryByText('"Night Rose" has no picture.')).not.toBeInTheDocument()
-    expect(downloadButton()).toBeEnabled()
-  })
-
-  it('allows exporting with nothing new, with a warning', async () => {
-    await startWith(library([painting('Old', 'Sam', 'published', 2)]))
-    renderExport()
-    expect(screen.getByText(/No new paintings are selected/)).toBeInTheDocument()
     expect(downloadButton()).toBeEnabled()
   })
 
@@ -161,6 +249,11 @@ describe('ExportScreen', () => {
     expect(lib?.paintings.find((p) => p.id === sunset.id)?.status).toBe('published')
     expect(lib?.paintings.find((p) => p.id === sunset.id)?.publishedIn).toBe(8)
     expect(lib?.paintings.find((p) => p.id === night.id)?.status).toBe('draft')
+
+    expect(screen.getByText('Your download of ours-v8.zip started.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Download again' }))
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(save.mock.calls[1]?.[0]).toBe(bytes)
 
     expect(screen.getByText("What's new in v8")).toBeInTheDocument()
     expect(screen.getByText('Sunset Chapel by Sam')).toBeInTheDocument()
@@ -192,28 +285,25 @@ describe('ExportScreen', () => {
     expect(screen.getByRole('button', { name: 'Copied ✓' })).toBeInTheDocument()
   })
 
-  it('writes the Discord text in French, and says when nothing is new', async () => {
+  it('writes the Discord text of a version downloaded again, in French', async () => {
     vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
     useLanguage.setState({ language: 'fr' })
     await startWith(library([painting('Vieux', 'Sam', 'published', 2)], 2))
     renderExport()
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Télécharger le pack de bibliothèque' }),
-    )
+    expect(downloadButton()).toHaveTextContent('Retélécharger la v2')
+    await userEvent.click(downloadButton())
     await userEvent.click(await screen.findByRole('button', { name: 'Copier pour Discord' }))
-    expect(writeText).toHaveBeenLastCalledWith(
-      '**Our paintings v3**\n- Aucun nouveau tableau dans cette version.',
-    )
+    expect(writeText).toHaveBeenLastCalledWith('**Our paintings v2**\n- Vieux par Sam')
   })
 
   it('counts a single painting in the singular, in English and French', async () => {
     await startWith(library([painting('Seul', 'Sam')]))
     const { unmount } = renderExport()
-    expect(screen.getByText('1 painting, sources and settings')).toBeInTheDocument()
+    expect(screen.getByText('1 painting')).toBeInTheDocument()
     unmount()
     useLanguage.setState({ language: 'fr' })
     renderExport()
-    expect(screen.getByText('1 tableau, images sources et réglages')).toBeInTheDocument()
+    expect(screen.getByText('1 tableau')).toBeInTheDocument()
   })
 
   it('shows the server.properties lines with a French link placeholder', async () => {
@@ -241,6 +331,28 @@ describe('ExportScreen', () => {
     ).toHaveTextContent('Copied ✓')
   })
 
+  it('does not claim a selection when the Discord text could not be copied', async () => {
+    vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    Object.defineProperty(document, 'execCommand', { value: () => false, configurable: true })
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    renderExport()
+    await userEvent.click(downloadButton())
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy for Discord' }))
+    const message = await screen.findByText(/^Couldn't copy/)
+    expect(message.textContent).not.toMatch(/selected/)
+  })
+
+  it('walks the server owner through the files, the mod and the link (I12, I21)', async () => {
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    renderExport()
+    const steps = screen.getByRole('list', { name: 'Server steps' })
+    expect(steps).toHaveTextContent('Transparent Paintings mod')
+    expect(steps).toHaveTextContent('server/ours-datapack.zip')
+    expect(steps).toHaveTextContent('world/datapacks/')
+    expect(steps).toHaveTextContent('server/ours-resources.zip')
+  })
+
   it('shows which painting is rendering while the pack builds', async () => {
     let finish: () => void = () => {}
     vi.spyOn(libraryPack, 'writeLibraryPack').mockImplementation(
@@ -258,7 +370,7 @@ describe('ExportScreen', () => {
     expect(busy).toBeDisabled()
     expect(busy).toHaveAttribute('aria-busy', 'true')
     await act(async () => finish())
-    expect(await screen.findByRole('button', { name: 'Download library pack' })).toBeEnabled()
+    expect(await screen.findByRole('button', { name: 'Publish 1 and download v8' })).toBeEnabled()
   })
 
   it('keeps the way out closed while the pack builds', async () => {
@@ -325,19 +437,13 @@ describe('ExportScreen', () => {
     useLanguage.setState({ language: 'fr' })
     await startWith(library([painting('Sunset Chapel', 'Sam')]))
     renderExport()
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Télécharger le pack de bibliothèque' }),
-    )
+    await userEvent.click(downloadButton())
     const message = await screen.findByText(/L’export a échoué/)
     expect(message.textContent).not.toMatch(/damaged/)
     expect(logged).toHaveBeenCalled()
     expect(save).not.toHaveBeenCalled()
     expect(useWorkspace.getState().library?.version).toBe(7)
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Télécharger le pack de bibliothèque' }),
-      ).toBeEnabled(),
-    )
+    await waitFor(() => expect(downloadButton()).toBeEnabled())
   })
 
   it('sends players without a library home with an explanation', async () => {

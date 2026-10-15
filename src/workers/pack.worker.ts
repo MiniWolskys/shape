@@ -9,7 +9,7 @@ const scope = self as unknown as {
 }
 
 scope.onmessage = async (event) => {
-  const { library, selectedIds, assets, now } = event.data
+  const { library, selectedIds, assets, now, again } = event.data
   try {
     const result = await writeLibraryPack(
       library,
@@ -17,6 +17,7 @@ scope.onmessage = async (event) => {
       assets,
       new Date(now),
       (done, total) => scope.postMessage({ kind: 'progress', done, total }),
+      { again },
     )
     scope.postMessage({ kind: 'packed', result }, [result.bytes.buffer as ArrayBuffer])
   } catch (error) {
