@@ -20,6 +20,7 @@ import { useEditor } from './state/editor.ts'
 import { useLanguage } from './i18n/i18n.ts'
 import { useNavigation } from './state/navigation.ts'
 import { useWorkspace } from './state/workspace.ts'
+import { setTabLockDriver, soloDriver, type TabStatus } from './state/tabLock.ts'
 import { memoryStorage } from './storage/persistence.ts'
 
 const realInit = useWorkspace.getState().init
@@ -72,6 +73,46 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Continue without saving' }))
     expect(useWorkspace.getState().ready).toBe(true)
     expect(screen.getByRole('button', { name: 'Create a painting' })).toBeInTheDocument()
+  })
+
+  describe('one active tab (R38)', () => {
+    afterEach(() => setTabLockDriver(soloDriver))
+
+    it('shows a full-page notice in a second tab, and "Use here" opens the work there', async () => {
+      let report: (status: TabStatus) => void = () => {}
+      const takeOver = vi.fn(() => report('active'))
+      setTabLockDriver(() => ({
+        start(onChange) {
+          report = onChange
+          onChange('elsewhere')
+        },
+        takeOver,
+        stop() {},
+      }))
+      const storage = memoryStorage()
+      await storage.save({ library: createLibrary('Ours', 'ours'), loose: [], assets: {} })
+      const init = vi.fn(() => realInit(storage))
+      useWorkspace.setState({ init })
+      useNavigation.setState({ screen: { name: 'library' } })
+      render(<App />)
+      expect(
+        screen.getByRole('heading', { name: 'Shape is open in another tab' }),
+      ).toBeInTheDocument()
+      // The workspace is not even read while another tab owns it.
+      expect(init).not.toHaveBeenCalled()
+      await userEvent.click(screen.getByRole('button', { name: 'Use here' }))
+      expect(takeOver).toHaveBeenCalledTimes(1)
+      expect(await screen.findByRole('heading', { name: 'Ours', level: 1 })).toBeInTheDocument()
+      expect(init).toHaveBeenCalledTimes(1)
+
+      // Another tab takes over: saving stops at once and the notice comes back.
+      const suspend = vi.spyOn(useWorkspace.getState(), 'suspend')
+      act(() => report('elsewhere'))
+      expect(suspend).toHaveBeenCalledTimes(1)
+      expect(
+        screen.getByRole('heading', { name: 'Shape is open in another tab' }),
+      ).toBeInTheDocument()
+    })
   })
 
   describe('save failures (C1)', () => {

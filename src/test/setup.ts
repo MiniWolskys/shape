@@ -2,6 +2,10 @@ import '@testing-library/jest-dom/vitest'
 import { webcrypto } from 'node:crypto'
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
+import { setTabLockDriver, soloDriver } from '../state/tabLock.ts'
+
+// One tab: App tests need no lock handshake (tabLock.test.ts covers it with fakes).
+setTabLockDriver(soloDriver)
 
 // jsdom may not expose Web Crypto's subtle API; sha1Hex needs it.
 if (!globalThis.crypto?.subtle) {

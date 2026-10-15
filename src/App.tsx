@@ -9,6 +9,7 @@ import { AppFileDrop } from './screens/AppFileDrop.tsx'
 import { SaveFailureBanner } from './screens/SaveFailureBanner.tsx'
 import { useEditor } from './state/editor.ts'
 import { startHashRouting, useNavigation, type Screen } from './state/navigation.ts'
+import { startTabLock, useTabLock } from './state/tabLock.ts'
 import { useWorkspace } from './state/workspace.ts'
 import { Button } from './ui/Button.tsx'
 import { documentTitle } from './ui/documentTitle.ts'
@@ -39,6 +40,26 @@ function StorageFailure() {
           <p className={styles.body}>{t.startup.storageBody}</p>
           <Button variant="primary" onClick={() => useWorkspace.setState({ ready: true })}>
             {t.startup.continueWithoutSaving}
+          </Button>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+/** Another tab is the active one (R38): nothing here reads or writes the workspace. */
+function OtherTabNotice() {
+  const t = useT()
+  const takeOver = useTabLock((s) => s.takeOver)
+  return (
+    <div className={styles.page}>
+      <TopBar />
+      <main className={styles.centered}>
+        <div className={styles.notice}>
+          <h1 className={styles.title}>{t.otherTab.title}</h1>
+          <p className={styles.body}>{t.otherTab.body}</p>
+          <Button variant="primary" onClick={takeOver}>
+            {t.otherTab.useHere}
           </Button>
         </div>
       </main>
@@ -129,7 +150,22 @@ export function App() {
   useEffect(() => startHashRouting(), [])
   useScrollPerScreen(screen)
 
+  const tab = useTabLock((s) => s.status)
+  useEffect(
+    () =>
+      startTabLock({
+        // Another tab owns the stored workspace now: not one more write from here.
+        onLost: () => useWorkspace.getState().suspend(),
+        // What this tab holds in memory may be older than what the other tab saved.
+        onRegained: () => window.location.reload(),
+      }),
+    [],
+  )
+
+  const active = tab === 'active'
   useEffect(() => {
+    // Only the active tab reads the workspace (R38), as it is now (not as last rendered).
+    if (!active || useTabLock.getState().status !== 'active') return
     // init returns the same promise while it runs, so StrictMode's second call is harmless.
     useWorkspace
       .getState()
@@ -138,16 +174,18 @@ export function App() {
         console.error('Could not open the browser storage', error)
         setStorageFailed(true)
       })
-  }, [])
+  }, [active])
 
   let content
-  if (ready) content = <Route screen={screen} />
+  if (tab === 'elsewhere') content = <OtherTabNotice />
+  else if (!active) content = <Loading />
+  else if (ready) content = <Route screen={screen} />
   else if (storageFailed) content = <StorageFailure />
   else content = <Loading />
 
   return (
     <>
-      {ready && <SaveFailureBanner />}
+      {ready && active && <SaveFailureBanner />}
       {content}
       <AppFileDrop />
       <Toasts />

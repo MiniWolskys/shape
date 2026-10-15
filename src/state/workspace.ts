@@ -90,6 +90,11 @@ export interface WorkspaceState extends Workspace {
   /** Writes pending changes to storage now instead of after the autosave delay. */
   persistNow(): Promise<void>
   /**
+   * Stops writing to storage at once, pending saves included: another tab took over (R38) and
+   * owns the stored workspace now. Only a new `init` saves again.
+   */
+  suspend(): void
+  /**
    * Takes over what an export changed (version, `exportedAt` — now if it has none — and the
    * paintings it published) into the open library as it is now. Ignored when that library is
    * no longer open.
@@ -207,6 +212,7 @@ export function createWorkspaceStore(
   let initializing: Promise<void> | null = null
   let hideListenersAdded = false
   let persistAsked = false
+  let suspended = false
 
   const store = create<WorkspaceState>()((set, get) => {
     const freshId = (title: string) => {
@@ -233,6 +239,7 @@ export function createWorkspaceStore(
     }
 
     const flush = async () => {
+      if (suspended) return
       const { library, loose, assets, demo, demoIds } = get()
       try {
         await storage.save({ library, loose, assets, demo, demoIds })
@@ -315,6 +322,7 @@ export function createWorkspaceStore(
         if (initializing) return initializing
         if (get().ready && !next) return Promise.resolve()
         if (next) storage = next
+        suspended = false
         unsubscribe?.()
         clearTimeout(timer)
         initializing = (async () => {
@@ -541,6 +549,14 @@ export function createWorkspaceStore(
         clearTimeout(timer)
         timer = undefined
         return requestFlush()
+      },
+
+      suspend() {
+        suspended = true
+        unsubscribe?.()
+        unsubscribe = undefined
+        clearTimeout(timer)
+        timer = undefined
       },
 
       applyExport(exported) {

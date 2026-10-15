@@ -306,6 +306,18 @@ describe('workspace store', () => {
     log.mockRestore()
   })
 
+  it('suspend stops every save at once, pending ones included (R38)', async () => {
+    const save = vi.fn(() => Promise.resolve())
+    const s = createWorkspaceStore({ ...memoryStorage(), save })
+    await s.getState().init()
+    s.getState().createPainting()
+    s.getState().suspend()
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(2000)
+    await s.getState().persistNow()
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('asks the browser once to keep its storage, after the first good save (I5)', async () => {
     const persist = vi.fn(() => Promise.resolve(true))
     vi.stubGlobal('navigator', { ...navigator, storage: { persist } })
