@@ -1,11 +1,11 @@
 import type { Painting } from '../../domain/types.ts'
 import { currentDictionary, format } from '../../i18n/i18n.ts'
 import { fileToRaster } from '../../imaging/decode.ts'
-import { encodePng } from '../../packs/png.ts'
 import { isCustomCrop, useEditor } from '../../state/editor.ts'
 import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { errorMessage } from '../../ui/errors.ts'
+import { encodePngOffThread } from '../../workers/imageClient.ts'
 import { toast } from '../../ui/toastStore.ts'
 
 /** The picture types the editor takes, as for <input accept>. */
@@ -27,7 +27,10 @@ export async function loadPicture(file: File): Promise<PictureResult> {
   try {
     const raster = await fileToRaster(file)
     if (useEditor.getState().session !== session) return 'stale'
-    const imageId = useWorkspace.getState().putAsset(encodePng(raster))
+    // A 2048 px picture takes about a second to encode: never on the page (R39).
+    const bytes = await encodePngOffThread(raster)
+    if (useEditor.getState().session !== session) return 'stale'
+    const imageId = useWorkspace.getState().putAsset(bytes)
     const { autoSized } = useEditor.getState().setSource(raster, imageId)
     if (!autoSized) return 'loaded'
     const t = currentDictionary()

@@ -43,22 +43,79 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out
 }
 
-/** RGBA, 8 bit (colour type 6), filter 0 on every row, zlib level 9. */
+/** Zlib level of encoded PNGs: close to 9 in size on filtered rows, much faster (R39). */
+const ZLIB_LEVEL = 6
+const BPP = 4
+
+/** A filtered byte's distance from zero, read as a signed byte (the usual PNG heuristic). */
+const cost = (v: number) => {
+  const b = v & 255
+  return b < 128 ? b : 256 - b
+}
+
+/**
+ * The scanlines with their filter-type bytes: each row takes the filter (None, Sub, Up,
+ * Average, Paeth) whose filtered bytes sum smallest as signed values, the lowest type on a tie.
+ * Photos shrink by a third or more against filter 0; the choice depends on the pixels only, so
+ * the same raster always gives the same bytes.
+ */
+function filterRows(data: ArrayLike<number>, width: number, height: number): Uint8Array {
+  const stride = width * BPP
+  const out = new Uint8Array((stride + 1) * height)
+  for (let y = 0; y < height; y++) {
+    const row = y * stride
+    const prev = row - stride
+    const at = y * (stride + 1) + 1
+    // Up, Average and Paeth see a zero row above the first one.
+    const hasPrev = y > 0
+    let none = 0
+    let sub = 0
+    let up = 0
+    let average = 0
+    let best = 0
+    for (let i = 0; i < stride; i++) {
+      const x = data[row + i] ?? 0
+      const a = i >= BPP ? (data[row + i - BPP] ?? 0) : 0
+      const b = hasPrev ? (data[prev + i] ?? 0) : 0
+      const c = hasPrev && i >= BPP ? (data[prev + i - BPP] ?? 0) : 0
+      none += cost(x)
+      sub += cost(x - a)
+      up += cost(x - b)
+      average += cost(x - ((a + b) >> 1))
+      best += cost(x - paeth(a, b, c))
+    }
+    const sums = [none, sub, up, average, best]
+    let type = 0
+    for (let t = 1; t < 5; t++) if ((sums[t] ?? 0) < (sums[type] ?? 0)) type = t
+    out[at - 1] = type
+    for (let i = 0; i < stride; i++) {
+      const x = data[row + i] ?? 0
+      const a = i >= BPP ? (data[row + i - BPP] ?? 0) : 0
+      const b = hasPrev ? (data[prev + i] ?? 0) : 0
+      const c = hasPrev && i >= BPP ? (data[prev + i - BPP] ?? 0) : 0
+      let predictor = 0
+      if (type === 1) predictor = a
+      else if (type === 2) predictor = b
+      else if (type === 3) predictor = (a + b) >> 1
+      else if (type === 4) predictor = paeth(a, b, c)
+      out[at + i] = (x - predictor) & 255
+    }
+  }
+  return out
+}
+
+/** RGBA, 8 bit (colour type 6), adaptive row filters, zlib level 6 (R39); deterministic. */
 export function encodePng(r: Raster): Uint8Array {
   const header = new Uint8Array(13)
   const view = new DataView(header.buffer)
   view.setUint32(0, r.width)
   view.setUint32(4, r.height)
   header.set([8, 6, 0, 0, 0], 8)
-  const stride = r.width * 4
-  const raw = new Uint8Array((stride + 1) * r.height)
-  for (let y = 0; y < r.height; y++) {
-    raw.set(r.data.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1)
-  }
+  const raw = filterRows(r.data, r.width, r.height)
   return concat([
     new Uint8Array(SIGNATURE),
     chunk('IHDR', header),
-    chunk('IDAT', zlibSync(raw, { level: 9 })),
+    chunk('IDAT', zlibSync(raw, { level: ZLIB_LEVEL })),
     chunk('IEND', new Uint8Array(0)),
   ])
 }

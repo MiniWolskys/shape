@@ -119,6 +119,10 @@ function renameForTitle(p: Painting): Painting {
   return renamed
 }
 
+/** The last edit layer a save encoded: autosaves without new pixels skip encoding it again. */
+let lastEncoded: { layer: EditLayer; encoded: { values: Uint8Array; mask: Uint8Array } } | null =
+  null
+
 /**
  * Writes the editor's painting and edit layer to the workspace (adding a new painting on its
  * first save, R18); returns the saved painting. The route follows a new id.
@@ -132,7 +136,9 @@ function savePaintingNow(): Painting | null {
   const hasEdits = edits !== null && !isEmptyLayer(edits)
   let editsId = hasEdits ? painting.recipe.editsId : unreadableEditsId
   if (hasEdits) {
-    const encoded = encodeEditLayer(edits)
+    // Edit layers are never changed in place: the same layer encodes to the same bytes.
+    const encoded = lastEncoded?.layer === edits ? lastEncoded.encoded : encodeEditLayer(edits)
+    lastEncoded = { layer: edits, encoded }
     const { assets } = workspace
     const stored = (id: string) => (Object.hasOwn(assets, id) ? assets[id] : undefined)
     // Asset ids are never written twice (C2): a pack shared earlier, or another painting, may

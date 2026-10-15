@@ -1,50 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Assets, Painting } from '../domain/types.ts'
-import type { EditLayer } from '../imaging/edits.ts'
-import { renderPainting } from '../imaging/pipeline.ts'
+import type { Painting } from '../domain/types.ts'
 import type { Raster } from '../imaging/raster.ts'
-import { resample } from '../imaging/resample.ts'
-import { decodeEditLayer, decodePng } from '../packs/png.ts'
+import { requestThumbnail } from '../workers/imageClient.ts'
 import { useWorkspace } from './workspace.ts'
 
-const MAX_PPB = 16
+export { renderThumbnail } from './thumbnailRender.ts'
 
 /** Thumbnails by `${id}:${updatedAt}`; a newer render of a painting replaces the older one. */
 const cache = new Map<string, Raster>()
 
 const keyOf = (p: Painting) => `${p.id}:${p.updatedAt}`
-
-function decodeSource(p: Painting, assets: Assets): Raster | null {
-  const source = p.recipe.source
-  const bytes = source && assets[source.imageId]
-  if (!bytes) return null
-  try {
-    return decodePng(bytes)
-  } catch (error) {
-    console.error(`Could not read the picture of ${p.id}`, error)
-    return null
-  }
-}
-
-function decodeEdits(p: Painting, assets: Assets): EditLayer | null {
-  const id = p.recipe.editsId
-  const values = id && assets[id]
-  const mask = id && assets[`${id}.mask`]
-  if (!values || !mask) return null
-  try {
-    return decodeEditLayer(values, mask)
-  } catch (error) {
-    console.error(`Could not read the edits of ${p.id}`, error)
-    return null
-  }
-}
-
-/** The finished painting, scaled down (sharp) to at most 16 pixels per block. */
-export function renderThumbnail(p: Painting, assets: Assets): Raster {
-  const full = renderPainting(decodeSource(p, assets), decodeEdits(p, assets), p)
-  if (p.pixelsPerBlock <= MAX_PPB) return full
-  return resample(full, p.width * MAX_PPB, p.height * MAX_PPB, 'sharp')
-}
 
 /** Runs `task` when the browser is idle, or soon without requestIdleCallback. */
 function whenIdle(task: () => void): void {
@@ -56,11 +21,15 @@ function whenIdle(task: () => void): void {
 }
 
 interface Job {
-  run(): void
+  /** Starts the job; it calls `done` when finished (at once when it runs on the page). */
+  run(done: () => void): void
   cancelled: boolean
 }
 
-/** Thumbnails render one per idle slot, in request order; cancelled jobs are skipped. */
+/**
+ * Thumbnails render one at a time, each starting in an idle slot, in request order; cancelled
+ * jobs are skipped. They render in the image worker (R39), on the page only without workers.
+ */
 const queue: Job[] = []
 let pumping = false
 
@@ -69,16 +38,19 @@ function pump() {
   whenIdle(() => {
     let job = queue.shift()
     while (job?.cancelled) job = queue.shift()
-    job?.run()
-    if (queue.some((j) => !j.cancelled)) pump()
-    else {
-      queue.length = 0
-      pumping = false
+    const next = () => {
+      if (queue.some((j) => !j.cancelled)) pump()
+      else {
+        queue.length = 0
+        pumping = false
+      }
     }
+    if (job) job.run(next)
+    else next()
   })
 }
 
-function enqueue(run: () => void): () => void {
+function enqueue(run: Job['run']): () => void {
   const job: Job = { run, cancelled: false }
   queue.push(job)
   if (!pumping) pump()
@@ -133,16 +105,18 @@ export function useThumbnail(p: Painting): Thumbnail {
 
   useEffect(() => {
     if (cache.has(key)) return
-    return enqueue(() => {
+    return enqueue((done) => {
       const painting = latest.current
-      try {
-        const raster = renderThumbnail(painting, useWorkspace.getState().assets)
-        store(painting, raster)
-        setRendered({ key, result: raster })
-      } catch (error) {
-        console.error(`Could not render the thumbnail of ${painting.id}`, error)
-        setRendered({ key, result: 'failed' })
-      }
+      requestThumbnail(painting, useWorkspace.getState().assets, (result) => {
+        if (result instanceof Error) {
+          console.error(`Could not render the thumbnail of ${painting.id}`, result)
+          setRendered({ key, result: 'failed' })
+        } else {
+          store(painting, result)
+          setRendered({ key, result })
+        }
+        done()
+      })
     })
   }, [key])
 

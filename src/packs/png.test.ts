@@ -1,4 +1,4 @@
-import { zlibSync } from 'fflate'
+import { unzlibSync, zlibSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { ShapeError } from '../domain/errors.ts'
 import { createEditLayer } from '../imaging/edits.ts'
@@ -78,6 +78,23 @@ describe('png', () => {
     expect(back.width).toBe(7)
     expect(back.height).toBe(5)
     expect(Array.from(back.data)).toEqual(Array.from(r.data))
+  })
+
+  it('filters each row with the filter whose bytes sum smallest (R39), deterministically', () => {
+    // Every row repeats the first: Up leaves nothing but zeros below it.
+    const r = createRaster(16, 4)
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 16; x++)
+        r.data.set([(x * 37) & 255, (x * 91) & 255, x * 3, 255], (y * 16 + x) * 4)
+    }
+    const bytes = encodePng(r)
+    expect(encodePng(r)).toEqual(bytes)
+    // IDAT starts after the signature (8) and IHDR (25), past its length and type (8).
+    const length = new DataView(bytes.buffer).getUint32(33)
+    const raw = unzlibSync(bytes.subarray(41, 41 + length))
+    const types = [0, 1, 2, 3].map((y) => raw[y * (16 * 4 + 1)])
+    expect(types.slice(1)).toEqual([2, 2, 2])
+    expect(Array.from(decodePng(bytes).data)).toEqual(Array.from(r.data))
   })
 
   it('writes a colour type 6, 8 bit PNG', () => {
