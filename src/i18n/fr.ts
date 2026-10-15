@@ -328,7 +328,7 @@ export const fr: Dictionary = {
       heading: 'Forme de la fenêtre',
       hint: 'Tout ce qui est hors de la forme devient transparent.',
       frameHint:
-        'Le cadre suit le contour de la fenêtre. Les barreaux en bois ont la même épaisseur ; les plombs gardent la leur.',
+        'Le cadre suit le contour de la fenêtre. Les barreaux en bois font la moitié de l’épaisseur du cadre ; les plombs gardent la leur.',
       material: 'Matière',
       px: 'px',
     },

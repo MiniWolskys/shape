@@ -324,7 +324,7 @@ export const en = {
       heading: 'Window shape',
       hint: 'Outside the shape becomes transparent.',
       frameHint:
-        'The frame follows the window outline. Wooden bars use the same thickness; lead lines keep their own.',
+        'The frame follows the window outline. Wooden bars are half as thick as the frame; lead lines keep their own width.',
       material: 'Material',
       px: 'px',
     },

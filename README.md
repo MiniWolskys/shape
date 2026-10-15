@@ -30,7 +30,7 @@ Built for Minecraft 26.3.
 
 ### Window and frame
 
-In **Window & frame**, pick a shape. Everything outside the shape becomes see-through in game. Set the glass opacity, then the frame material and thickness. The frame follows the window outline. Wooden bars use the same thickness; lead lines keep their own.
+In **Window & frame**, pick a shape. Everything outside the shape becomes see-through in game. Set the glass opacity, then the frame material and thickness. The frame follows the window outline. Wooden bars are half as thick as the frame; lead lines keep their own width.
 
 Use the canvas views to check the result: **Editor**, **On the wall** and **Without the Transparent Paintings mod** (what players without the mod see: the frame color instead of see-through).
 
