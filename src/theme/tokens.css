@@ -36,4 +36,8 @@
   /* Derived tokens used by the UI kit */
   --overlay: rgba(12, 7, 3, 0.62);
   --drop-tint: rgba(238, 138, 47, 0.1);
+  /* Editor pixel grid and crop box, drawn over paintings of any colour */
+  --grid-pixel: rgba(128, 128, 132, 0.35);
+  --grid-block: rgba(20, 20, 24, 0.55);
+  --crop-shade: rgba(12, 7, 3, 0.55);
 }

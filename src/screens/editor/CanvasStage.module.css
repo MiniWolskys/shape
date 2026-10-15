@@ -1,0 +1,152 @@
+.stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 18px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.zoom,
+.backdrop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.backdrop {
+  gap: 10px;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.chip,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.iconButton {
+  width: 30px;
+  padding: 0;
+}
+
+.chip:hover,
+.iconButton:hover {
+  color: var(--text);
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.area {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.surface {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+/* margin: auto centres the painting while it fits and lets the area scroll once it doesn't. */
+.center {
+  display: flex;
+  margin: auto;
+  padding: 16px;
+}
+
+.painting {
+  position: relative;
+  flex: none;
+  touch-action: none;
+}
+
+.painting[data-tool] {
+  cursor: crosshair;
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--grid-block) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-block) 1px, transparent 1px);
+  background-size: var(--block) var(--block);
+}
+
+.grid[data-pixels] {
+  background-image:
+    linear-gradient(to right, var(--grid-block) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-block) 1px, transparent 1px),
+    linear-gradient(to right, var(--grid-pixel) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-pixel) 1px, transparent 1px);
+  background-size:
+    var(--block) var(--block),
+    var(--block) var(--block),
+    var(--pixel) var(--pixel),
+    var(--pixel) var(--pixel);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.foot b {
+  color: var(--text);
+}
+
+@media (max-width: 860px) {
+  .stage {
+    padding: 12px;
+  }
+
+  .area {
+    height: min(70vh, 520px);
+    min-height: 280px;
+  }
+}

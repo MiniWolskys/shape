@@ -8,6 +8,9 @@ import { hashString } from './shapes.ts'
 import { centeredCrop, crop, flip, rotate } from './transform.ts'
 import { applyWindow } from './window.ts'
 
+/** The painting fields that shape its texture; titles and status play no part. */
+export type TextureSpec = Pick<Painting, 'id' | 'width' | 'height' | 'pixelsPerBlock' | 'recipe'>
+
 const PLACEHOLDER_A: RGBA = [110, 110, 114, 255]
 const PLACEHOLDER_B: RGBA = [92, 92, 96, 255]
 
@@ -26,7 +29,7 @@ function placeholder(width: number, height: number, pixelsPerBlock: number): Ras
 }
 
 /** The picture at the painting's pixel size, before the window shape is applied. */
-export function renderPicture(source: Raster | null, p: Painting): Raster {
+export function renderPicture(source: Raster | null, p: TextureSpec): Raster {
   const width = p.width * p.pixelsPerBlock
   const height = p.height * p.pixelsPerBlock
   if (!source) return placeholder(width, height, p.pixelsPerBlock)
@@ -46,7 +49,7 @@ export function renderPicture(source: Raster | null, p: Painting): Raster {
 export function renderPainting(
   source: Raster | null,
   edits: EditLayer | null,
-  p: Painting,
+  p: TextureSpec,
 ): Raster {
   const { recipe } = p
   const shaped = applyWindow(renderPicture(source, p), {

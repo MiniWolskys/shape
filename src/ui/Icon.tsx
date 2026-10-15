@@ -15,6 +15,31 @@ const PATHS = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  minus: <path d="M5 12h14" />,
+  'rotate-left': (
+    <>
+      <path d="M4 4v5h5" />
+      <path d="M4.5 9A8 8 0 1 1 6 17.5" />
+    </>
+  ),
+  'rotate-right': (
+    <>
+      <path d="M20 4v5h-5" />
+      <path d="M19.5 9A8 8 0 1 0 18 17.5" />
+    </>
+  ),
+  'flip-x': (
+    <>
+      <path d="M12 3v18" />
+      <path d="M9 7 4 17h5zM15 7l5 10h-5z" />
+    </>
+  ),
+  'flip-y': (
+    <>
+      <path d="M3 12h18" />
+      <path d="M7 9 17 4v5zM7 15l10 5v-5z" />
+    </>
+  ),
   lock: (
     <>
       <rect x="5" y="10" width="14" height="11" rx="1" />

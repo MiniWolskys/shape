@@ -1,0 +1,91 @@
+.rail {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 12px;
+  border-right: 1px solid var(--line);
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.step:hover {
+  color: var(--text);
+}
+
+.step[aria-current='step'] {
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised);
+  font: 600 12px/1 var(--font-body);
+}
+
+.step[data-done] .badge {
+  background: var(--ok);
+  color: var(--accent-ink);
+}
+
+.step[aria-current='step'] .badge {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.hint {
+  margin: 0;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 860px) {
+  .rail {
+    overflow-x: auto;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .list {
+    display: flex;
+  }
+
+  .step {
+    white-space: nowrap;
+  }
+
+  .hint {
+    display: none;
+  }
+}

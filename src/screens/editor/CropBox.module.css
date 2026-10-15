@@ -1,0 +1,61 @@
+.crop {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.picture {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  touch-action: none;
+}
+
+.rect {
+  position: absolute;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 9999px var(--crop-shade);
+  cursor: move;
+}
+
+.rect:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.controls {
+  display: flex;
+  gap: 6px;
+}
+
+.button,
+.text {
+  display: inline-grid;
+  min-width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--text);
+  font: 600 12.5px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.button {
+  padding: 0;
+}
+
+.button:hover,
+.text:hover {
+  filter: brightness(1.08);
+}
+
+.hint,
+.empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}

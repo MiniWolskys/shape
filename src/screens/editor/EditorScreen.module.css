@@ -1,0 +1,102 @@
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 330px;
+  min-height: 0;
+}
+
+.inspector {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+  border-left: 1px solid var(--line);
+}
+
+.warning {
+  margin: 0;
+  color: var(--muted);
+}
+
+@media (max-width: 1080px) {
+  .editor {
+    grid-template-columns: 170px minmax(0, 1fr) 300px;
+  }
+}
+
+/* Narrow screens: steps on top, then the canvas, then the inspector; the page scrolls. */
+@media (max-width: 860px) {
+  .page {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inspector {
+    overflow: visible;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .chip {
+    display: none;
+  }
+}
+
+/* Undo and Redo keep their names for assistive tech but show only icons on phones. */
+@media (max-width: 640px) {
+  .narrowHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .actions {
+    flex-wrap: nowrap;
+  }
+}
