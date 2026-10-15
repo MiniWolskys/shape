@@ -19,6 +19,8 @@ import { ExportScreen } from './ExportScreen.tsx'
 vi.mock('../../state/thumbnails.ts', () => ({ useThumbnail: () => null }))
 
 const now = new Date('2026-10-15T12:00:00Z')
+/** An export after every painting here was last changed. */
+const EXPORTED = '2026-10-15T13:00:00.000Z'
 let seed = 0
 
 const IMAGE = 'img_1'
@@ -150,7 +152,7 @@ describe('ExportScreen', () => {
 
   it('downloads the same version again when nothing is new, without a new version (C5)', async () => {
     const save = vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
-    await startWith(library([painting('Old', 'Sam', 'published', 2)]))
+    await startWith({ ...library([painting('Old', 'Sam', 'published', 2)]), exportedAt: EXPORTED })
     renderExport()
     expect(downloadButton()).toHaveTextContent('Download v7 again')
     expect(screen.queryByText(/can't be resized or deleted later/)).toBeNull()
@@ -175,6 +177,29 @@ describe('ExportScreen', () => {
     expect(second?.[1]).toBe('ours-v8.zip')
     expect(second?.[0]).toEqual(first?.[0])
     expect(useWorkspace.getState().library?.version).toBe(8)
+  })
+
+  it('offers a backup, not the same file, while unpublished paintings exist (R35)', async () => {
+    const save = vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
+    await startWith({
+      ...library([painting('Old', 'Sam', 'published', 2), painting('Night Rose', 'Alex', 'draft')]),
+      exportedAt: EXPORTED,
+    })
+    renderExport()
+    expect(downloadButton()).toHaveTextContent('Download a backup')
+    expect(
+      screen.getByText('Keeps your 1 unpublished painting. The server files stay those of v7.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('ours-v7-backup.zip')).toBeInTheDocument()
+    await userEvent.click(downloadButton())
+    expect(
+      await screen.findByText('Your download of ours-v7-backup.zip started.'),
+    ).toBeInTheDocument()
+    expect(save.mock.calls[0]?.[1]).toBe('ours-v7-backup.zip')
+    const lib = useWorkspace.getState().library
+    expect(lib?.version).toBe(7)
+    expect(lib?.exportedAt).toBe(EXPORTED)
+    expect(lib?.paintings.map((p) => p.status)).toEqual(['published', 'draft'])
   })
 
   it('has nothing to download before the first painting is ticked', async () => {
@@ -288,7 +313,10 @@ describe('ExportScreen', () => {
   it('writes the Discord text of a version downloaded again, in French', async () => {
     vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
     useLanguage.setState({ language: 'fr' })
-    await startWith(library([painting('Vieux', 'Sam', 'published', 2)], 2))
+    await startWith({
+      ...library([painting('Vieux', 'Sam', 'published', 2)], 2),
+      exportedAt: EXPORTED,
+    })
     renderExport()
     expect(downloadButton()).toHaveTextContent('Retélécharger la v2')
     await userEvent.click(downloadButton())

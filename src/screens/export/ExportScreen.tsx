@@ -74,7 +74,8 @@ function ExportView({ library }: { library: Library }) {
     .filter((p) => p.status !== 'published' && selected.has(p.id))
     .map((p) => p.id)
   const plan = phase.kind === 'done' ? phase.plan : exportPlan(library, selectedIds)
-  const again = plan.kind === 'again'
+  /** Downloads of the current version (again, or a backup) publish nothing (C5, R35). */
+  const again = plan.kind === 'again' || plan.kind === 'backup'
   // "Nothing new" is what the plan and its button already say.
   const issues = done
     ? []
@@ -108,20 +109,22 @@ function ExportView({ library }: { library: Library }) {
     try {
       const result = await buildLibraryPack(
         state.library,
-        planned.kind === 'again' ? [] : selectedIds,
+        planned.kind === 'again' || planned.kind === 'backup' ? [] : selectedIds,
         state.assets,
         new Date(),
         (done, total) => {
           if (!build.signal.aborted) setPhase({ kind: 'busy', done, total })
         },
         build.signal,
-        planned.kind === 'again',
+        { again: planned.kind === 'again', backup: planned.kind === 'backup' },
       )
       // Left the screen meanwhile: no late download, and the library stays as it is.
       if (build.signal.aborted) return
       downloadBytes(result.bytes, result.fileName, 'application/zip')
-      // Downloading a version again publishes nothing (C5).
-      if (planned.kind !== 'again') useWorkspace.getState().applyExport(result.library)
+      // Downloading a version again, or a backup of it, publishes nothing (C5, R35).
+      if (planned.kind === 'publish' || planned.kind === 'update') {
+        useWorkspace.getState().applyExport(result.library)
+      }
       setPhase({ kind: 'done', result, plan: planned })
     } catch (error) {
       if (build.signal.aborted) return

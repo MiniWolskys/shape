@@ -16,7 +16,7 @@ Built for Minecraft 26.3.
 - **Home**: resume your work, create a painting, open a library pack, start a new library, or try the demo library. "How it works" explains the three steps.
 - **Library**: every painting with its badge (Draft, Ready, Changed, Published), filters, search, duplicate and delete. Paintings made outside the library are listed below it, each with "Add to {library}". Import any library pack: a pack of another library adds its paintings as new ones, after you confirm.
 - **Editor**: five steps you can visit in any order: Image, Size & crop, Window & frame, Colors & pixels, Details. Your work saves itself as you go.
-- **Export**: the button says what it does ("Publish 2 and download v3", or "Download v2 again" when nothing is new), then copy the server settings.
+- **Export**: the button says what it does ("Publish 2 and download v3"; with nothing new, "Download v2 again" or "Download a backup"), then copy the server settings.
 
 ## How to use it
 
@@ -41,7 +41,7 @@ In **Colors & pixels**, paint over the result with the pencil (B), fill (G), rep
 ### Export
 
 1. Start a library (just a name; its pack ID is under Advanced), or open your last library pack. Paintings you made outside a library are listed below it, ready to add.
-2. Choose **Export**. Ready paintings with a picture are ticked; the button says how many it publishes and which version it downloads (`<namespace>-v<version>.zip`). With nothing new, it downloads the same version again without publishing anything.
+2. Choose **Export**. Ready paintings with a picture are ticked; the button says how many it publishes and which version it downloads (`<namespace>-v<version>.zip`). With nothing new, it downloads the same version again, or, when you have unpublished paintings, a backup `<namespace>-v<version>-backup.zip` that keeps them; neither publishes anything.
 3. Keep that one file: it is your backup, and you can share it with friends.
 
 Closing a library, or replacing it with a new one or the demo, deletes its paintings from the browser. Shape tells you first how many haven't been exported and offers to export them.

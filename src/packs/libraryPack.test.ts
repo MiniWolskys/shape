@@ -25,6 +25,17 @@ function sample() {
 }
 
 describe('library pack', () => {
+  it('builds a backup of the current version under its own name (R35)', async () => {
+    const { lib, p, assets } = sample()
+    const first = await writeLibraryPack(lib, [p.id], assets, now)
+    const draft = { ...p, id: `${p.id}_d`, title: 'Draft', status: 'draft' as const }
+    const withDraft = upsertPainting(first.library, draft)
+    const backup = await writeLibraryPack(withDraft, [], assets, now, undefined, { backup: true })
+    expect(backup.fileName).toBe('ourpaintings-v1-backup.zip')
+    expect(backup.library).toEqual(withDraft)
+    expect(backup.sha1).toBe(first.sha1)
+  })
+
   it('downloads the last version again: same bytes, no publish, no new version (C5)', async () => {
     const { lib, p, assets } = sample()
     const first = await writeLibraryPack(lib, [p.id], assets, now)

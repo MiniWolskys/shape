@@ -8,8 +8,9 @@ export interface PackRequest {
   assets: Assets
   /** ISO time of the export. */
   now: string
-  /** Build the current version again, publishing nothing (see writeLibraryPack). */
+  /** Build the current version again, or a backup of it, publishing nothing (see writeLibraryPack). */
   again: boolean
+  backup: boolean
 }
 
 export type PackReply =
@@ -22,8 +23,11 @@ type Progress = (done: number, total: number) => void
 /** Builds on this thread; a short pause first lets the busy state paint. */
 async function buildHere(request: PackRequest, onProgress: Progress): Promise<LibraryPackResult> {
   await new Promise((resolve) => setTimeout(resolve, 0))
-  const { library, selectedIds, assets, now, again } = request
-  return writeLibraryPack(library, selectedIds, assets, new Date(now), onProgress, { again })
+  const { library, selectedIds, assets, now, again, backup } = request
+  return writeLibraryPack(library, selectedIds, assets, new Date(now), onProgress, {
+    again,
+    backup,
+  })
 }
 
 /**
@@ -39,9 +43,16 @@ export function buildLibraryPack(
   now: Date,
   onProgress: Progress,
   signal?: AbortSignal,
-  again = false,
+  options: { again?: boolean; backup?: boolean } = {},
 ): Promise<LibraryPackResult> {
-  const request: PackRequest = { library, selectedIds, assets, now: now.toISOString(), again }
+  const request: PackRequest = {
+    library,
+    selectedIds,
+    assets,
+    now: now.toISOString(),
+    again: options.again ?? false,
+    backup: options.backup ?? false,
+  }
   if (typeof Worker !== 'function') return buildHere(request, onProgress)
   return new Promise((resolve, reject) => {
     let worker: Worker

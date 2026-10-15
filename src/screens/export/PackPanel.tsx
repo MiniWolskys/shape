@@ -38,6 +38,8 @@ function buttonLabel(plan: Plan, version: number, t: ReturnType<typeof useT>): s
       return plural(t, t.export.publishAndDownload, plan.count, { version })
     case 'update':
       return plural(t, t.export.updateAndDownload, plan.count, { version })
+    case 'backup':
+      return t.export.downloadBackup
     case 'again':
       return format(t.export.downloadVersionAgain, { version })
     case 'nothing':
@@ -61,9 +63,10 @@ export function PackPanel({
   const t = useT()
   const done = phase.kind === 'done' ? phase.result : null
   const busy = phase.kind === 'busy'
-  const again = plan.kind === 'again'
+  /** The current version, as it is or as a backup: no new version (C5, R35). */
+  const again = plan.kind === 'again' || plan.kind === 'backup'
   const blocking = issues.some((i) => i.blocking) || plan.kind === 'nothing'
-  const fileName = `${library.namespace}-v${version}.zip`
+  const fileName = `${library.namespace}-v${version}${plan.kind === 'backup' ? '-backup' : ''}.zip`
   const ns = library.namespace
   const total = library.paintings.filter((p) => p.status === 'published' || news.includes(p)).length
 
@@ -96,7 +99,10 @@ export function PackPanel({
             {t.export.publishNote}
           </p>
         )}
-        {again && <p className={styles.muted}>{t.export.againNote}</p>}
+        {plan.kind === 'again' && <p className={styles.muted}>{t.export.againNote}</p>}
+        {plan.kind === 'backup' && (
+          <p className={styles.muted}>{plural(t, t.export.backupNote, plan.count, { version })}</p>
+        )}
         <Button
           variant="primary"
           size="lg"

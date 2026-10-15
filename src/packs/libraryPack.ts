@@ -98,7 +98,9 @@ function assetEntries(p: Painting): [key: string, path: string][] {
  * rendering (done counts from 1).
  *
  * With `again`, nothing is published and the version stays: the library's current version is
- * built once more, so an unchanged library gives the very same bytes and SHA1 (C5).
+ * built once more, so an unchanged library gives the very same bytes and SHA1 (C5). A `backup`
+ * is built the same way but named `<namespace>-v<version>-backup.zip`: it also holds paintings
+ * changed or added since that version, so it is not the file that version was (R35).
  */
 export async function writeLibraryPack(
   lib: Library,
@@ -106,11 +108,12 @@ export async function writeLibraryPack(
   assets: Assets,
   now: Date,
   onProgress?: (done: number, total: number) => void,
-  options: { again?: boolean } = {},
+  options: { again?: boolean; backup?: boolean } = {},
 ): Promise<LibraryPackResult> {
-  const library = options.again
-    ? lib
-    : { ...publish(lib, selectedIds, now), exportedAt: now.toISOString() }
+  const library =
+    options.again || options.backup
+      ? lib
+      : { ...publish(lib, selectedIds, now), exportedAt: now.toISOString() }
   const paintings = exportSet(library, selectedIds)
   const ns = library.namespace
 
@@ -151,7 +154,7 @@ export async function writeLibraryPack(
 
   return {
     bytes: zipDeterministic(entries),
-    fileName: `${ns}-v${library.version}.zip`,
+    fileName: `${ns}-v${library.version}${options.backup ? '-backup' : ''}.zip`,
     sha1,
     library,
   }
