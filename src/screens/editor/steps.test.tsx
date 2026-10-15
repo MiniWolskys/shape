@@ -451,7 +451,7 @@ describe('editor steps', () => {
       mockRect(8, 12)
       const frames: FrameRequestCallback[] = []
       vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => frames.push(cb))
-      const wall = vi.spyOn(wallModule, 'renderWallPreview')
+      const wall = vi.spyOn(wallModule, 'renderWallPreviewToFit')
       let commits = 0
       const stop = useEditor.subscribe((s, prev) => {
         if (s.edits !== prev.edits) commits++

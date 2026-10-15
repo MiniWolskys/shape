@@ -12,7 +12,7 @@ import { format, plural, useT } from '../../../i18n/i18n.ts'
 import type { RGBA } from '../../../imaging/raster.ts'
 import { BRUSH_SIZES, maskSize } from '../../../imaging/tools.ts'
 import { outlinePath } from '../../../imaging/outline.ts'
-import { renderWallPreview } from '../../../imaging/wall.ts'
+import { renderWallPreviewToFit } from '../../../imaging/wall.ts'
 import { DEFAULT_TOLERANCE, useEditor, type Tool } from '../../../state/editor.ts'
 import { endStroke, useRenderedPainting } from '../../../state/useRenderedPainting.ts'
 import { Button } from '../../../ui/Button.tsx'
@@ -278,7 +278,9 @@ export function PixelsPanel() {
   // Drawn in a later, lower-priority render: the painting itself shows first.
   const wallInput = useDeferredValue(wallSource)
   const wall = useMemo(
-    () => wallInput && renderWallPreview(wallInput, blocksW, blocksH, ppb),
+    // Drawn at about twice the size it is shown (sharp on high-density screens), no bigger.
+    () =>
+      wallInput && renderWallPreviewToFit(wallInput, blocksW, blocksH, ppb, 2 * WALL_PREVIEW.width),
     [wallInput, blocksW, blocksH, ppb],
   )
   if (!painting) return null
