@@ -146,7 +146,7 @@ const rose: ShapeFn = (x, y, { width: w, height: h, frame, lead }) => {
   const seg = (Math.PI * 2) / 12
   const a = Math.atan2(dy, dx) + Math.PI
   if (d > hub && toSpoke(a, seg) * d < lead / 2) return LEAD
-  return tinted(d < hub ? 2 : Math.floor(a / seg) + (d > r * 0.64 ? 1 : 0))
+  return tinted(d < hub ? 2 : (Math.floor(a / seg) + (d > r * 0.64 ? 1 : 0)) % 4)
 }
 
 interface CellGrid {

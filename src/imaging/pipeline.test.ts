@@ -44,6 +44,33 @@ describe('pipeline', () => {
     })
     expect(getPixel(rotated, 8, 8)).toEqual([0, 0, 255, 255])
   })
+  it('uses a crop that fits the source as-is', () => {
+    const src = createRaster(20, 10, [0, 0, 255, 255])
+    setPixel(src, 19, 9, [255, 255, 0, 255])
+    const p = painting()
+    const out = renderPicture(src, {
+      ...p,
+      recipe: { ...p.recipe, crop: { x: 18, y: 8, width: 2, height: 2 } },
+    })
+    expect(getPixel(out, 15, 15)).toEqual([255, 255, 0, 255])
+    expect(getPixel(out, 0, 0)).toEqual([0, 0, 255, 255])
+  })
+  it('falls back to the centred crop when the stored crop no longer fits', () => {
+    const src = createRaster(40, 20)
+    for (let y = 0; y < 20; y++)
+      for (let x = 0; x < 40; x++) setPixel(src, x, y, [x * 6, y * 12, 100, 255])
+    const p = painting()
+    const rotated = { ...p.recipe, rotation: 90 as const }
+    const stale = renderPicture(src, {
+      ...p,
+      recipe: { ...rotated, crop: { x: 0, y: 0, width: 40, height: 20 } },
+    })
+    const centred = renderPicture(src, {
+      ...p,
+      recipe: { ...rotated, crop: { x: 0, y: 0, width: 0, height: 0 } },
+    })
+    expect(stale.data).toEqual(centred.data)
+  })
   it('applies the Minecraft look when enabled', () => {
     const src = createRaster(16, 16)
     for (let y = 0; y < 16; y++)

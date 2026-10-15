@@ -49,6 +49,15 @@ describe('shapes', () => {
       }
     }
   })
+  it('rose panes cycle through the first four tints like the prototype', () => {
+    const tints = new Set<string>()
+    for (let y = 0.5; y < 64; y++)
+      for (let x = 0.5; x < 64; x++) {
+        const t = SHAPES.rose(x, y, ctx).tint
+        if (t) tints.add(t.join())
+      }
+    expect(tints).toEqual(new Set(['200,50,70', '50,100,210', '240,170,50', '40,160,100']))
+  })
   it('decorates glass and frames per shape', () => {
     const features = (id: ShapeId) => {
       const seen = new Set<string>()

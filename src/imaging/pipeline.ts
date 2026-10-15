@@ -32,10 +32,11 @@ export function renderPicture(source: Raster | null, p: Painting): Raster {
   if (!source) return placeholder(width, height, p.pixelsPerBlock)
   const { recipe } = p
   const turned = flip(rotate(source, recipe.rotation), recipe.flipX, recipe.flipY)
-  const rect =
-    recipe.crop.width > 0 && recipe.crop.height > 0
-      ? recipe.crop
-      : centeredCrop(turned.width, turned.height, p.width, p.height)
+  const { x, y, width: cw, height: ch } = recipe.crop
+  // An unset crop, or one left stale by a rotation or a new source, falls back to the centre.
+  const fits =
+    cw > 0 && ch > 0 && x >= 0 && y >= 0 && x + cw <= turned.width && y + ch <= turned.height
+  const rect = fits ? recipe.crop : centeredCrop(turned.width, turned.height, p.width, p.height)
   const sized = resample(crop(turned, rect), width, height, recipe.scaling)
   const adjusted = adjust(sized, recipe.adjust)
   return recipe.mcLook.enabled ? quantize(adjusted, recipe.mcLook) : adjusted
