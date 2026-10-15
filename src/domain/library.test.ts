@@ -6,10 +6,15 @@ import {
   createLibrary,
   createPainting,
   defaultRecipe,
+  copyAsNew,
   exportSet,
+  insertAfter,
+  isChanged,
   mergeLibraries,
   publish,
   removePainting,
+  retitlePainting,
+  unexportedPaintings,
   updatePainting,
   upsertPainting,
   whatsNew,
@@ -32,7 +37,7 @@ describe('library', () => {
       width: 1,
       height: 1,
       pixelsPerBlock: 32,
-      status: 'draft',
+      status: 'ready',
       titleColor: 'yellow',
       authorColor: 'gray',
     })
@@ -54,10 +59,10 @@ describe('library', () => {
     const out = publish(l, [a!.id], now)
     expect(out.version).toBe(1)
     expect(out.paintings[0]).toMatchObject({ status: 'published', publishedIn: 1 })
-    expect(out.paintings[1]!.status).toBe('draft')
+    expect(out.paintings[1]!.status).toBe('ready')
     expect(whatsNew(out, 1).map((p) => p.id)).toEqual([a!.id])
     expect(l.version).toBe(0)
-    expect(l.paintings[0]!.status).toBe('draft')
+    expect(l.paintings[0]!.status).toBe('ready')
   })
   it('publish with no ids still bumps the version and keeps updatedAt', () => {
     const l = lib('A')
@@ -97,6 +102,15 @@ describe('library', () => {
     expect(library.version).toBe(1)
     expect(library.name).toBe('Our paintings')
   })
+  it('merge keeps the local export time, taking the incoming one only when there is none', () => {
+    // A later incoming time could hide local changes made after the local export (R15).
+    const early = { ...lib('A'), exportedAt: '2026-10-01T00:00:00.000Z' }
+    const late = { ...early, exportedAt: '2026-10-09T00:00:00.000Z' }
+    const { exportedAt: _, ...never } = early
+    expect(mergeLibraries(early, late).library.exportedAt).toBe(early.exportedAt)
+    expect(mergeLibraries(never, late).library.exportedAt).toBe(late.exportedAt)
+    expect(mergeLibraries(never, never).library.exportedAt).toBeUndefined()
+  })
   it('merge refuses another namespace', () => {
     expect(() => mergeLibraries(lib('A'), createLibrary('Other', 'other'))).toThrow(/namespace/)
   })
@@ -127,5 +141,113 @@ describe('library', () => {
     const out = addLoosePaintings(createLibrary('L', 'l'), [a, b], rnd)
     expect(new Set(out.paintings.map((p) => p.id)).size).toBe(2)
     expect(out.paintings[0]!.id).toBe('b_aaa')
+  })
+})
+
+describe('export state (R15, R16)', () => {
+  const later = new Date('2026-10-16T12:00:00Z')
+  const exported = (l: ReturnType<typeof lib>, ids: string[]) => ({
+    ...publish(l, ids, now),
+    exportedAt: now.toISOString(),
+  })
+
+  it('counts every painting as unexported while the library was never exported', () => {
+    const l = publish(lib('A', 'B'), [], now)
+    expect(unexportedPaintings(l).map((p) => p.title)).toEqual(['A', 'B'])
+    expect(unexportedPaintings(createLibrary('L', 'l'))).toEqual([])
+  })
+  it('after an export, counts unpublished and changed paintings only', () => {
+    const l = exported(lib('A', 'B', 'C'), [])
+    const [a, b] = l.paintings
+    const pub = exported(l, [a!.id, b!.id])
+    const changed = {
+      ...pub,
+      paintings: pub.paintings.map((p) =>
+        p.id === b!.id ? updatePainting(p, { title: 'B2' }, later) : p,
+      ),
+    }
+    expect(unexportedPaintings(pub).map((p) => p.title)).toEqual(['C'])
+    expect(unexportedPaintings(changed).map((p) => p.title)).toEqual(['B2', 'C'])
+  })
+  it('isChanged: published and updated after the last export', () => {
+    const l = exported(lib('A', 'B'), [])
+    const pub = exported(l, [l.paintings[0]!.id])
+    const [a, b] = pub.paintings
+    expect(isChanged(a!, pub)).toBe(false)
+    expect(isChanged(b!, pub)).toBe(false)
+    expect(isChanged(updatePainting(a!, { title: 'A2' }, later), pub)).toBe(true)
+    expect(isChanged(updatePainting(b!, { title: 'B2' }, later), pub)).toBe(false)
+    const { exportedAt: _, ...neverExported } = pub
+    expect(isChanged(updatePainting(a!, { title: 'A2' }, later), neverExported)).toBe(false)
+  })
+})
+
+describe('retitlePainting (R17)', () => {
+  const later = new Date('2026-10-16T12:00:00Z')
+  const fixed = (id: string) => ({ ...createPainting({ title: '' }, now, rnd), id })
+
+  it('makes the id follow the title and keeps the suffix while unpublished', () => {
+    const p = retitlePainting(fixed('painting_3js'), 'Rosace du soir', new Set(), later, rnd)
+    expect(p).toMatchObject({ id: 'rosace_du_soir_3js', title: 'Rosace du soir' })
+    expect(p.updatedAt).toBe(later.toISOString())
+  })
+  it('falls back to "painting" for an empty title', () => {
+    expect(retitlePainting(fixed('rose_3js'), '  ', new Set(), later, rnd).id).toBe('painting_3js')
+  })
+  it('picks a new suffix when the id is taken by another painting', () => {
+    const p = retitlePainting(fixed('painting_3js'), 'Rose', new Set(['rose_3js']), later, rnd)
+    expect(p.id).toMatch(/^rose_[a-z0-9]{3}$/)
+    expect(p.id).not.toBe('rose_3js')
+  })
+  it('keeps the id when the title gives the same slug', () => {
+    const p = retitlePainting(fixed('rose_3js'), 'Rose', new Set(['rose_3js']), later, rnd)
+    expect(p.id).toBe('rose_3js')
+  })
+  it('gives an id without a suffix a fresh one', () => {
+    expect(retitlePainting(fixed('sunset'), 'Moon', new Set(), later, rnd).id).toMatch(
+      /^moon_[a-z0-9]{3}$/,
+    )
+  })
+  it('never changes a published id', () => {
+    const l = lib('A')
+    const pub = publish(l, [l.paintings[0]!.id], now).paintings[0]!
+    const p = retitlePainting(pub, 'Renamed', new Set(), later, rnd)
+    expect(p).toMatchObject({ id: pub.id, title: 'Renamed' })
+  })
+})
+
+describe('copies', () => {
+  it('insertAfter puts a painting right after another one, or at the end', () => {
+    const [a, b] = lib('A', 'B').paintings
+    const c = createPainting({ title: 'C' }, now, rnd)
+    expect(insertAfter([a!, b!], a!.id, c).map((p) => p.title)).toEqual(['A', 'C', 'B'])
+    expect(insertAfter([a!, b!], 'missing', c).map((p) => p.title)).toEqual(['A', 'B', 'C'])
+  })
+  it('copyAsNew gives a fresh unpublished ready painting with fresh asset ids', () => {
+    const l = lib('Sunset')
+    const p0 = publish(l, [l.paintings[0]!.id], now).paintings[0]!
+    const p = {
+      ...p0,
+      recipe: { ...p0.recipe, source: { imageId: 'img', width: 1, height: 1 }, editsId: 'ed' },
+    }
+    const later = new Date('2026-10-16T12:00:00Z')
+    const out = copyAsNew(p, {
+      title: 'Sunset (copy)',
+      takenIds: new Set([p.id]),
+      takenAssetIds: new Set(['img', 'ed']),
+      now: later,
+      random: rnd,
+    })
+    expect(out.painting).toMatchObject({ title: 'Sunset (copy)', status: 'ready' })
+    expect(out.painting.id).toMatch(/^sunset_copy_[a-z0-9]{3}$/)
+    expect(out.painting.publishedIn).toBeUndefined()
+    expect(out.painting.createdAt).toBe(later.toISOString())
+    expect(out.painting.updatedAt).toBe(later.toISOString())
+    const image = out.painting.recipe.source?.imageId ?? ''
+    const edits = out.painting.recipe.editsId ?? ''
+    expect(image).not.toBe('img')
+    expect(edits).not.toBe('ed')
+    expect(out.assetIds).toEqual({ img: image, ed: edits, 'ed.mask': `${edits}.mask` })
+    expect(p.recipe.source?.imageId).toBe('img')
   })
 })

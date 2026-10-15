@@ -185,13 +185,15 @@ describe('LibraryScreen', () => {
     expect(useWorkspace.getState().library?.paintings).toHaveLength(3)
   })
 
-  it('duplicates a painting as a new draft', async () => {
+  it('duplicates a painting as a ready "(copy)" right after the original', async () => {
     await startWith({ library: library(sample()), loose: [], assets: {} })
     renderLibrary()
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Frost Oculus' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }))
-    expect(cardTitles().filter((t) => t === 'Frost Oculus')).toHaveLength(2)
-    expect(useWorkspace.getState().library?.paintings.at(-1)?.status).toBe('draft')
+    const titles = cardTitles()
+    expect(titles.indexOf('Frost Oculus (copy)')).toBe(titles.indexOf('Frost Oculus') + 1)
+    const copy = useWorkspace.getState().library?.paintings.find((p) => p.title.endsWith('(copy)'))
+    expect(copy?.status).toBe('ready')
   })
 
   it('moves loose paintings into the library from the banner', async () => {

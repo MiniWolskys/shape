@@ -96,6 +96,13 @@ describe('library pack', () => {
     expect(stored).toEqual(out.library)
   })
 
+  it('records when the pack was exported, in the library and its JSON', async () => {
+    const { lib, p, assets } = sample()
+    const out = await writeLibraryPack(lib, [p.id], assets, now)
+    expect(out.library.exportedAt).toBe(now.toISOString())
+    expect(readLibraryPack(out.bytes).library.exportedAt).toBe(now.toISOString())
+  })
+
   it('renders the texture at the painting size and puts the same PNG in the resource pack', async () => {
     const { lib, p, assets } = sample()
     const entries = unzipEntries((await writeLibraryPack(lib, [p.id], assets, now)).bytes)
@@ -214,6 +221,19 @@ describe('library pack checks', () => {
       l.paintings = [null]
     })
     expect(failure(() => readLibraryPack(nulls))).toMatch(/^not-a-library-pack: .*painting 0/)
+  })
+
+  it('accepts a pack without exportedAt and refuses a malformed one', async () => {
+    const without = await packWith((l) => {
+      delete l.exportedAt
+    })
+    expect(readLibraryPack(without).library.exportedAt).toBeUndefined()
+    for (const bad of [42, 'yesterday', '2026-13-45T99:00:00.000Z']) {
+      const pack = await packWith((l) => {
+        l.exportedAt = bad
+      })
+      expect(failure(() => readLibraryPack(pack))).toMatch(/^not-a-library-pack: .*exportedAt/)
+    }
   })
 
   it('refuses a bad namespace', async () => {

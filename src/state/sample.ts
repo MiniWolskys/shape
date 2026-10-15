@@ -7,17 +7,23 @@ import { useWorkspace, type WorkspaceStore } from './workspace.ts'
 
 const PIXELS_PER_BLOCK = 32
 
+/** The sample paintings' title keys; the caller gives each title in the current language. */
+export type SampleTitles = Record<
+  'sunsetChapel' | 'nightRose' | 'springWindow' | 'frostOculus',
+  string
+>
+
 const SAMPLES: Array<{
-  title: string
+  title: keyof SampleTitles
   scene: SceneId
   shape: ShapeId
   width: number
   height: number
 }> = [
-  { title: 'Sunset Chapel', scene: 'sunset', shape: 'gothic_arch', width: 2, height: 3 },
-  { title: 'Night Rose', scene: 'night', shape: 'rose', width: 2, height: 2 },
-  { title: 'Spring Window', scene: 'meadow', shape: 'four_panes', width: 2, height: 2 },
-  { title: 'Frost Oculus', scene: 'snow', shape: 'oculus', width: 1, height: 1 },
+  { title: 'sunsetChapel', scene: 'sunset', shape: 'gothic_arch', width: 2, height: 3 },
+  { title: 'nightRose', scene: 'night', shape: 'rose', width: 2, height: 2 },
+  { title: 'springWindow', scene: 'meadow', shape: 'four_panes', width: 2, height: 2 },
+  { title: 'frostOculus', scene: 'snow', shape: 'oculus', width: 1, height: 1 },
 ]
 
 /**
@@ -26,19 +32,21 @@ const SAMPLES: Array<{
  */
 export function buildSampleLibrary(
   name: string,
+  titles: SampleTitles,
   random: Random = Math.random,
   now: Date = new Date(),
 ): { library: Library; assets: Assets } {
   const assets: Assets = {}
   const takenIds = new Set<string>()
   const paintings = SAMPLES.map((s): Painting => {
+    const title = titles[s.title]
     const base = createPainting(
-      { title: s.title, author: 'Shape', width: s.width, height: s.height },
+      { title, author: 'Shape', width: s.width, height: s.height },
       now,
       random,
     )
     let id = base.id
-    while (takenIds.has(id)) id = makePaintingId(s.title, random)
+    while (takenIds.has(id)) id = makePaintingId(title, random)
     takenIds.add(id)
     let imageId = makeAssetId(random)
     while (imageId in assets) imageId = makeAssetId(random)
@@ -60,9 +68,20 @@ export function buildSampleLibrary(
   return { library: { ...createLibrary(name, 'sample'), paintings }, assets }
 }
 
-/** Replaces the open library with the sample library; loose paintings stay. */
-export function openSampleLibrary(name: string, store: WorkspaceStore = useWorkspace): void {
-  const sample = buildSampleLibrary(name)
+/**
+ * Replaces the open library with the sample library, marked as the demo (R23); loose paintings
+ * stay. Closing deletes the open library's paintings: ask first (see `unexportedCount`).
+ */
+export function openSampleLibrary(
+  name: string,
+  titles: SampleTitles,
+  store: WorkspaceStore = useWorkspace,
+): void {
+  const sample = buildSampleLibrary(name, titles)
   store.getState().closeLibrary()
-  store.setState((s) => ({ library: sample.library, assets: { ...s.assets, ...sample.assets } }))
+  store.setState((s) => ({
+    library: sample.library,
+    assets: { ...s.assets, ...sample.assets },
+    demo: true,
+  }))
 }

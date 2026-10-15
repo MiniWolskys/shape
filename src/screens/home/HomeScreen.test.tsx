@@ -116,15 +116,14 @@ describe('HomeScreen', () => {
     expect(await screen.findByText('Added 1 painting')).toBeInTheDocument()
   })
 
-  it('refuses a pack from another library while one is open', async () => {
+  it('adds the paintings of another library to the open one as copies (R21)', async () => {
     useWorkspace.getState().createLibrary('Mine', 'mine')
     const bytes = await packBytes('theirs', ['Sunset'])
     renderHome()
     dropFile(new File([bytes as Uint8Array<ArrayBuffer>], 'theirs-v1.zip'))
-    expect(
-      await screen.findByText("This pack doesn't belong to the open library (mine)."),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Added 1 painting')).toBeInTheDocument()
     expect(useWorkspace.getState().library?.namespace).toBe('mine')
+    expect(useWorkspace.getState().library?.paintings.map((p) => p.title)).toEqual(['Sunset'])
   })
 
   it('hides Resume when there is no saved work', () => {
@@ -215,7 +214,20 @@ describe('HomeScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Try the sample library' }))
     expect(useWorkspace.getState().library?.namespace).toBe('sample')
     expect(useWorkspace.getState().library?.paintings).toHaveLength(4)
+    expect(useWorkspace.getState().demo).toBe(true)
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
+  })
+
+  it('titles the sample paintings in the current language', async () => {
+    renderHome()
+    act(() => useLanguage.setState({ language: 'fr' }))
+    await userEvent.click(screen.getByRole('button', { name: "Essayer la bibliothèque d'exemple" }))
+    expect(useWorkspace.getState().library?.paintings.map((p) => p.title)).toEqual([
+      'Chapelle au couchant',
+      'Rose de nuit',
+      'Fenêtre de printemps',
+      'Oculus de givre',
+    ])
   })
 
   it('speaks French', () => {

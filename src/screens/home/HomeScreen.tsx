@@ -92,7 +92,7 @@ export function HomeScreen() {
   async function openPack(file: File) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const { added } = useWorkspace.getState().openLibraryPack(bytes)
+      const { added } = useWorkspace.getState().importPack(bytes)
       toast(plural(t, t.home.packAdded, added))
       go({ name: 'library' })
     } catch (error) {
@@ -121,7 +121,7 @@ export function HomeScreen() {
   function openSample() {
     setConfirmSample(false)
     if (useWorkspace.getState().library?.namespace !== SAMPLE_NAMESPACE) {
-      openSampleLibrary(t.home.sampleName)
+      openSampleLibrary(t.home.sampleName, t.home.sampleTitles)
     }
     go({ name: 'library' })
   }

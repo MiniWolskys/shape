@@ -69,6 +69,12 @@ export const fr: Dictionary = {
     createLibrary: 'Créer la bibliothèque',
     replaceLibrary: 'La fermer et créer',
     sampleName: "Tableaux d'exemple",
+    sampleTitles: {
+      sunsetChapel: 'Chapelle au couchant',
+      nightRose: 'Rose de nuit',
+      springWindow: 'Fenêtre de printemps',
+      frostOculus: 'Oculus de givre',
+    },
   },
   library: {
     title: 'Bibliothèque',
@@ -110,6 +116,7 @@ export const fr: Dictionary = {
       other: '{count} tableaux créés dans ce navigateur ne sont dans aucune bibliothèque',
     },
     addLoose: 'Ajouter à {name}',
+    copySuffix: '(copie)',
     looseAdded: {
       one: '{count} tableau ajouté à {name}',
       other: '{count} tableaux ajoutés à {name}',

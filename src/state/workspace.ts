@@ -3,10 +3,14 @@ import type { ShapeErrorCode } from '../domain/errors.ts'
 import { isValidNamespace, makeAssetId, makePaintingId } from '../domain/ids.ts'
 import {
   addLoosePaintings,
+  copyAsNew,
   createLibrary as newLibrary,
   createPainting as newPainting,
+  insertAfter,
   mergeLibraries,
   removePainting,
+  retitlePainting,
+  unexportedPaintings,
   upsertPainting,
 } from '../domain/library.ts'
 import type { Assets, Library, Painting, Workspace } from '../domain/types.ts'
@@ -16,22 +20,57 @@ import type { WorkspaceStorage } from '../storage/persistence.ts'
 
 const AUTOSAVE_MS = 600
 
+/**
+ * What `importPack` did: `opened` the pack as the library (none was open), `merged` it into the
+ * open library of the same namespace, or `copied` its paintings into the open library of another
+ * namespace as new unpublished ones. `kept` counts local paintings a merge left as they were
+ * (re-importing the same pack: added 0, kept n).
+ */
+export interface ImportResult {
+  kind: 'opened' | 'merged' | 'copied'
+  added: number
+  kept: number
+  sourceName: string
+  sourceNamespace: string
+}
+
 export interface WorkspaceState extends Workspace {
   ready: boolean
   saveError: ShapeErrorCode | null
+  /** The open library is the built-in demo (R23): set by openSampleLibrary, persisted locally. */
+  demo: boolean
   init(storage?: WorkspaceStorage): Promise<void>
+  /**
+   * Replaces the open library with an empty one, deleting its paintings and their assets.
+   * Ask first when `unexportedCount()` is above 0.
+   */
   createLibrary(name: string, namespace: string): void
-  openLibraryPack(bytes: Uint8Array): { added: number; kept: number }
-  addLooseToLibrary(): number
+  /** Opens, merges or copies a library pack (R21); throws a ShapeError and changes nothing on bad bytes. */
+  importPack(bytes: Uint8Array): ImportResult
+  /** Moves the given loose paintings (all of them by default) into the open library; returns how many. */
+  addLooseToLibrary(ids?: string[]): number
   createPainting(): string
   savePainting(p: Painting): void
+  /**
+   * Sets a painting's title. While unpublished its id follows the title (R17); returns the id it
+   * has now, which callers holding the old id (editor, navigation) must switch to.
+   */
+  retitlePainting(id: string, title: string): string
   deletePainting(id: string): void
-  duplicatePainting(id: string): string
+  /** Copies a painting right after the original, titled `${title} ${titleSuffix}`; returns its id. */
+  duplicatePainting(id: string, titleSuffix: string): string
   putAsset(bytes: Uint8Array): string
   setAsset(id: string, bytes: Uint8Array): void
   /** Deletes assets no library or loose painting refers to, except the ids in `keep`. */
   pruneUnreferencedAssets(keep?: string[]): void
+  /** Stores the library a pack was built from, stamping `exportedAt` (now) if it has none. */
   applyExport(library: Library): void
+  /**
+   * How many paintings of the open library no downloaded pack holds (R15): closing or replacing
+   * the library deletes them. In the demo, paintings never changed since created don't count.
+   */
+  unexportedCount(): number
+  /** Closes the open library, deleting its paintings and their assets. Ask first (see unexportedCount). */
   closeLibrary(): void
   findPainting(id: string): Painting | undefined
 }
@@ -82,9 +121,9 @@ export function createWorkspaceStore(
     }
 
     const flush = async () => {
-      const { library, loose, assets } = get()
+      const { library, loose, assets, demo } = get()
       try {
-        await storage.save({ library, loose, assets })
+        await storage.save({ library, loose, assets, demo })
         if (get().saveError !== null) set({ saveError: null })
       } catch (e) {
         if (e instanceof Error && e.name === 'QuotaExceededError') {
@@ -134,7 +173,8 @@ export function createWorkspaceStore(
         if (
           state.library === prev.library &&
           state.loose === prev.loose &&
-          state.assets === prev.assets
+          state.assets === prev.assets &&
+          state.demo === prev.demo
         ) {
           return
         }
@@ -152,6 +192,7 @@ export function createWorkspaceStore(
       assets: {},
       ready: false,
       saveError: null,
+      demo: false,
 
       init(next) {
         if (initializing) return initializing
@@ -166,6 +207,7 @@ export function createWorkspaceStore(
               library: loaded?.library ?? null,
               loose: loaded?.loose ?? [],
               assets: loaded?.assets ?? {},
+              demo: loaded?.demo ?? false,
               ready: true,
             })
             startAutosave()
@@ -182,18 +224,48 @@ export function createWorkspaceStore(
         const { library, loose, assets } = get()
         set({
           library: newLibrary(name, namespace),
+          demo: false,
           assets: library
             ? pruneAssets(assets, library.paintings.flatMap(assetIdsOf), loose)
             : assets,
         })
       },
 
-      openLibraryPack(bytes) {
+      importPack(bytes) {
         const pack = readLibraryPack(bytes)
-        const { library, assets } = get()
+        const { library, loose, assets } = get()
+        const source = { sourceName: pack.library.name, sourceNamespace: pack.library.namespace }
+        const count = pack.library.paintings.length
         if (!library) {
-          set({ library: pack.library, assets: { ...assets, ...pack.assets } })
-          return { added: pack.library.paintings.length, kept: 0 }
+          set({ library: pack.library, assets: { ...assets, ...pack.assets }, demo: false })
+          return { kind: 'opened', added: count, kept: 0, ...source }
+        }
+        if (library.namespace !== pack.library.namespace) {
+          // Another library: its paintings join this one as new, unpublished copies.
+          const takenIds = new Set(allPaintings(get()).map((p) => p.id))
+          const takenAssetIds = new Set(Object.keys(assets))
+          const nextAssets = { ...assets }
+          const copies = pack.library.paintings.map((p) => {
+            const copy = copyAsNew(p, {
+              title: p.title,
+              takenIds,
+              takenAssetIds,
+              now: new Date(),
+              random: Math.random,
+            })
+            takenIds.add(copy.painting.id)
+            for (const [from, to] of Object.entries(copy.assetIds)) {
+              takenAssetIds.add(to)
+              const data = pack.assets[from]
+              if (data) nextAssets[to] = data
+            }
+            return copy.painting
+          })
+          set({
+            library: { ...library, paintings: [...library.paintings, ...copies] },
+            assets: nextAssets,
+          })
+          return { kind: 'copied', added: count, kept: 0, ...source }
         }
         const merged = mergeLibraries(library, pack.library)
         // Added paintings and published copies that replaced local ones come from the pack.
@@ -213,17 +285,23 @@ export function createWorkspaceStore(
           library: merged.library,
           assets: pruneAssets(nextAssets, dropped.flatMap(assetIdsOf), [
             ...merged.library.paintings,
-            ...get().loose,
+            ...loose,
           ]),
         })
-        return { added: merged.added.length, kept: merged.kept.length }
+        return { kind: 'merged', added: merged.added.length, kept: merged.kept.length, ...source }
       },
 
-      addLooseToLibrary() {
+      addLooseToLibrary(ids) {
         const { library, loose } = get()
-        if (!library || loose.length === 0) return 0
-        set({ library: addLoosePaintings(library, loose, Math.random), loose: [] })
-        return loose.length
+        if (!library) return 0
+        const chosen = ids ? new Set(ids) : null
+        const moving = chosen ? loose.filter((p) => chosen.has(p.id)) : loose
+        if (moving.length === 0) return 0
+        set({
+          library: addLoosePaintings(library, moving, Math.random),
+          loose: chosen ? loose.filter((p) => !chosen.has(p.id)) : [],
+        })
+        return moving.length
       },
 
       createPainting() {
@@ -248,6 +326,23 @@ export function createWorkspaceStore(
         }
       },
 
+      retitlePainting(id, title) {
+        const { library, loose } = get()
+        const target = get().findPainting(id)
+        if (!target) throw new Error(`No painting ${id}`)
+        if (target.title === title) return id
+        const others = new Set(allPaintings(get()).map((p) => p.id))
+        others.delete(id)
+        const next = retitlePainting(target, title, others, new Date(), Math.random)
+        const swap = (list: Painting[]) => list.map((p) => (p.id === id ? next : p))
+        if (library?.paintings.some((p) => p.id === id)) {
+          set({ library: { ...library, paintings: swap(library.paintings) } })
+        } else {
+          set({ loose: swap(loose) })
+        }
+        return next.id
+      },
+
       deletePainting(id) {
         const target = get().findPainting(id)
         if (!target) return
@@ -263,41 +358,32 @@ export function createWorkspaceStore(
         })
       },
 
-      duplicatePainting(id) {
+      duplicatePainting(id, titleSuffix) {
         const original = get().findPainting(id)
         if (!original) throw new Error(`No painting ${id}`)
         // The copy gets its own asset ids so editing one painting never changes the other.
-        const assets = { ...get().assets }
-        const copyAsset = (from: string, to: string) => {
+        const { library, loose, assets } = get()
+        const { painting: copy, assetIds } = copyAsNew(original, {
+          title: `${original.title} ${titleSuffix}`.trim(),
+          takenIds: new Set(allPaintings(get()).map((p) => p.id)),
+          takenAssetIds: new Set(Object.keys(assets)),
+          now: new Date(),
+          random: Math.random,
+        })
+        const nextAssets = { ...assets }
+        for (const [from, to] of Object.entries(assetIds)) {
           const data = assets[from]
-          if (data) assets[to] = data
+          if (data) nextAssets[to] = data
         }
-        const recipe = { ...original.recipe }
-        if (recipe.source) {
-          const imageId = freshAssetId(assets)
-          copyAsset(recipe.source.imageId, imageId)
-          recipe.source = { ...recipe.source, imageId }
-        }
-        if (recipe.editsId) {
-          const editsId = freshAssetId(assets)
-          copyAsset(recipe.editsId, editsId)
-          copyAsset(`${recipe.editsId}.mask`, `${editsId}.mask`)
-          recipe.editsId = editsId
-        }
-        const stamp = new Date().toISOString()
-        const copy: Painting = {
-          ...original,
-          id: freshId(original.title),
-          status: 'draft',
-          createdAt: stamp,
-          updatedAt: stamp,
-          recipe,
-        }
-        delete copy.publishedIn
-        const { library, loose } = get()
         const inLibrary = library?.paintings.some((p) => p.id === id) ?? false
-        if (library && inLibrary) set({ library: upsertPainting(library, copy), assets })
-        else set({ loose: [...loose, copy], assets })
+        if (library && inLibrary) {
+          set({
+            library: { ...library, paintings: insertAfter(library.paintings, id, copy) },
+            assets: nextAssets,
+          })
+        } else {
+          set({ loose: insertAfter(loose, id, copy), assets: nextAssets })
+        }
         return copy.id
       },
 
@@ -319,7 +405,14 @@ export function createWorkspaceStore(
       },
 
       applyExport(library) {
-        set({ library })
+        set({ library: { ...library, exportedAt: library.exportedAt ?? new Date().toISOString() } })
+      },
+
+      unexportedCount() {
+        const { library, demo } = get()
+        if (!library) return 0
+        const atRisk = unexportedPaintings(library)
+        return demo ? atRisk.filter((p) => p.updatedAt !== p.createdAt).length : atRisk.length
       },
 
       closeLibrary() {
@@ -327,6 +420,7 @@ export function createWorkspaceStore(
         if (!library) return
         set({
           library: null,
+          demo: false,
           assets: pruneAssets(assets, library.paintings.flatMap(assetIdsOf), loose),
         })
       },

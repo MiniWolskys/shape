@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShapeError } from '../domain/errors.ts'
-import { createLibrary, createPainting, publish, upsertPainting } from '../domain/library.ts'
+import {
+  createLibrary,
+  createPainting,
+  publish,
+  updatePainting,
+  upsertPainting,
+} from '../domain/library.ts'
 import { writeLibraryPack } from '../packs/libraryPack.ts'
 import { encodePng } from '../packs/png.ts'
 import { createRaster } from '../imaging/raster.ts'
@@ -65,7 +71,13 @@ describe('workspace store', () => {
     const s = createWorkspaceStore(memoryStorage())
     await s.getState().init()
     const { bytes, ids } = await packFor('ours', ['Sunset'])
-    expect(s.getState().openLibraryPack(bytes)).toEqual({ added: 1, kept: 0 })
+    expect(s.getState().importPack(bytes)).toEqual({
+      kind: 'opened',
+      added: 1,
+      kept: 0,
+      sourceName: 'Pack',
+      sourceNamespace: 'ours',
+    })
     expect(s.getState().library?.paintings.map((p) => p.id)).toEqual(ids)
     expect(Object.keys(s.getState().assets)).toContain('img0')
   })
@@ -75,8 +87,9 @@ describe('workspace store', () => {
     await s.getState().init()
     s.getState().createLibrary('Ours', 'ours')
     const { bytes, ids } = await packFor('ours', ['Sunset'])
-    expect(s.getState().openLibraryPack(bytes)).toEqual({ added: 1, kept: 0 })
-    expect(s.getState().openLibraryPack(bytes)).toEqual({ added: 0, kept: 1 })
+    const merged = { kind: 'merged', sourceName: 'Pack', sourceNamespace: 'ours' }
+    expect(s.getState().importPack(bytes)).toEqual({ ...merged, added: 1, kept: 0 })
+    expect(s.getState().importPack(bytes)).toEqual({ ...merged, added: 0, kept: 1 })
     expect(s.getState().library?.paintings.map((p) => p.id)).toEqual(ids)
   })
 
@@ -85,13 +98,13 @@ describe('workspace store', () => {
     await s.getState().init()
     s.getState().createLibrary('Ours', 'ours')
     const { bytes, ids } = await packFor('ours', ['Sunset'])
-    s.getState().openLibraryPack(bytes)
+    s.getState().importPack(bytes)
     const local = s.getState().findPainting(ids[0] as string)!
     const source = { imageId: 'keepimg', width: 1, height: 1 }
     s.getState().setAsset('keepimg', new Uint8Array([7]))
     s.getState().savePainting({ ...local, recipe: { ...local.recipe, source } })
     s.getState().setAsset('img0', new Uint8Array([8]))
-    expect(s.getState().openLibraryPack(bytes)).toEqual({ added: 0, kept: 1 })
+    expect(s.getState().importPack(bytes)).toMatchObject({ kind: 'merged', added: 0, kept: 1 })
     expect(Array.from(s.getState().assets.keepimg ?? [])).toEqual([7])
     expect(Array.from(s.getState().assets.img0 ?? [])).toEqual([8])
   })
@@ -108,7 +121,7 @@ describe('workspace store', () => {
       recipe: { ...draft.recipe, source: { imageId: 'localimg', width: 1, height: 1 } },
     })
     s.getState().setAsset('localimg', new Uint8Array([3]))
-    s.getState().openLibraryPack(bytes)
+    s.getState().importPack(bytes)
     expect(s.getState().assets.localimg).toBeUndefined()
     expect(s.getState().assets.img0).toBeDefined()
   })
@@ -191,21 +204,10 @@ describe('workspace store', () => {
     expect(save).toHaveBeenCalledTimes(1)
   })
 
-  it('throws on a foreign namespace and leaves state unchanged', async () => {
-    const s = createWorkspaceStore(memoryStorage())
-    await s.getState().init()
-    s.getState().createLibrary('Ours', 'ours')
-    const before = s.getState()
-    const { bytes } = await packFor('theirs', ['Sunset'])
-    expect(() => s.getState().openLibraryPack(bytes)).toThrow(ShapeError)
-    expect(s.getState().library).toBe(before.library)
-    expect(s.getState().assets).toBe(before.assets)
-  })
-
   it('throws on bytes that are not a pack without changing state', async () => {
     const s = createWorkspaceStore(memoryStorage())
     await s.getState().init()
-    expect(() => s.getState().openLibraryPack(new Uint8Array([1, 2, 3]))).toThrow(ShapeError)
+    expect(() => s.getState().importPack(new Uint8Array([1, 2, 3]))).toThrow(ShapeError)
     expect(s.getState().library).toBeNull()
   })
 
@@ -314,10 +316,10 @@ describe('workspace store', () => {
       ...pa,
       recipe: { ...pa.recipe, source: { imageId: img, width: 1, height: 1 } },
     })
-    const copyId = s.getState().duplicatePainting(a)
+    const copyId = s.getState().duplicatePainting(a, '(copy)')
     const copy = s.getState().findPainting(copyId)!
     expect(copyId).not.toBe(a)
-    expect(copy.status).toBe('draft')
+    expect(copy.status).toBe('ready')
     expect(copy.recipe.source?.imageId).not.toBe(img)
     expect(Array.from(s.getState().assets[copy.recipe.source!.imageId] ?? [])).toEqual([5])
   })
@@ -373,5 +375,272 @@ describe('workspace store', () => {
     const before = s.getState().assets
     s.getState().pruneUnreferencedAssets()
     expect(s.getState().assets).toBe(before)
+  })
+
+  it('starts new paintings as ready (R16)', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const id = s.getState().createPainting()
+    expect(s.getState().findPainting(id)?.status).toBe('ready')
+  })
+})
+
+describe('library data safety (R15)', () => {
+  it('applyExport records the export time unless the library already has one', async () => {
+    vi.useFakeTimers({ now: new Date('2026-10-20T08:00:00Z') })
+    try {
+      const s = createWorkspaceStore(memoryStorage())
+      await s.getState().init()
+      s.getState().createLibrary('Ours', 'ours')
+      const id = s.getState().createPainting()
+      const lib = s.getState().library!
+      s.getState().applyExport(publish(lib, [id], now))
+      expect(s.getState().library?.exportedAt).toBe('2026-10-20T08:00:00.000Z')
+      s.getState().applyExport({ ...publish(lib, [id], now), exportedAt: now.toISOString() })
+      expect(s.getState().library?.exportedAt).toBe(now.toISOString())
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('counts the open library paintings that closing would lose', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    expect(s.getState().unexportedCount()).toBe(0)
+    s.getState().createPainting()
+    s.getState().createLibrary('Ours', 'ours')
+    expect(s.getState().unexportedCount()).toBe(0)
+    const a = s.getState().createPainting()
+    s.getState().createPainting()
+    expect(s.getState().unexportedCount()).toBe(2)
+    const lib = s.getState().library!
+    s.getState().applyExport({ ...publish(lib, [a], now), exportedAt: '2999-01-01T00:00:00.000Z' })
+    expect(s.getState().unexportedCount()).toBe(1)
+  })
+
+  it('a pack written by writeLibraryPack opens with nothing unexported', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const { bytes } = await packFor('ours', ['Sunset', 'Moon'])
+    s.getState().importPack(bytes)
+    expect(s.getState().library?.exportedAt).toBe(now.toISOString())
+    expect(s.getState().unexportedCount()).toBe(0)
+  })
+})
+
+describe('retitlePainting (R17)', () => {
+  async function storeWith() {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    return s
+  }
+
+  it('renames an unpublished painting and moves its id, keeping its assets', async () => {
+    const s = await storeWith()
+    s.getState().createLibrary('Ours', 'ours')
+    const id = s.getState().createPainting()
+    const img = s.getState().putAsset(new Uint8Array([5]))
+    const p = s.getState().findPainting(id)!
+    s.getState().savePainting({
+      ...p,
+      recipe: { ...p.recipe, source: { imageId: img, width: 1, height: 1 } },
+    })
+    const suffix = id.split('_').at(-1)
+    const next = s.getState().retitlePainting(id, 'Rosace du soir')
+    expect(next).toBe(`rosace_du_soir_${suffix}`)
+    expect(s.getState().findPainting(id)).toBeUndefined()
+    const moved = s.getState().findPainting(next)!
+    expect(moved.title).toBe('Rosace du soir')
+    expect(moved.recipe.source?.imageId).toBe(img)
+    expect(s.getState().library?.paintings).toHaveLength(1)
+    expect(s.getState().assets[img]).toBeDefined()
+  })
+
+  it('renames loose paintings in place and avoids ids used by the library', async () => {
+    const s = await storeWith()
+    const loose = s.getState().createPainting()
+    s.getState().createPainting()
+    s.getState().createLibrary('Ours', 'ours')
+    const inLib = s.getState().createPainting()
+    const libId = s.getState().retitlePainting(inLib, 'Rose')
+    const suffix = libId.split('_').at(-1) ?? ''
+    // Put the loose painting on the same suffix so its natural new id collides.
+    s.setState((st) => ({
+      loose: st.loose.map((q) => (q.id === loose ? { ...q, id: `painting_${suffix}` } : q)),
+    }))
+    const next = s.getState().retitlePainting(`painting_${suffix}`, 'Rose')
+    expect(next).not.toBe(libId)
+    expect(next).toMatch(/^rose_[a-z0-9]{3}$/)
+    expect(s.getState().loose[0]?.id).toBe(next)
+    expect(s.getState().loose).toHaveLength(2)
+  })
+
+  it('keeps a published painting id', async () => {
+    const s = await storeWith()
+    s.getState().createLibrary('Ours', 'ours')
+    const id = s.getState().createPainting()
+    s.getState().applyExport(publish(s.getState().library!, [id], now))
+    expect(s.getState().retitlePainting(id, 'Renamed')).toBe(id)
+    expect(s.getState().findPainting(id)?.title).toBe('Renamed')
+  })
+
+  it('changes nothing when the title is the same', async () => {
+    const s = await storeWith()
+    const id = s.getState().createPainting()
+    const before = s.getState().loose
+    expect(s.getState().retitlePainting(id, '')).toBe(id)
+    expect(s.getState().loose).toBe(before)
+  })
+
+  it('throws for an unknown painting', async () => {
+    const s = await storeWith()
+    expect(() => s.getState().retitlePainting('nope_abc', 'X')).toThrow()
+  })
+})
+
+describe('duplicatePainting', () => {
+  it('titles the copy with the suffix and inserts it right after the original', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const a = s.getState().createPainting()
+    s.getState().createPainting()
+    const pa = s.getState().findPainting(a)!
+    s.getState().savePainting({ ...pa, title: 'Rosace du soir' })
+    const copy = s.getState().duplicatePainting(a, '(copie)')
+    const paintings = s.getState().library!.paintings
+    expect(paintings.map((p) => p.id).indexOf(copy)).toBe(1)
+    expect(paintings[1]).toMatchObject({ title: 'Rosace du soir (copie)', status: 'ready' })
+    expect(copy).toMatch(/^rosace_du_soir_copie_[a-z0-9]{3}$/)
+  })
+
+  it('inserts a loose copy after its original too', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const a = s.getState().createPainting()
+    s.getState().createPainting()
+    const copy = s.getState().duplicatePainting(a, '(copy)')
+    expect(
+      s
+        .getState()
+        .loose.map((p) => p.id)
+        .indexOf(copy),
+    ).toBe(1)
+    expect(s.getState().findPainting(copy)?.title).toBe('(copy)')
+  })
+
+  it('drops publishedIn from a copy of a published painting', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const a = s.getState().createPainting()
+    s.getState().applyExport(publish(s.getState().library!, [a], now))
+    const copy = s.getState().findPainting(s.getState().duplicatePainting(a, '(copy)'))!
+    expect(copy.status).toBe('ready')
+    expect(copy.publishedIn).toBeUndefined()
+  })
+})
+
+describe('importPack (R21)', () => {
+  it('copies the paintings of another library into the open one as new unpublished ones', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const mine = s.getState().createPainting()
+    s.getState().setAsset('img0', new Uint8Array([42]))
+    const { bytes, ids } = await packFor('theirs', ['Sunset', 'Moon'])
+    expect(s.getState().importPack(bytes)).toEqual({
+      kind: 'copied',
+      added: 2,
+      kept: 0,
+      sourceName: 'Pack',
+      sourceNamespace: 'theirs',
+    })
+    const { library, assets } = s.getState()
+    expect(library).toMatchObject({ name: 'Ours', namespace: 'ours', version: 0 })
+    expect(library?.exportedAt).toBeUndefined()
+    const [first, sunset, moon] = library!.paintings
+    expect(first?.id).toBe(mine)
+    expect([sunset?.title, moon?.title]).toEqual(['Sunset', 'Moon'])
+    for (const p of [sunset!, moon!]) {
+      expect(ids).not.toContain(p.id)
+      expect(p.status).toBe('ready')
+      expect(p.publishedIn).toBeUndefined()
+      const imageId = p.recipe.source?.imageId ?? ''
+      expect(imageId).not.toMatch(/^img\d$/)
+      expect(assets[imageId]?.length).toBeGreaterThan(1)
+    }
+    expect(sunset!.id).toMatch(/^sunset_[a-z0-9]{3}$/)
+    expect(Array.from(assets.img0 ?? [])).toEqual([42])
+    expect(s.getState().unexportedCount()).toBe(3)
+  })
+
+  it('leaves the state unchanged when the bytes are not a pack', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const before = s.getState()
+    expect(() => s.getState().importPack(new Uint8Array([1, 2, 3]))).toThrow(ShapeError)
+    expect(s.getState().library).toBe(before.library)
+    expect(s.getState().assets).toBe(before.assets)
+  })
+
+  it('opening a pack with no library open clears the demo flag', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.setState({ demo: true })
+    const { bytes } = await packFor('ours', ['Sunset'])
+    s.getState().importPack(bytes)
+    expect(s.getState().demo).toBe(false)
+  })
+})
+
+describe('loose paintings (I16)', () => {
+  it('adds only the chosen loose paintings to the library', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const a = s.getState().createPainting()
+    const b = s.getState().createPainting()
+    s.getState().createLibrary('Ours', 'ours')
+    expect(s.getState().addLooseToLibrary([b])).toBe(1)
+    expect(s.getState().library?.paintings.map((p) => p.id)).toEqual([b])
+    expect(s.getState().loose.map((p) => p.id)).toEqual([a])
+    expect(s.getState().addLooseToLibrary()).toBe(1)
+    expect(s.getState().loose).toEqual([])
+  })
+})
+
+describe('demo flag (R23)', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('starts false, clears on create and close, and survives a reload', async () => {
+    const storage = memoryStorage()
+    const s = createWorkspaceStore(storage)
+    await s.getState().init()
+    expect(s.getState().demo).toBe(false)
+    s.setState({ demo: true })
+    await vi.advanceTimersByTimeAsync(600)
+    const again = createWorkspaceStore(storage)
+    await again.getState().init()
+    expect(again.getState().demo).toBe(true)
+    s.getState().createLibrary('Ours', 'ours')
+    expect(s.getState().demo).toBe(false)
+    s.setState({ demo: true })
+    s.getState().closeLibrary()
+    expect(s.getState().demo).toBe(false)
+  })
+
+  it('does not count untouched paintings of the demo as unexported', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Sample', 'sample')
+    const a = s.getState().createPainting()
+    s.getState().createPainting()
+    s.setState({ demo: true })
+    expect(s.getState().unexportedCount()).toBe(0)
+    const p = s.getState().findPainting(a)!
+    s.getState().savePainting(updatePainting(p, { title: 'Mine' }, new Date(Date.now() + 1000)))
+    expect(s.getState().unexportedCount()).toBe(1)
   })
 })

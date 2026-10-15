@@ -1,5 +1,5 @@
 import { ShapeError } from './errors.ts'
-import { makePaintingId } from './ids.ts'
+import { makeAssetId, makePaintingId, slugify } from './ids.ts'
 import type { Library, Painting, Random, Recipe } from './types.ts'
 
 export function defaultRecipe(): Recipe {
@@ -44,7 +44,7 @@ export function createPainting(
     width: init.width ?? 1,
     height: init.height ?? 1,
     pixelsPerBlock: init.pixelsPerBlock ?? 32,
-    status: 'draft',
+    status: 'ready',
     createdAt: stamp,
     updatedAt: stamp,
     recipe: defaultRecipe(),
@@ -111,9 +111,12 @@ export function mergeLibraries(local: Library, incoming: Library): MergeResult {
     return p
   })
   const added = incoming.paintings.filter((p) => !localIds.has(p.id))
+  // The local export time wins: a later incoming one could hide local changes made since (R15).
+  const exportedAt = local.exportedAt ?? incoming.exportedAt
   return {
     library: {
       ...local,
+      ...(exportedAt === undefined ? {} : { exportedAt }),
       version: Math.max(local.version, incoming.version),
       paintings: [...merged, ...added],
     },
@@ -155,4 +158,107 @@ export function exportSet(lib: Library, ids: string[]): Painting[] {
 
 export function whatsNew(lib: Library, version: number): Painting[] {
   return lib.paintings.filter((p) => p.publishedIn === version)
+}
+
+/** A published painting edited after the last export: the server copy is out of date. */
+export function isChanged(p: Painting, lib: Library): boolean {
+  return (
+    p.status === 'published' &&
+    lib.exportedAt !== undefined &&
+    Date.parse(p.updatedAt) > Date.parse(lib.exportedAt)
+  )
+}
+
+/**
+ * Paintings that no downloaded library pack holds in their current state (R15): all of them
+ * while the library was never exported, else the unpublished and changed ones.
+ */
+export function unexportedPaintings(lib: Library): Painting[] {
+  if (lib.exportedAt === undefined) return lib.paintings
+  return lib.paintings.filter((p) => p.status !== 'published' || isChanged(p, lib))
+}
+
+/**
+ * Sets the title (R17). While unpublished the id follows it: `slugify(title)_<suffix>`, keeping
+ * the current suffix unless another painting in `takenIds` already has that id.
+ * Published ids never change.
+ */
+export function retitlePainting(
+  p: Painting,
+  title: string,
+  takenIds: ReadonlySet<string>,
+  now: Date,
+  random: Random,
+): Painting {
+  const titled = { ...p, title, updatedAt: now.toISOString() }
+  if (p.status === 'published') return titled
+  const suffix = /_([a-z0-9]+)$/.exec(p.id)?.[1]
+  let id = suffix ? `${slugify(title)}_${suffix}` : makePaintingId(title, random)
+  while (id !== p.id && takenIds.has(id)) id = makePaintingId(title, random)
+  return { ...titled, id }
+}
+
+/** Returns the list with `p` inserted right after the painting `afterId` (or at the end). */
+export function insertAfter(paintings: Painting[], afterId: string, p: Painting): Painting[] {
+  const index = paintings.findIndex((q) => q.id === afterId)
+  if (index === -1) return [...paintings, p]
+  return [...paintings.slice(0, index + 1), p, ...paintings.slice(index + 1)]
+}
+
+export interface NewCopy {
+  painting: Painting
+  /** Old asset id → new asset id, for every asset the copy needs (edit masks included). */
+  assetIds: Record<string, string>
+}
+
+/**
+ * Makes an independent, unpublished, ready copy of a painting: a fresh id from `title`, fresh
+ * asset ids (so editing one never changes the other) and new timestamps. The caller copies the
+ * asset bytes along `assetIds`.
+ */
+export function copyAsNew(
+  p: Painting,
+  opts: {
+    title: string
+    takenIds: ReadonlySet<string>
+    takenAssetIds: ReadonlySet<string>
+    now: Date
+    random: Random
+  },
+): NewCopy {
+  const { title, takenIds, takenAssetIds, now, random } = opts
+  const used = new Set(takenAssetIds)
+  const freshAsset = (avoidMask: boolean) => {
+    let id = makeAssetId(random)
+    while (used.has(id) || (avoidMask && used.has(`${id}.mask`))) id = makeAssetId(random)
+    used.add(id)
+    return id
+  }
+  const assetIds: Record<string, string> = {}
+  const recipe = { ...p.recipe }
+  if (recipe.source) {
+    const imageId = freshAsset(false)
+    assetIds[recipe.source.imageId] = imageId
+    recipe.source = { ...recipe.source, imageId }
+  }
+  if (recipe.editsId) {
+    const editsId = freshAsset(true)
+    assetIds[recipe.editsId] = editsId
+    assetIds[`${recipe.editsId}.mask`] = `${editsId}.mask`
+    recipe.editsId = editsId
+  }
+  let id = makePaintingId(title, random)
+  while (takenIds.has(id)) id = makePaintingId(title, random)
+  const stamp = now.toISOString()
+  const painting: Painting = {
+    ...p,
+    id,
+    title,
+    status: 'ready',
+    createdAt: stamp,
+    updatedAt: stamp,
+    recipe,
+  }
+  delete painting.publishedIn
+  return { painting, assetIds }
 }

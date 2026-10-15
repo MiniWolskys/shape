@@ -32,6 +32,14 @@ describe('idbStorage', () => {
     expect(Array.from(loaded?.assets.b ?? [])).toEqual([4])
   })
 
+  it('keeps the demo flag, and reads records saved without it as not a demo', async () => {
+    await createIdbStorage().save({ ...workspace(), demo: true })
+    expect((await createIdbStorage().load())?.demo).toBe(true)
+    const record = await get<Record<string, unknown>>('shape:workspace:v1')
+    await set('shape:workspace:v1', { ...record, demo: undefined })
+    expect((await createIdbStorage().load())?.demo).toBe(false)
+  })
+
   it('returns null when nothing is stored', async () => {
     expect(await createIdbStorage().load()).toBeNull()
   })

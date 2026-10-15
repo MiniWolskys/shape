@@ -102,7 +102,7 @@ export async function writeLibraryPack(
   assets: Assets,
   now: Date,
 ): Promise<LibraryPackResult> {
-  const library = publish(lib, selectedIds, now)
+  const library = { ...publish(lib, selectedIds, now), exportedAt: now.toISOString() }
   const paintings = exportSet(library, selectedIds)
   const ns = library.namespace
 
@@ -163,6 +163,11 @@ const isIntIn = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
 const isOneOf = (v: unknown, values: readonly string[]) =>
   typeof v === 'string' && values.includes(v)
+/** An ISO 8601 UTC timestamp as `Date.toISOString` writes it, naming a real instant. */
+const isIsoTime = (v: unknown) =>
+  typeof v === 'string' &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(v) &&
+  !Number.isNaN(Date.parse(v))
 
 /** Returns the first problem with a painting entry, or null when it can be used safely. */
 function paintingProblem(p: unknown): string | null {
@@ -206,7 +211,7 @@ function parseLibrary(bytes: Uint8Array): Library {
     )
   }
   if (!isObject(value)) throw notALibraryPack(`${LIBRARY_ENTRY} is empty`)
-  const { formatVersion, namespace, name, version, paintings } = value
+  const { formatVersion, namespace, name, version, exportedAt, paintings } = value
   if (typeof formatVersion === 'number' && formatVersion > FORMAT_VERSION) {
     throw new ShapeError(
       'newer-format',
@@ -223,6 +228,9 @@ function parseLibrary(bytes: Uint8Array): Library {
   }
   if (typeof namespace !== 'string' || !isValidNamespace(namespace)) {
     throw notALibraryPack(`${LIBRARY_ENTRY} has an invalid namespace`)
+  }
+  if (exportedAt !== undefined && !isIsoTime(exportedAt)) {
+    throw notALibraryPack(`${LIBRARY_ENTRY} has an invalid exportedAt`)
   }
   const seen = new Set<string>()
   paintings.forEach((p: unknown, i) => {

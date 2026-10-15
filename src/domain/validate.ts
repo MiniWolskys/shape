@@ -1,4 +1,4 @@
-import { exportSet } from './library.ts'
+import { exportSet, isChanged } from './library.ts'
 import type { Assets, Library } from './types.ts'
 
 export type IssueCode = 'no-image' | 'duplicate-id' | 'no-title' | 'no-author' | 'nothing-new'
@@ -30,6 +30,9 @@ export function validateForExport(lib: Library, ids: string[], assets: Assets): 
       issues.push({ code: 'no-author', paintingId: p.id, blocking: false })
     }
   }
-  if (ids.length === 0) issues.push({ code: 'nothing-new', blocking: false })
+  // Changed published paintings make a new version worth exporting even with nothing selected.
+  if (ids.length === 0 && !lib.paintings.some((p) => isChanged(p, lib))) {
+    issues.push({ code: 'nothing-new', blocking: false })
+  }
   return issues
 }

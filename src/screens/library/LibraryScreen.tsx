@@ -79,7 +79,7 @@ export function LibraryScreen() {
   async function openPack(file: File) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const { added } = useWorkspace.getState().openLibraryPack(bytes)
+      const { added } = useWorkspace.getState().importPack(bytes)
       toast(plural(t, t.home.packAdded, added))
     } catch (error) {
       const namespace = useWorkspace.getState().library?.namespace ?? ''
@@ -95,7 +95,7 @@ export function LibraryScreen() {
 
   function duplicate(p: Painting) {
     try {
-      useWorkspace.getState().duplicatePainting(p.id)
+      useWorkspace.getState().duplicatePainting(p.id, t.library.copySuffix)
     } catch (error) {
       toast(errorMessage(error, t), 'error')
     }

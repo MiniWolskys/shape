@@ -136,6 +136,8 @@ export interface Library {
   name: string
   namespace: string
   version: number
+  /** When the last library pack was built (ISO); absent = never exported. */
+  exportedAt?: string
   paintings: Painting[]
 }
 /** PNG bytes keyed by asset id (source images, edit layers `<id>`, edit masks `<id>.mask`). */
@@ -144,5 +146,7 @@ export interface Workspace {
   library: Library | null
   loose: Painting[]
   assets: Assets
+  /** The open library is the built-in demo (sample). Workspace-only, never written to packs. */
+  demo?: boolean
 }
 export type Random = () => number // returns [0, 1)

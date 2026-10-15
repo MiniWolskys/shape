@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createLibrary, createPainting, publish, upsertPainting } from './library.ts'
+import {
+  createLibrary,
+  createPainting,
+  publish,
+  updatePainting,
+  upsertPainting,
+} from './library.ts'
 import { validateForExport } from './validate.ts'
 const now = new Date('2026-10-15T12:00:00Z')
 const rnd = () => 0.42
@@ -51,5 +57,17 @@ describe('validateForExport', () => {
     expect(validateForExport(createLibrary('L', 'l'), [], {})).toEqual([
       { code: 'nothing-new', blocking: false },
     ])
+  })
+  it('does not warn about nothing new when a published painting changed since the export', () => {
+    const p = withSource('A')
+    const pub = publish(upsertPainting(createLibrary('L', 'l'), p), [p.id], now)
+    const exported = { ...pub, exportedAt: now.toISOString() }
+    const changed = updatePainting(
+      exported.paintings[0]!,
+      { title: 'B' },
+      new Date(now.getTime() + 1),
+    )
+    const l = upsertPainting(exported, changed)
+    expect(validateForExport(l, [], { img1: new Uint8Array([1]) })).toEqual([])
   })
 })

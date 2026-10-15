@@ -67,6 +67,12 @@ export const en = {
     createLibrary: 'Create library',
     replaceLibrary: 'Close it and create',
     sampleName: 'Sample paintings',
+    sampleTitles: {
+      sunsetChapel: 'Sunset Chapel',
+      nightRose: 'Night Rose',
+      springWindow: 'Spring Window',
+      frostOculus: 'Frost Oculus',
+    },
   },
   library: {
     title: 'Library',
@@ -106,6 +112,7 @@ export const en = {
       other: "{count} paintings made in this browser aren't in a library yet",
     },
     addLoose: 'Add to {name}',
+    copySuffix: '(copy)',
     looseAdded: {
       one: 'Added {count} painting to {name}',
       other: 'Added {count} paintings to {name}',
