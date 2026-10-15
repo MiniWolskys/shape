@@ -18,6 +18,7 @@ export const fr: Dictionary = {
     duplicate: 'Dupliquer',
     edit: 'Modifier',
     copy: 'Copier',
+    copied: 'Copié',
     copiedCheck: 'Copié ✓',
     more: 'Plus d’actions',
     download: 'Télécharger',
@@ -30,6 +31,8 @@ export const fr: Dictionary = {
   drop: {
     picture: 'Déposez pour en faire l’image',
     pack: 'Déposez pour importer le pack de bibliothèque',
+    newPainting: 'Déposez pour commencer un tableau avec cette image',
+    closeDialog: 'Fermez d’abord la boîte de dialogue',
     pictureSet: 'Nouvelle image : {file}',
     needsLibrary: 'Les packs de bibliothèque s’importent depuis la Bibliothèque.',
     needsPainting: 'Pour utiliser une image, créez ou ouvrez d’abord un tableau.',
@@ -391,6 +394,7 @@ export const fr: Dictionary = {
     title: 'Exporter',
     heading: 'Exporter {name}',
     back: 'Bibliothèque',
+    waitForExport: 'Attendez la fin de l’export.',
     needsLibrary:
       "L'export demande une bibliothèque. Ouvrez-en une ou créez-la, puis ajoutez-y vos tableaux.",
     checksPassed: 'Tout est en ordre',

@@ -8,7 +8,7 @@ import { isEmptyLayer, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster } from '../../imaging/raster.ts'
 import { decodeEditLayer, decodePng, encodeEditLayer } from '../../packs/png.ts'
 import { useEditor, type EditorStep, type Tool } from '../../state/editor.ts'
-import { setLeaveGuard, useNavigation } from '../../state/navigation.ts'
+import { noteRename, setLeaveGuard, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
 import { errorMessage } from '../../ui/errors.ts'
@@ -17,6 +17,7 @@ import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
 import { PHONE, useMediaQuery } from '../../ui/useMediaQuery.ts'
 import { startAutosave, type Autosave } from './autosave.ts'
+import { placePicture, takePendingPicture } from './pictureActions.ts'
 import { CanvasStage } from './CanvasStage.tsx'
 import styles from './EditorScreen.module.css'
 import { StepRail } from './StepRail.tsx'
@@ -138,6 +139,8 @@ function savePaintingNow(): Painting | null {
   const id = renameForTitle(updated)
   const saved = id === updated.id ? updated : { ...updated, id }
   workspace.savePainting(saved)
+  // Older history entries may still name the old id.
+  if (id !== painting.id) noteRename(painting.id, id)
   useEditor.getState().markSaved(saved)
   workspace.pruneUnreferencedAssets(historyPictureIds())
   const navigation = useNavigation.getState()
@@ -269,10 +272,21 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
     unreadableEditsId = null
     if (paintingId === null) {
       editor.open(workspace.draftPainting(), null, null)
+      // A picture dropped on Home or the Library (R33). Loaded after the effects settle:
+      // StrictMode closes and reopens the editor once, which would make it stale.
+      const file = takePendingPicture()
+      if (file) {
+        setTimeout(() => {
+          if (useEditor.getState().painting) void placePicture(file)
+        }, 0)
+      }
       return
     }
     const p = workspace.findPainting(paintingId)
     if (!p) {
+      // StrictMode runs effects twice; only the first run still sees this editor route.
+      const { screen } = useNavigation.getState()
+      if (screen.name !== 'editor' || screen.paintingId !== paintingId) return
       toast(t.editor.notFound, 'error')
       go({ name: 'library' }, { replace: true })
       return

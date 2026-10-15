@@ -59,15 +59,21 @@ interface WindowFileDropProps {
   onFiles(files: File[]): void
   /** The overlay's words for files of these MIME types (empty strings when unknown). */
   label(types: readonly string[]): string
+  /** The overlay's words while a modal dialog is open, when files are not taken. */
+  blockedLabel: string
 }
+
+/** A modal dialog is open: a file must not act on the screen behind it. */
+const dialogOpen = () => document.querySelector('dialog[open]') !== null
 
 /**
  * The app's one window-wide file handler (C4): every file drag is kept from the browser (which
  * would open the file in place of the app), shows an overlay saying what the drop will do, and
- * ends in `onFiles` unless a local zone takes it. Pasted files go the same way.
+ * ends in `onFiles` unless a local zone takes it or a modal dialog is open. Pasted files go the
+ * same way.
  */
-export function WindowFileDrop({ onFiles, label }: WindowFileDropProps) {
-  const [types, setTypes] = useState<string[] | null>(null)
+export function WindowFileDrop({ onFiles, label, blockedLabel }: WindowFileDropProps) {
+  const [drag, setDrag] = useState<{ types: string[]; blocked: boolean } | null>(null)
   const depth = useRef(0)
   // The latest handler for the window listeners without re-subscribing every render.
   const latest = useRef(onFiles)
@@ -78,7 +84,7 @@ export function WindowFileDrop({ onFiles, label }: WindowFileDropProps) {
   useEffect(() => {
     function reset() {
       depth.current = 0
-      setTypes(null)
+      setDrag(null)
     }
     function deliver(list: FileList | null | undefined): boolean {
       const files = Array.from(list ?? [])
@@ -87,28 +93,28 @@ export function WindowFileDrop({ onFiles, label }: WindowFileDropProps) {
     }
     function onPaste(event: ClipboardEvent) {
       if (event.defaultPrevented || isEditable(event.target)) return
-      if (insideLocalZone(document.activeElement)) return
+      if (insideLocalZone(document.activeElement) || dialogOpen()) return
       if (deliver(event.clipboardData?.files)) event.preventDefault()
     }
     function onEnter(event: DragEvent) {
       if (!hasFiles(event.dataTransfer)) return
       event.preventDefault()
       depth.current += 1
-      setTypes(draggedTypes(event.dataTransfer))
+      setDrag({ types: draggedTypes(event.dataTransfer), blocked: dialogOpen() })
     }
     function onOver(event: DragEvent) {
       if (hasFiles(event.dataTransfer)) event.preventDefault()
     }
     function onLeave() {
       depth.current = Math.max(0, depth.current - 1)
-      if (depth.current === 0) setTypes(null)
+      if (depth.current === 0) setDrag(null)
     }
     // Capture phase: runs before any local zone, so the overlay always clears.
     function onDrop(event: DragEvent) {
       reset()
       if (!hasFiles(event.dataTransfer)) return
       event.preventDefault()
-      if (!insideLocalZone(event.target)) deliver(event.dataTransfer?.files)
+      if (!insideLocalZone(event.target) && !dialogOpen()) deliver(event.dataTransfer?.files)
     }
     document.addEventListener('paste', onPaste)
     window.addEventListener('dragenter', onEnter)
@@ -126,10 +132,10 @@ export function WindowFileDrop({ onFiles, label }: WindowFileDropProps) {
     }
   }, [])
 
-  if (types === null) return null
+  if (drag === null) return null
   return (
     <div className={styles.overlay} data-drop-overlay aria-hidden="true">
-      <p className={styles.label}>{label(types)}</p>
+      <p className={styles.label}>{drag.blocked ? blockedLabel : label(drag.types)}</p>
     </div>
   )
 }

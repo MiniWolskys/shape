@@ -95,9 +95,43 @@ export const useNavigation = create<NavigationState>()((set) => ({
   },
 }))
 
+/**
+ * Paintings renamed in this page session (R17), old id → new id. History entries made before
+ * a rename still name the old id; following them leads to the painting under its new one.
+ */
+const renamed = new Map<string, string>()
+
+/** Records that the painting `from` is now called `to`. */
+export function noteRename(from: string, to: string): void {
+  if (from === to) return
+  // `to` is a real id again (a title renamed back), not an alias.
+  renamed.delete(to)
+  renamed.set(from, to)
+}
+
+/** The current id of a painting once called `id`, following renames in order. */
+function currentId(id: string): string {
+  const seen = new Set([id])
+  let current = id
+  for (let next = renamed.get(current); next !== undefined; next = renamed.get(current)) {
+    if (seen.has(next)) break
+    seen.add(next)
+    current = next
+  }
+  return current
+}
+
 /** The browser moved to another URL: show its screen, unless the leave guard keeps this one. */
 function followLocation(): void {
-  const next = parseHash(location.hash)
+  let next = parseHash(location.hash)
+  if (next.name === 'editor' && next.paintingId !== null) {
+    const id = currentId(next.paintingId)
+    if (id !== next.paintingId) {
+      next = { name: 'editor', paintingId: id }
+      // The entry names the painting by its current id from now on.
+      writeHistory(next, true)
+    }
+  }
   const { screen } = useNavigation.getState()
   if (sameScreen(next, screen)) return
   if (leaveGuard && !leaveGuard(next)) {

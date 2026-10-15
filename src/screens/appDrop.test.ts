@@ -32,11 +32,14 @@ describe('routeDrop', () => {
     expect(routeDrop(library, 'zip')).toBe('pack')
   })
 
+  it('starts a new painting with a picture dropped on Home or in the Library (R33)', () => {
+    expect(routeDrop(home, 'image')).toBe('newPainting')
+    expect(routeDrop(library, 'image')).toBe('newPainting')
+  })
+
   it('explains everything else', () => {
     expect(routeDrop(editor, 'zip')).toBe('needsLibrary')
     expect(routeDrop(exportScreen, 'zip')).toBe('needsLibrary')
-    expect(routeDrop(home, 'image')).toBe('needsPainting')
-    expect(routeDrop(library, 'image')).toBe('needsPainting')
     expect(routeDrop(exportScreen, 'image')).toBe('needsPainting')
     for (const screen of [editor, home, library, exportScreen]) {
       expect(routeDrop(screen, 'other')).toBe('unsupported')
@@ -55,7 +58,7 @@ describe('predictRoute (while dragging, only types are known)', () => {
     expect(predictRoute(editor, ['image/png'])).toBe('picture')
     expect(predictRoute(editor, ['application/zip'])).toBe('needsLibrary')
     expect(predictRoute(library, ['application/x-zip-compressed'])).toBe('pack')
-    expect(predictRoute(home, ['image/jpeg'])).toBe('needsPainting')
+    expect(predictRoute(home, ['image/jpeg'])).toBe('newPainting')
     expect(predictRoute(library, ['text/plain'])).toBe('unsupported')
   })
 })
@@ -64,6 +67,7 @@ describe('routeLabel', () => {
   it('says what a drop will do', () => {
     expect(routeLabel('picture', en)).toBe('Drop to use as the picture')
     expect(routeLabel('pack', en)).toBe('Drop to import the library pack')
+    expect(routeLabel('newPainting', en)).toBe('Drop to start a painting with this picture')
     expect(routeLabel('needsPainting', en)).toBe(en.drop.needsPainting)
   })
 })

@@ -7,7 +7,7 @@ import type { Assets, Library, Painting, PaintingStatus } from '../../domain/typ
 import { useLanguage } from '../../i18n/i18n.ts'
 import * as libraryPack from '../../packs/libraryPack.ts'
 import { encodePng } from '../../packs/png.ts'
-import { useNavigation } from '../../state/navigation.ts'
+import { startHashRouting, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import * as download from '../../ui/download.ts'
@@ -173,7 +173,8 @@ describe('ExportScreen', () => {
     expect(writeText).toHaveBeenLastCalledWith(sha1.textContent)
     // The button says it worked, right where the player looks (M1); no toast.
     expect(copySha1).toHaveTextContent('Copied ✓')
-    expect(screen.queryByText('Copied')).not.toBeInTheDocument()
+    // Its accessible name stays "Copy the SHA1": a status line says it worked.
+    expect(screen.getAllByRole('status').some((el) => el.textContent === 'Copied')).toBe(true)
     await waitFor(() => expect(copySha1).toHaveTextContent(/^Copy$/), { timeout: 3000 })
   })
 
@@ -267,6 +268,26 @@ describe('ExportScreen', () => {
     await userEvent.click(downloadButton())
     expect(await screen.findByRole('button', { name: 'Library' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Shape · Home' })).toBeDisabled()
+  })
+
+  it('refuses browser Back while the pack builds, keeping the URL (R32)', async () => {
+    vi.spyOn(libraryPack, 'writeLibraryPack').mockImplementation(() => new Promise(() => {}))
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    history.replaceState(null, '', '#/export')
+    const stop = startHashRouting()
+    try {
+      renderExport()
+      await userEvent.click(downloadButton())
+      act(() => {
+        history.replaceState(null, '', '#/library')
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      })
+      expect(useNavigation.getState().screen).toEqual({ name: 'export' })
+      expect(location.hash).toBe('#/export')
+      expect(screen.getByText('Wait for the export to finish.')).toBeInTheDocument()
+    } finally {
+      stop()
+    }
   })
 
   it('leaving during a build downloads nothing and changes nothing', async () => {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   formatHash,
+  noteRename,
   parseHash,
   screenAtStartup,
   setLeaveGuard,
@@ -117,6 +118,21 @@ describe('navigation with the browser history', () => {
     browserGoesTo('#/library')
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
     expect(location.hash).toBe('#/library')
+  })
+
+  it('follows renamed paintings when history leads to an old id (R17)', () => {
+    noteRename('painting_abc', 'rose_abc')
+    noteRename('rose_abc', 'rosace_abc')
+    const before = history.length
+    browserGoesTo('#/edit/painting_abc')
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: 'rosace_abc' })
+    // The entry itself now names the painting by its id.
+    expect(location.hash).toBe('#/edit/rosace_abc')
+    expect(history.length).toBe(before)
+    // A rename back to an earlier name is no loop.
+    noteRename('rosace_abc', 'painting_abc')
+    browserGoesTo('#/edit/rose_abc')
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: 'painting_abc' })
   })
 
   it('does not ask the guard when the app itself navigates', () => {

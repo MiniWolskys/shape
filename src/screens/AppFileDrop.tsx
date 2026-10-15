@@ -11,6 +11,7 @@ export function AppFileDrop() {
   return (
     <WindowFileDrop
       label={(types) => routeLabel(predictRoute(screen, types), t)}
+      blockedLabel={t.drop.closeDialog}
       onFiles={(files) => {
         // Before the workspace is open there is nothing to put a file in (the drop is still
         // kept from the browser).

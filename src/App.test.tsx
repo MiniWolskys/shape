@@ -1,7 +1,8 @@
-import { act, createEvent, fireEvent, render, screen } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.tsx'
+import { ShapeError } from './domain/errors.ts'
 import type { Library } from './domain/types.ts'
 import { createLibrary, createPainting, upsertPainting } from './domain/library.ts'
 import * as decode from './imaging/decode.ts'
@@ -131,15 +132,43 @@ describe('App', () => {
       useWorkspace.setState({ importPack: realImportPack })
     })
 
-    it('explains a file the screen cannot use, and keeps the page', async () => {
+    it('starts a new painting with a picture dropped on the Library (R33)', async () => {
       await startWith(createLibrary('Ours', 'ours'))
+      vi.spyOn(decode, 'fileToRaster').mockResolvedValue(createRaster(400, 300))
       useNavigation.setState({ screen: { name: 'library' } })
       render(<App />)
       const event = drop(new File(['x'], 'cat.png', { type: 'image/png' }))
       expect(event.defaultPrevented).toBe(true)
+      // A draft (R18), sized to its picture (R20).
+      expect(await screen.findByText('Sized to 4×3 blocks to fit your picture')).toBeInTheDocument()
+      const { painting } = useEditor.getState()
+      expect(painting?.recipe.source).toMatchObject({ width: 400, height: 300 })
+      expect(useEditor.getState().step).toBe('image')
+      // The picture is a change: autosave adds the draft to the library (R18, R19).
+      await waitFor(() => expect(useWorkspace.getState().library?.paintings).toHaveLength(1))
+    })
+
+    it('explains a file the screen cannot use, and keeps the page', async () => {
+      await startWith(createLibrary('Ours', 'ours'))
+      useNavigation.setState({ screen: { name: 'library' } })
+      render(<App />)
+      const event = drop(new File(['x'], 'notes.txt', { type: 'text/plain' }))
+      expect(event.defaultPrevented).toBe(true)
+      expect(await screen.findByText(/Shape can't use this file/)).toBeInTheDocument()
+    })
+
+    it('stays on the step when a dropped picture cannot be read', async () => {
+      const p = createPainting({ title: 'Rose', width: 1, height: 1 }, now, () => 0.5)
+      await startWith(upsertPainting(createLibrary('Ours', 'ours'), p))
+      vi.spyOn(decode, 'fileToRaster').mockRejectedValue(new ShapeError('not-an-image', 'bad'))
+      useNavigation.setState({ screen: { name: 'editor', paintingId: p.id } })
+      render(<App />)
+      act(() => useEditor.getState().setStep('window'))
+      drop(new File(['x'], 'broken.png', { type: 'image/png' }))
       expect(
-        await screen.findByText('To use a picture, create or open a painting first.'),
+        await screen.findByText("This file isn't an image Shape can read."),
       ).toBeInTheDocument()
+      expect(useEditor.getState().step).toBe('window')
     })
 
     it('labels the overlay with what the drop will do', async () => {

@@ -1,9 +1,9 @@
 import type { Dictionary } from '../i18n/en.ts'
-import { currentDictionary, format } from '../i18n/i18n.ts'
+import { currentDictionary } from '../i18n/i18n.ts'
 import { useEditor } from '../state/editor.ts'
 import { useNavigation, type Screen } from '../state/navigation.ts'
 import { toast } from '../ui/toastStore.ts'
-import { loadPicture } from './editor/pictureActions.ts'
+import { placePicture, startPaintingWith } from './editor/pictureActions.ts'
 import { importPackFile } from './packImport.ts'
 
 export type FileKind = 'image' | 'zip' | 'other'
@@ -25,13 +25,15 @@ export function fileKind(file: { name: string; type: string }): FileKind {
  * becomes the painting's picture, a pack on Home or in the Library is imported; anything else
  * gets an explanation.
  */
-export type DropRoute = 'picture' | 'pack' | 'needsLibrary' | 'needsPainting' | 'unsupported'
+export type DropRoute =
+  'picture' | 'newPainting' | 'pack' | 'needsLibrary' | 'needsPainting' | 'unsupported'
 
 export function routeDrop(screen: Screen, kind: FileKind): DropRoute {
   if (kind === 'other') return 'unsupported'
   if (screen.name === 'editor') return kind === 'image' ? 'picture' : 'needsLibrary'
-  if (kind === 'image') return 'needsPainting'
-  return screen.name === 'export' ? 'needsLibrary' : 'pack'
+  if (screen.name === 'export') return kind === 'image' ? 'needsPainting' : 'needsLibrary'
+  // Home and the Library: a picture starts a painting (R33), a pack is imported.
+  return kind === 'image' ? 'newPainting' : 'pack'
 }
 
 /**
@@ -51,6 +53,8 @@ export function routeLabel(route: DropRoute, t: Dictionary): string {
       return t.drop.picture
     case 'pack':
       return t.drop.pack
+    case 'newPainting':
+      return t.drop.newPainting
     default:
       return t.drop[route]
   }
@@ -64,16 +68,12 @@ export async function receiveFiles(files: readonly File[]): Promise<void> {
   const route = routeDrop(screen, fileKind(file))
   const t = currentDictionary()
   switch (route) {
-    case 'picture': {
-      const editor = useEditor.getState()
-      if (!editor.painting) return
-      // The picture's own settings are where its result shows.
-      editor.setStep('image')
-      if ((await loadPicture(file)) === 'loaded') {
-        toast(format(t.drop.pictureSet, { file: file.name }))
-      }
+    case 'picture':
+      if (useEditor.getState().painting) await placePicture(file)
       return
-    }
+    case 'newPainting':
+      startPaintingWith(file)
+      return
     case 'pack':
       if ((await importPackFile(file)) && screen.name === 'home') go({ name: 'library' })
       return

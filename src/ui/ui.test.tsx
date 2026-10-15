@@ -463,7 +463,7 @@ describe('FileDrop', () => {
     const local = vi.fn()
     render(
       <>
-        <WindowFileDrop label={label} onFiles={full} />
+        <WindowFileDrop label={label} blockedLabel="Close the dialog first" onFiles={full} />
         <p>Page</p>
         <FileDrop accept="image/*" onFiles={local}>
           <button type="button">Local zone</button>
@@ -527,6 +527,25 @@ describe('FileDrop', () => {
     fireEvent(page, drop)
     expect(drop.defaultPrevented).toBe(false)
     expect(full).not.toHaveBeenCalled()
+  })
+
+  it('keeps files from the browser but takes none while a dialog is open', () => {
+    const { full } = renderBoth(() => 'Drop it')
+    const dialog = document.createElement('dialog')
+    dialog.setAttribute('open', '')
+    document.body.append(dialog)
+    try {
+      const page = screen.getByText('Page')
+      fireEvent.dragEnter(page, { dataTransfer: { files: [], types: ['Files'] } })
+      expect(overlay()).toHaveTextContent('Close the dialog first')
+      const drop = createEvent.drop(page, { dataTransfer: { files: [png()], types: ['Files'] } })
+      fireEvent(page, drop)
+      expect(drop.defaultPrevented).toBe(true)
+      fireEvent.paste(document.body, { clipboardData: { files: [png()] } })
+      expect(full).not.toHaveBeenCalled()
+    } finally {
+      dialog.remove()
+    }
   })
 
   it('clears the overlay when the drag ends without a drop', () => {

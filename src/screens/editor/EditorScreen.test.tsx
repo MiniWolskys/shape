@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
@@ -385,6 +386,24 @@ describe('EditorScreen', () => {
       expect(document.querySelector('[data-editor-session]')).not.toBe(grid)
     })
 
+    it('Back to an entry from before a rename opens the renamed painting (R17)', async () => {
+      const p = painting({ title: '' })
+      await startWith(p)
+      openRouted(p.id)
+      act(() => useNavigation.getState().go({ name: 'library' }))
+      act(() => useNavigation.getState().go({ name: 'editor', paintingId: p.id }))
+      retitle('Rose')
+      fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+      const renamed = openId()
+      expect(renamed).not.toBe(p.id)
+      act(() => useNavigation.getState().go({ name: 'library' }))
+      // An older entry still names the painting by its first id.
+      browserGoesTo(`#/edit/${p.id}`)
+      expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: renamed })
+      expect(location.hash).toBe(`#/edit/${renamed}`)
+      expect(screen.queryByText("This painting doesn't exist anymore.")).not.toBeInTheDocument()
+    })
+
     it('a new painting gets its id in the URL in place of #/edit/new', async () => {
       await startWith(painting())
       useNavigation.setState({ screen: { name: 'library' } })
@@ -464,6 +483,18 @@ describe('EditorScreen', () => {
     renderEditor('missing_abc')
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
     expect(screen.getByText("This painting doesn't exist anymore.")).toBeInTheDocument()
+  })
+
+  it('says once that a missing painting is gone, even in StrictMode', async () => {
+    await startWith(painting())
+    useNavigation.setState({ screen: { name: 'editor', paintingId: 'missing_abc' } })
+    render(
+      <StrictMode>
+        <Routed />
+        <Toasts />
+      </StrictMode>,
+    )
+    expect(screen.getAllByText("This painting doesn't exist anymore.")).toHaveLength(1)
   })
 
   it('saves no edits after undoing them, so reopening shows none', async () => {

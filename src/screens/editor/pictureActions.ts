@@ -3,6 +3,7 @@ import { currentDictionary, format } from '../../i18n/i18n.ts'
 import { fileToRaster } from '../../imaging/decode.ts'
 import { encodePng } from '../../packs/png.ts'
 import { isCustomCrop, useEditor } from '../../state/editor.ts'
+import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { errorMessage } from '../../ui/errors.ts'
 import { toast } from '../../ui/toastStore.ts'
@@ -41,6 +42,38 @@ export async function loadPicture(file: File): Promise<PictureResult> {
     toast(errorMessage(error, currentDictionary()), 'error')
     return 'failed'
   }
+}
+
+/**
+ * A dropped or pasted picture (C4): used like a chosen one, then the Image step shows it, with a
+ * toast when no auto-size toast already said something.
+ */
+export async function placePicture(file: File): Promise<void> {
+  const result = await loadPicture(file)
+  if (result !== 'loaded' && result !== 'sized') return
+  useEditor.getState().setStep('image')
+  if (result === 'loaded') {
+    toast(format(currentDictionary().drop.pictureSet, { file: file.name }))
+  }
+}
+
+/** A picture waiting for the new painting `startPaintingWith` opens. */
+let pendingPicture: File | null = null
+
+/**
+ * Starts a new painting with `file` as its picture (R33): a draft, as Create a painting opens
+ * (R18), which the picture sizes (R20) once the editor has it open.
+ */
+export function startPaintingWith(file: File): void {
+  pendingPicture = file
+  useNavigation.getState().go({ name: 'editor', paintingId: null })
+}
+
+/** The picture for a new painting the editor just opened, if one waits (once). */
+export function takePendingPicture(): File | null {
+  const file = pendingPicture
+  pendingPicture = null
+  return file
 }
 
 /**

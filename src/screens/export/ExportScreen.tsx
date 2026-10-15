@@ -4,9 +4,9 @@ import { exportSet, whatsNew } from '../../domain/library.ts'
 import type { Assets, Library, Painting } from '../../domain/types.ts'
 import { validateForExport, type Issue } from '../../domain/validate.ts'
 import type { Dictionary } from '../../i18n/en.ts'
-import { format, plural, useT } from '../../i18n/i18n.ts'
+import { currentDictionary, format, plural, useT } from '../../i18n/i18n.ts'
 import { serverPropertiesLines, type LibraryPackResult } from '../../packs/libraryPack.ts'
-import { useNavigation } from '../../state/navigation.ts'
+import { setLeaveGuard, useNavigation } from '../../state/navigation.ts'
 import { useThumbnail } from '../../state/thumbnails.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Backdrop } from '../../ui/Backdrop.tsx'
@@ -158,19 +158,25 @@ function CopyButton({
     return () => clearTimeout(timer)
   }, [copied])
   return (
-    <Button
-      icon="copy"
-      aria-label={label}
-      className={className}
-      disabled={disabled}
-      onClick={() => {
-        void onCopy().then((ok) => {
-          if (ok) setCopied(true)
-        })
-      }}
-    >
-      {copied ? t.common.copiedCheck : children}
-    </Button>
+    <>
+      <Button
+        icon="copy"
+        aria-label={label}
+        className={className}
+        disabled={disabled}
+        onClick={() => {
+          void onCopy().then((ok) => {
+            if (ok) setCopied(true)
+          })
+        }}
+      >
+        {copied ? t.common.copiedCheck : children}
+      </Button>
+      {/* `label` names the button, so the confirmation is announced on its own. */}
+      <span role="status" className="visually-hidden">
+        {copied ? t.common.copied : ''}
+      </span>
+    </>
   )
 }
 
@@ -210,6 +216,16 @@ function ExportView({ library }: { library: Library }) {
   const selectedIds = newPaintings.filter((p) => selected.has(p.id)).map((p) => p.id)
   const done = phase.kind === 'done' ? phase.result : null
   const busy = phase.kind === 'busy'
+
+  // Browser Back and Forward can't leave a build half-way (R32): the URL stays on Export.
+  useEffect(() => {
+    if (!busy) return
+    setLeaveGuard(() => {
+      toast(currentDictionary().export.waitForExport)
+      return false
+    })
+    return () => setLeaveGuard(null)
+  }, [busy])
 
   const issues = done ? [] : validateForExport(library, selectedIds, assets)
   const blocking = issues.some((i) => i.blocking)
