@@ -15,6 +15,9 @@ import { useToasts } from '../../ui/toastStore.ts'
 import { AppFileDrop } from '../AppFileDrop.tsx'
 import { HomeScreen } from './HomeScreen.tsx'
 
+// Thumbnails render on idle callbacks; their own tests cover them.
+vi.mock('../../state/thumbnails.ts', () => ({ useThumbnail: () => null }))
+
 const now = new Date('2026-10-15T12:00:00Z')
 
 async function startWith(saved: Workspace | null = null) {
