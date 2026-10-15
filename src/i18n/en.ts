@@ -231,6 +231,9 @@ export const en = {
     stepsHint: 'Steps are a suggestion. Click any of them at any time.',
     stepNeedsPicture: 'no picture yet',
     backToLibrary: 'Library',
+    done: 'Done',
+    doneSaved: '“{title}” saved to {library}',
+    doneSavedLoose: '“{title}” saved',
     saveStatus: {
       saving: 'Saving…',
       saved: 'Saved',

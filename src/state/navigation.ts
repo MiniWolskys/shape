@@ -157,3 +157,15 @@ export function startHashRouting(): () => void {
     window.removeEventListener('hashchange', followLocation)
   }
 }
+
+/** The painting the Library highlights when it next opens (the one just finished with Done). */
+let arrivalHighlight: string | null = null
+
+export function highlightOnArrival(id: string | null): void {
+  arrivalHighlight = id
+}
+
+/** What the Library highlights as it opens; it clears it once shown (StrictMode reads twice). */
+export function peekArrivalHighlight(): string | null {
+  return arrivalHighlight
+}

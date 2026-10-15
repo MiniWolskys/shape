@@ -235,6 +235,9 @@ export const fr: Dictionary = {
     stepsHint: 'Les étapes sont un guide. Passez de l’une à l’autre quand vous voulez.',
     stepNeedsPicture: 'pas encore d’image',
     backToLibrary: 'Bibliothèque',
+    done: 'Terminé',
+    doneSaved: '« {title} » enregistré dans {library}',
+    doneSavedLoose: '« {title} » enregistré',
     saveStatus: {
       saving: 'Enregistrement…',
       saved: 'Enregistré',

@@ -5,7 +5,7 @@ import { createLibrary, createPainting, upsertPainting } from '../../domain/libr
 import type { Library, Painting, PaintingStatus, Workspace } from '../../domain/types.ts'
 import { useLanguage } from '../../i18n/i18n.ts'
 import { writeLibraryPack } from '../../packs/libraryPack.ts'
-import { useNavigation } from '../../state/navigation.ts'
+import { highlightOnArrival, peekArrivalHighlight, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
@@ -293,6 +293,18 @@ describe('LibraryScreen', () => {
     expect(await screen.findByText('Duplicated')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
     expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: copy?.id })
+  })
+
+  it('highlights the painting just finished with Done', async () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    const lib = library(sample())
+    await startWith({ library: lib, loose: [], assets: {} })
+    const target = lib.paintings.find((p) => p.title === 'Frost Oculus')
+    highlightOnArrival(target?.id ?? null)
+    renderLibrary()
+    const card = screen.getByRole('heading', { name: 'Frost Oculus' }).closest('li')
+    expect(card).toHaveAttribute('data-highlight', 'true')
+    expect(peekArrivalHighlight()).toBeNull()
   })
 
   it('lists loose paintings next to the library, each with its own Add (I16)', async () => {

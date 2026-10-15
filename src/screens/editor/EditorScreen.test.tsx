@@ -10,7 +10,7 @@ import { createRaster } from '../../imaging/raster.ts'
 import { decodeEditLayer, encodePng } from '../../packs/png.ts'
 import * as png from '../../packs/png.ts'
 import { forgetLastSteps, useEditor } from '../../state/editor.ts'
-import { startHashRouting, useNavigation } from '../../state/navigation.ts'
+import { peekArrivalHighlight, startHashRouting, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { stubMedia } from '../../test/media.ts'
@@ -261,6 +261,18 @@ describe('EditorScreen', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
     expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+  })
+
+  it('Done saves, says where, and shows the painting in the library', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(useNavigation.getState().screen).toEqual({ name: 'library' })
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+    expect(peekArrivalHighlight()).toBe(p.id)
+    expect(await screen.findByText('“Sunset Chapel” saved to Ours')).toBeInTheDocument()
   })
 
   it('stays in the editor when the last save fails on leaving, keeping the picture', async () => {

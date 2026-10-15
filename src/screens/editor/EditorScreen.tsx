@@ -8,7 +8,12 @@ import { isEmptyLayer, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster } from '../../imaging/raster.ts'
 import { decodeEditLayer, decodePng, encodeEditLayer } from '../../packs/png.ts'
 import { useEditor, type EditorStep, type Tool } from '../../state/editor.ts'
-import { noteRename, setLeaveGuard, useNavigation } from '../../state/navigation.ts'
+import {
+  highlightOnArrival,
+  noteRename,
+  setLeaveGuard,
+  useNavigation,
+} from '../../state/navigation.ts'
 import { sameBytes, useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
 import { errorMessage } from '../../ui/errors.ts'
@@ -420,6 +425,25 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
     go({ name: to })
   }
 
+  /** Done: saves, then shows the painting in the Library, highlighted. */
+  function done() {
+    if (autosave.current?.flush() === false) return
+    const { painting } = useEditor.getState()
+    const workspace = useWorkspace.getState()
+    const saved = painting ? workspace.findPainting(painting.id) : undefined
+    if (saved) {
+      const title = saved.title || t.library.untitled
+      const inLibrary = workspace.library?.paintings.some((p) => p.id === saved.id) ?? false
+      toast(
+        inLibrary && workspace.library
+          ? format(t.editor.doneSaved, { title, library: workspace.library.name })
+          : format(t.editor.doneSavedLoose, { title }),
+      )
+    }
+    highlightOnArrival(saved?.id ?? null)
+    go({ name: 'library' })
+  }
+
   let status: SaveStatus = 'saved'
   // "Saved" would be untrue while the browser storage refuses the workspace (C1).
   if (failedIn === session || storageFailing) status = 'failed'
@@ -468,6 +492,9 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
               onClick={() => useEditor.getState().redo()}
             >
               <span className={styles.narrowHidden}>{t.editor.redo}</span>
+            </Button>
+            <Button variant="primary" icon="check" onClick={done}>
+              {t.editor.done}
             </Button>
           </div>
         }

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { canDelete, isChanged, paintingState, readyToExport } from '../../domain/library.ts'
 import type { Library, Painting } from '../../domain/types.ts'
 import { format, plural, useT } from '../../i18n/i18n.ts'
-import { useNavigation } from '../../state/navigation.ts'
+import { highlightOnArrival, peekArrivalHighlight, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
 import { Dialog } from '../../ui/Dialog.tsx'
@@ -64,7 +64,8 @@ export function LibraryScreen() {
   const [libraryDialog, setLibraryDialog] = useState({ open: false, key: 0 })
   /** A new library waiting for the close-library confirm (R15). */
   const [replaceWith, setReplaceWith] = useState<{ name: string; namespace: string } | null>(null)
-  const [highlight, setHighlight] = useState<string | null>(null)
+  // The painting just finished with Done, if that is how the player got here.
+  const [highlight, setHighlight] = useState<string | null>(peekArrivalHighlight)
   const fileInput = useRef<HTMLInputElement>(null)
   const demoNoteId = useId()
   const emptyId = useId()
@@ -73,6 +74,7 @@ export function LibraryScreen() {
   useEffect(() => {
     if (nothingToShow) go({ name: 'home' }, { replace: true })
   }, [nothingToShow, go])
+  useEffect(() => highlightOnArrival(null), [])
   useEffect(() => {
     if (highlight === null) return
     const timer = setTimeout(() => setHighlight(null), HIGHLIGHT_MS)
