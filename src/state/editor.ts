@@ -59,6 +59,11 @@ export interface EditorState {
    * save may give the open painting a new id.
    */
   session: number
+  /**
+   * Counts changes, undos and redos (not saves, which may rename the history): a toast offering
+   * Undo for one change checks nothing happened since.
+   */
+  revision: number
   open(p: Painting, source: Raster | null, edits: EditLayer | null): void
   /** Forgets the open painting and its history (when the editor screen goes away). */
   close(): void
@@ -229,6 +234,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     pruneRasters([...nextPast, next])
     set({
       ...extra,
+      revision: get().revision + 1,
       painting: next.painting,
       edits: next.edits,
       past: nextPast,
@@ -275,6 +281,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     future: [],
     dirty: false,
     session: 0,
+    revision: 0,
 
     open(p, source, edits) {
       rasters = new Map()
@@ -391,6 +398,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       const restored = restore(previous)
       set({
         ...restored,
+        revision: get().revision + 1,
         past: past.slice(0, -1),
         future: [{ painting, edits }, ...future],
         selection: null,
@@ -412,6 +420,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       pruneRasters([...nextPast, next, ...rest])
       set({
         ...restored,
+        revision: get().revision + 1,
         past: nextPast,
         future: rest,
         selection: null,

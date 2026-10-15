@@ -1,8 +1,9 @@
 import { useId, useRef, type CSSProperties, type KeyboardEvent } from 'react'
-import { slugify } from '../../../domain/ids.ts'
+import { retitlePainting } from '../../../domain/library.ts'
 import { MC_COLOR_HEX, MC_COLORS, type McColor, type Painting } from '../../../domain/types.ts'
 import { format, useT } from '../../../i18n/i18n.ts'
 import { useEditor } from '../../../state/editor.ts'
+import { useWorkspace } from '../../../state/workspace.ts'
 import { TooltipPreview } from '../TooltipPreview.tsx'
 import styles from './steps.module.css'
 import own from './DetailsStep.module.css'
@@ -10,12 +11,12 @@ import own from './DetailsStep.module.css'
 const MAX_TEXT = 64
 
 /**
- * The id an unpublished painting gets once its title is saved (R17): the title's slug with the
- * id's own suffix. (A clash with another painting picks another suffix, which is rare.)
+ * The id the painting will have once its title is saved (R17), by the rule the save uses. On a
+ * clash the save draws a random suffix, so the preview may then differ from the saved id.
  */
-function idForTitle(p: Painting): string {
-  const suffix = /_([a-z0-9]{3})$/.exec(p.id)?.[1]
-  return suffix ? `${slugify(p.title)}_${suffix}` : p.id
+function previewId(p: Painting, others: Painting[]): string {
+  const taken = new Set(others.flatMap((q) => (q.id === p.id ? [] : [q.id])))
+  return retitlePainting(p, p.title, taken, new Date(), () => 0).id
 }
 
 /** Typing merges into one undo step per field (until a pause). */
@@ -27,6 +28,8 @@ export function DetailsStep() {
   const t = useT()
   const id = useId()
   const painting = useEditor((s) => s.painting)
+  const library = useWorkspace((s) => s.library)
+  const loose = useWorkspace((s) => s.loose)
   if (!painting) return null
   const { title, titleColor, author, authorColor, status } = painting
   const limit = format(t.editor.details.maxLength, { count: MAX_TEXT })
@@ -130,7 +133,9 @@ export function DetailsStep() {
         ) : (
           <p className={own.idRow}>
             <span className={styles.hint}>{t.editor.details.willBe}</span>
-            <code className={own.id}>{idForTitle(painting)}</code>
+            <code className={own.id}>
+              {previewId(painting, [...(library?.paintings ?? []), ...loose])}
+            </code>
           </p>
         )}
       </section>

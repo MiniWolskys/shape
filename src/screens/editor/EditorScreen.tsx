@@ -112,10 +112,11 @@ function decodeEdits(p: Painting, assets: Assets, t: Dictionary): EditLayer | nu
 }
 
 /**
- * The id the painting has once saved. While unpublished it follows the title (R17): a stored
- * painting is retitled in the workspace; a new one enters it under an id made from its title.
+ * Gives the painting the id its title asks for (R17), changing the workspace: a stored painting
+ * is retitled there; a new one gets an id made from its title. Called last in a save, once
+ * nothing else can fail, so a failed save never leaves the editor on an id the workspace dropped.
  */
-function idForTitle(p: Painting): string {
+function renameForTitle(p: Painting): string {
   const workspace = useWorkspace.getState()
   const stored = workspace.findPainting(p.id)
   if (stored) return stored.title === p.title ? p.id : workspace.retitlePainting(p.id, p.title)
@@ -134,7 +135,6 @@ function savePaintingNow(): Painting | null {
   const { painting, edits } = useEditor.getState()
   if (!painting) return null
   const workspace = useWorkspace.getState()
-  const id = idForTitle(painting)
   // No edits (none made, or all undone) means no edit assets: the old ones get pruned below,
   // unless they could not be read, in which case they stay untouched.
   const hasEdits = edits !== null && !isEmptyLayer(edits)
@@ -151,11 +151,9 @@ function savePaintingNow(): Painting | null {
     // New edits replaced the unreadable ones.
     unreadableEditsId = null
   }
-  const saved = updatePainting(
-    { ...painting, id },
-    { recipe: { ...painting.recipe, editsId } },
-    new Date(),
-  )
+  const updated = updatePainting(painting, { recipe: { ...painting.recipe, editsId } }, new Date())
+  const id = renameForTitle(updated)
+  const saved = id === updated.id ? updated : { ...updated, id }
   workspace.savePainting(saved)
   useEditor.getState().markSaved(saved)
   workspace.pruneUnreferencedAssets(historyPictureIds())
@@ -208,15 +206,17 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
   })
 
   /** Saves now; a failure is shown, and the next change tries again. */
-  const save = useRef(() => {})
+  const save = useRef<() => boolean>(() => true)
   useEffect(() => {
     save.current = () => {
       try {
         savePaintingNow()
         setFailedIn(null)
+        return true
       } catch (error) {
         setFailedIn(useEditor.getState().session)
         toast(errorMessage(error, tRef.current), 'error')
+        return false
       }
     }
   })
@@ -248,13 +248,14 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
     const running = startAutosave(() => save.current())
     autosave.current = running
     return () => {
-      running.flush()
+      const saved = running.flush()
       running.stop()
       autosave.current = null
       unreadableEditsId = null
       useEditor.getState().close()
-      // Pictures chosen but never saved are not needed once the editor is gone.
-      useWorkspace.getState().pruneUnreferencedAssets()
+      // Pictures chosen but never saved are not needed once the editor is gone; after a failed
+      // save they may be all that is left of the work, so they stay.
+      if (saved) useWorkspace.getState().pruneUnreferencedAssets()
     }
   }, [])
 
@@ -326,9 +327,9 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
 
   if (!painting) return null
 
-  /** Back and the logo save what is pending, then leave (M14). */
+  /** Back and the logo save what is pending, then leave (M14); a failed save stays here. */
   function leave(to: 'library' | 'home') {
-    autosave.current?.flush()
+    if (autosave.current?.flush() === false) return
     go({ name: to })
   }
 

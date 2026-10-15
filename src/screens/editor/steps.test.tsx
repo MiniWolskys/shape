@@ -551,6 +551,21 @@ describe('editor steps', () => {
       expect(mark(/Details/)).toHaveAttribute('data-done')
     })
 
+    it('does not check Size just because a picture got its centred crop', async () => {
+      const p = createPainting({}, now, () => 0.5)
+      const withPicture = {
+        ...p,
+        recipe: {
+          ...p.recipe,
+          source: { imageId: 'pic', width: 8, height: 12 },
+          crop: { x: 0, y: 2, width: 8, height: 8 },
+        },
+      }
+      await open(withPicture, 'details')
+      expect(mark(/Image/)).toHaveAttribute('data-done')
+      expect(mark(/Size & crop/)).not.toHaveAttribute('data-done')
+    })
+
     it('marks a new painting without a picture as needing one, and nothing as done', async () => {
       const p = createPainting({}, now, () => 0.5)
       await open(p, 'details')

@@ -8,7 +8,7 @@ const painting = createPainting({ title: 'Test' }, new Date('2026-10-15T12:00:00
 const retitle = (title: string) => useEditor.getState().change((p) => ({ ...p, title }))
 
 describe('autosave', () => {
-  let save: ReturnType<typeof vi.fn<() => void>>
+  let save: ReturnType<typeof vi.fn<() => boolean>>
   let autosave: Autosave
 
   beforeEach(() => {
@@ -18,6 +18,7 @@ describe('autosave', () => {
     save = vi.fn(() => {
       const current = useEditor.getState().painting as Painting
       useEditor.getState().markSaved({ ...current })
+      return true
     })
     autosave = startAutosave(save)
   })

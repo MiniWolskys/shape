@@ -45,18 +45,15 @@ export function noticeCropReset(run: () => void): void {
   const after = useEditor.getState().painting
   if (!before || !after || after === before || !isCustomCrop(before)) return
   if (sameCrop(before, after)) return
-  // The step this change added (an autosave since replaces the current painting, not this).
-  const { past, session } = useEditor.getState()
-  const step = past.at(-1)
+  // Saves don't count as changes, so Undo still works after an autosave renamed the history.
+  const { revision, session } = useEditor.getState()
   const t = currentDictionary()
   toast(t.editor.cropRecentred, 'info', {
     label: t.editor.undo,
     run() {
       // Only while nothing else was done since: Undo must take back this change.
       const now = useEditor.getState()
-      if (now.session === session && now.past.at(-1) === step && now.future.length === 0) {
-        now.undo()
-      }
+      if (now.session === session && now.revision === revision) now.undo()
     },
   })
 }

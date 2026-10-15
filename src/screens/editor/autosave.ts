@@ -4,17 +4,20 @@ import { useEditor } from '../../state/editor.ts'
 export const AUTOSAVE_MS = 800
 
 export interface Autosave {
-  /** Saves pending changes now (leaving, hiding the page, Ctrl+S). */
-  flush(): void
+  /**
+   * Saves pending changes now (leaving, hiding the page, Ctrl+S). False when that save failed:
+   * the changes are still only in the editor.
+   */
+  flush(): boolean
   stop(): void
 }
 
 /**
- * Calls `save` AUTOSAVE_MS after the last change of the open painting while it has unsaved
+ * Calls `save` (true once saved) AUTOSAVE_MS after the last change of the open painting while it has unsaved
  * changes. Never while a pointer is held: a stroke or a drag is saved once released (a save in
  * the middle of one would cut it into two undo steps and make a stroke copy its pixels again).
  */
-export function startAutosave(save: () => void): Autosave {
+export function startAutosave(save: () => boolean): Autosave {
   let timer: ReturnType<typeof setTimeout> | undefined
   let held = false
 
@@ -53,7 +56,7 @@ export function startAutosave(save: () => void): Autosave {
   return {
     flush() {
       cancel()
-      if (useEditor.getState().dirty) save()
+      return useEditor.getState().dirty ? save() : true
     },
     stop() {
       cancel()

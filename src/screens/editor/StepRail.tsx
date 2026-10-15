@@ -10,15 +10,15 @@ const DEFAULT = defaultRecipe()
 const DEFAULT_PPB = 32
 
 /**
- * Which steps hold a real choice (I6), read from the painting itself: a picture, a size or crop
- * other than a new painting's, a window or frame other than the default, pixel edits, a title.
+ * Which steps hold a real choice (I6), read from the painting itself: a picture, a size other
+ * than a new painting's, a window or frame other than the default, pixel edits, a title.
  */
 function doneSteps(p: Painting, edits: EditLayer | null): Record<EditorStep, boolean> {
   const { recipe } = p
   return {
     image: recipe.source !== null,
-    size:
-      p.width !== 1 || p.height !== 1 || p.pixelsPerBlock !== DEFAULT_PPB || recipe.crop.width > 0,
+    // A new painting is 1×1 at 32 px until the player or a first picture (R20) sizes it.
+    size: p.width !== 1 || p.height !== 1 || p.pixelsPerBlock !== DEFAULT_PPB,
     window:
       recipe.window.shape !== DEFAULT.window.shape ||
       recipe.window.glassOpacity !== DEFAULT.window.glassOpacity ||

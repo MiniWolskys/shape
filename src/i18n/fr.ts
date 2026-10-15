@@ -258,7 +258,6 @@ export const fr: Dictionary = {
     details: {
       heading: 'Détails',
       preview: 'Aperçu en jeu',
-      status: 'Statut',
       include: 'Inclure dans le prochain export',
       includeHint: 'Désactivez pour le garder en brouillon, hors des exports.',
       publishedNote: 'Publié : sa taille ne peut plus changer et il ne peut pas être supprimé.',

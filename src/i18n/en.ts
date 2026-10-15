@@ -253,7 +253,6 @@ export const en = {
     details: {
       heading: 'Details',
       preview: 'In-game preview',
-      status: 'Status',
       include: 'Include in the next export',
       includeHint: 'Turn off to keep it as a draft, left out of exports.',
       publishedNote: "Published: its size can't change and it can't be deleted.",

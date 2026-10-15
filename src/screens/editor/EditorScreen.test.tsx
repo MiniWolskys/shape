@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createLibrary, createPainting, upsertPainting } from '../../domain/library.ts'
 import type { Painting, Workspace } from '../../domain/types.ts'
 import { useLanguage } from '../../i18n/i18n.ts'
 import { createEditLayer } from '../../imaging/edits.ts'
 import { createRaster } from '../../imaging/raster.ts'
 import { decodeEditLayer, encodePng } from '../../packs/png.ts'
+import * as png from '../../packs/png.ts'
 import { forgetLastSteps, useEditor } from '../../state/editor.ts'
 import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
@@ -249,6 +250,54 @@ describe('EditorScreen', () => {
     expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
   })
 
+  it('stays in the editor when the last save fails on leaving, keeping the picture', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    let imageId = ''
+    act(() => {
+      imageId = useWorkspace.getState().putAsset(encodePng(createRaster(4, 4)))
+      useEditor.getState().setSource(createRaster(4, 4), imageId)
+    })
+    const realSave = useWorkspace.getState().savePainting
+    useWorkspace.setState({
+      savePainting: () => {
+        throw new Error('disk on fire')
+      },
+    })
+    onTestFinished(() => useWorkspace.setState({ savePainting: realSave }))
+    await userEvent.click(screen.getByRole('button', { name: 'Library' }))
+    expect(useNavigation.getState().screen.name).toBe('editor')
+    expect(screen.getByText('Something went wrong: disk on fire')).toBeInTheDocument()
+    expect(saveStatus()).toHaveTextContent("Couldn't save")
+    expect(useWorkspace.getState().assets[imageId]).toBeDefined()
+    await userEvent.click(screen.getByRole('button', { name: 'Shape · Home' }))
+    expect(useNavigation.getState().screen.name).toBe('editor')
+  })
+
+  it('a save that fails half-way leaves the id alone, and the next one adds no copy', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    const layer = createEditLayer(8, 12)
+    layer.mask[0] = 1
+    act(() => {
+      useEditor.getState().change((q) => ({ ...q, title: 'Night Rose' }))
+      useEditor.getState().setEdits(layer)
+    })
+    const encode = vi.spyOn(png, 'encodeEditLayer').mockImplementationOnce(() => {
+      throw new Error('no memory')
+    })
+    await userEvent.keyboard('{Control>}s{/Control}')
+    expect(encode).toHaveBeenCalled()
+    expect(allPaintings().map((q) => [q.id, q.title])).toEqual([[p.id, 'Sunset Chapel']])
+    expect(openId()).toBe(p.id)
+    await userEvent.keyboard('{Control>}s{/Control}')
+    const id = `night_rose_${p.id.slice(-3)}`
+    expect(allPaintings().map((q) => [q.id, q.title])).toEqual([[id, 'Night Rose']])
+    expect(openId()).toBe(id)
+  })
+
   it('the logo saves what is pending and goes home (M14)', async () => {
     const p = painting()
     await startWith(p)
@@ -481,6 +530,29 @@ describe('EditorScreen autosave (R19) and new paintings (R18)', () => {
     await wait(AUTOSAVE_MS)
     expect(allPaintings().map((q) => q.id)).toEqual([p.id])
     expect(openId()).toBe(p.id)
+  })
+
+  it('Undo on the crop toast still works after an autosave renamed the painting', async () => {
+    const p = painting({
+      recipe: {
+        ...painting().recipe,
+        source: { imageId: 'pic', width: 20, height: 30 },
+        crop: { x: 2, y: 3, width: 8, height: 12 },
+      },
+    })
+    await startWith(p, { assets: { pic: encodePng(createRaster(20, 30)) } })
+    renderEditor(p.id)
+    retitle('Night Rose')
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate right' }))
+    await wait(AUTOSAVE_MS)
+    expect(openId()).toBe(`night_rose_${p.id.slice(-3)}`)
+    const note = screen.getByText('Crop recentred').parentElement as HTMLElement
+    fireEvent.click(within(note).getByRole('button', { name: 'Undo' }))
+    expect(useEditor.getState().painting?.recipe).toMatchObject({
+      rotation: 0,
+      crop: { x: 2, y: 3, width: 8, height: 12 },
+    })
+    expect(title()).toBe('Night Rose')
   })
 
   it('keeps the id of a published painting when its title changes', async () => {
