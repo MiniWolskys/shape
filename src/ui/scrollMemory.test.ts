@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createScrollMemory } from './scrollMemory.ts'
+import { createScrollMemory, scrollKey } from './scrollMemory.ts'
 
 describe('scroll memory', () => {
   it('returns to where a screen was left when the player goes Back to it', () => {
@@ -17,5 +17,18 @@ describe('scroll memory', () => {
 
   it('opens a screen never seen at its top, even through history', () => {
     expect(createScrollMemory().target('export', true)).toBe(0)
+  })
+})
+
+describe('scrollKey', () => {
+  it('keys the editor as one screen, so a first save or a rename keeps the scroll', () => {
+    // #/edit/new → #/edit/<id>, and a rename (R17) replaces the id while the player types.
+    expect(scrollKey({ name: 'editor', paintingId: null })).toBe(
+      scrollKey({ name: 'editor', paintingId: 'rose_abc' }),
+    )
+    expect(scrollKey({ name: 'editor', paintingId: 'rose_abc' })).toBe(
+      scrollKey({ name: 'editor', paintingId: 'night_rose_abc' }),
+    )
+    expect(scrollKey({ name: 'library' })).not.toBe(scrollKey({ name: 'export' }))
   })
 })

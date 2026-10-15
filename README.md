@@ -41,7 +41,7 @@ In **Colors & pixels**, paint over the result with the pencil (B), fill (G), rep
 ### Export
 
 1. Start a library (just a name; its pack ID is under Advanced), or open your last library pack. Paintings you made outside a library are listed below it, ready to add.
-2. Choose **Export**. Ready paintings with a picture are ticked; the button says how many it publishes and which version it downloads (`<namespace>-v<version>.zip`). With nothing new, it downloads the same version again, or, when you have unpublished paintings, a backup `<namespace>-v<version>-backup.zip` that keeps them; neither publishes anything.
+2. Choose **Export**. Ready paintings with a picture are ticked; the button says how many it publishes and which version it downloads (`<namespace>-v<version>.zip`). With nothing new, it downloads the same version again (the server files are exactly those of that version), or, when you have unpublished paintings, a backup `<namespace>-v<version>-backup.zip` that keeps them; neither publishes anything.
 3. Keep that one file: it is your backup, and you can share it with friends.
 
 Closing a library, or replacing it with a new one or the demo, deletes its paintings from the browser. Shape tells you first how many haven't been exported and offers to export them.

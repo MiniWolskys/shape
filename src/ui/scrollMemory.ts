@@ -1,3 +1,13 @@
+import type { Screen } from '../state/navigation.ts'
+
+/**
+ * The screen as scroll memory knows it. The editor is one screen whatever its painting: a draft's
+ * first save and a rename (R17) change the id in the URL while the player stays put.
+ */
+export function scrollKey(screen: Screen): string {
+  return screen.name
+}
+
 /**
  * Where each screen was scrolled to, so browser Back and Forward return the player to the same
  * place (e.g. deep in the Library), while links and buttons open a screen at its top.

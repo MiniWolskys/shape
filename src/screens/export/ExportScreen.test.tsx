@@ -155,6 +155,10 @@ describe('ExportScreen', () => {
     await startWith({ ...library([painting('Old', 'Sam', 'published', 2)]), exportedAt: EXPORTED })
     renderExport()
     expect(downloadButton()).toHaveTextContent('Download v7 again')
+    // The server files are what stays the same (R37), not necessarily the whole file.
+    expect(
+      screen.getByText('Nothing new: the server files are exactly those of v7.'),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/can't be resized or deleted later/)).toBeNull()
     expect(screen.getByText('ours-v7.zip')).toBeInTheDocument()
     await userEvent.click(downloadButton())
@@ -188,7 +192,7 @@ describe('ExportScreen', () => {
     renderExport()
     expect(downloadButton()).toHaveTextContent('Download a backup')
     expect(
-      screen.getByText('Keeps your 1 unpublished painting. The server files stay those of v7.'),
+      screen.getByText('Keeps your unpublished painting. The server files stay those of v7.'),
     ).toBeInTheDocument()
     expect(screen.getByText('ours-v7-backup.zip')).toBeInTheDocument()
     await userEvent.click(downloadButton())

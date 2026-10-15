@@ -723,6 +723,37 @@ describe('demo flag (R23)', () => {
     expect(s.getState().unexportedCount()).toBe(0)
   })
 
+  async function demoWithMyWork() {
+    const { s, a, b } = await demoStore()
+    const p = s.getState().findPainting(a)!
+    const imageId = s.getState().putAsset(new Uint8Array([1]))
+    const editsId = s.getState().putAsset(new Uint8Array([2]))
+    s.getState().setAsset(`${editsId}.mask`, new Uint8Array([3]))
+    const mine = updatePainting(
+      p,
+      { recipe: { ...p.recipe, source: { imageId, width: 1, height: 1 }, editsId } },
+      new Date(Date.now() + 1000),
+    )
+    s.getState().savePainting(mine)
+    return { s, a, b, kept: [imageId, editsId, `${editsId}.mask`] }
+  }
+
+  it('keeps the assets of demo paintings kept outside when the demo closes', async () => {
+    const { s, kept } = await demoWithMyWork()
+    expect(s.getState().keepDemoWork()).toBe(1)
+    s.getState().closeLibrary()
+    for (const id of kept) expect(s.getState().assets[id]).toBeDefined()
+  })
+
+  it('keeps the assets of demo paintings kept outside when a pack replaces the demo', async () => {
+    const { s, kept } = await demoWithMyWork()
+    s.getState().keepDemoWork()
+    const { bytes } = await packFor('theirs', ['Sunset'])
+    s.getState().importPack(bytes)
+    expect(s.getState().library?.namespace).toBe('theirs')
+    for (const id of kept) expect(s.getState().assets[id]).toBeDefined()
+  })
+
   it('keeps the demo paintings the player made or changed, as loose ones', async () => {
     const { s, a, b } = await demoStore()
     const p = s.getState().findPainting(a)!

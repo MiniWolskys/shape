@@ -186,8 +186,8 @@ All copy exists in English and French. Visual reference: the design page, Dusk t
    Validation (blocking: no image, duplicate ID; warnings: no title, no author), version
    `vN → vN+1`, contents of the pack. The one button says what it does: “Publish {n} and download
    v{v}” (with “Published paintings can't be resized or deleted later”), “Update {m} and download
-   v{v}”. With nothing new, either “Download v{v} again” when every painting is exported (the very
-   same file), or “Download a backup” (`<ns>-v{v}-backup.zip`, keeping the unpublished paintings;
+   v{v}”. With nothing new, either “Download v{v} again” when every painting is exported (the
+   server files are exactly those of v{v}), or “Download a backup” (`<ns>-v{v}-backup.zip`, keeping the unpublished paintings;
    the server files stay those of v{v}); neither publishes anything or changes the version. Then “Your download of {file} started” and “Didn't get the file?
    Download again”. SHA1 and `server.properties` lines with copy, server steps (the mod, the exact
    files inside the pack, what a direct link is), What's new with “Copy for Discord”. The demo

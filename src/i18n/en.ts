@@ -508,10 +508,10 @@ export const en = {
     downloadVersion: 'Download v{version}',
     downloadVersionAgain: 'Download v{version} again',
     publishNote: "Published paintings can't be resized or deleted later.",
-    againNote: 'Nothing new: you get the same file as last time.',
+    againNote: 'Nothing new: the server files are exactly those of v{version}.',
     downloadBackup: 'Download a backup',
     backupNote: {
-      one: 'Keeps your {count} unpublished painting. The server files stay those of v{version}.',
+      one: 'Keeps your unpublished painting. The server files stay those of v{version}.',
       other: 'Keeps your {count} unpublished paintings. The server files stay those of v{version}.',
     },
     exporting: 'Building the pack…',

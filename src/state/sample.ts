@@ -35,9 +35,12 @@ export function buildSampleLibrary(
   titles: SampleTitles,
   random: Random = Math.random,
   now: Date = new Date(),
+  /** Ids the workspace already uses (loose paintings, their assets): never reused. */
+  taken: { takenIds?: Iterable<string>; takenAssetIds?: Iterable<string> } = {},
 ): { library: Library; assets: Assets } {
   const assets: Assets = {}
-  const takenIds = new Set<string>()
+  const takenIds = new Set<string>(taken.takenIds)
+  const takenAssetIds = new Set<string>(taken.takenAssetIds)
   const paintings = SAMPLES.map((s): Painting => {
     const title = titles[s.title]
     const base = createPainting(
@@ -49,7 +52,7 @@ export function buildSampleLibrary(
     while (takenIds.has(id)) id = makePaintingId(title, random)
     takenIds.add(id)
     let imageId = makeAssetId(random)
-    while (imageId in assets) imageId = makeAssetId(random)
+    while (imageId in assets || takenAssetIds.has(imageId)) imageId = makeAssetId(random)
     const width = s.width * PIXELS_PER_BLOCK
     const height = s.height * PIXELS_PER_BLOCK
     assets[imageId] = encodePng(renderScene(s.scene, width, height))
@@ -77,8 +80,12 @@ export function openSampleLibrary(
   titles: SampleTitles,
   store: WorkspaceStore = useWorkspace,
 ): void {
-  const sample = buildSampleLibrary(name, titles)
   store.getState().closeLibrary()
+  const { loose, assets } = store.getState()
+  const sample = buildSampleLibrary(name, titles, Math.random, new Date(), {
+    takenIds: loose.map((p) => p.id),
+    takenAssetIds: Object.keys(assets),
+  })
   store.setState((s) => ({
     library: sample.library,
     assets: { ...s.assets, ...sample.assets },

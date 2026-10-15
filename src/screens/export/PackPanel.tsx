@@ -99,7 +99,9 @@ export function PackPanel({
             {t.export.publishNote}
           </p>
         )}
-        {plan.kind === 'again' && <p className={styles.muted}>{t.export.againNote}</p>}
+        {plan.kind === 'again' && (
+          <p className={styles.muted}>{format(t.export.againNote, { version })}</p>
+        )}
         {plan.kind === 'backup' && (
           <p className={styles.muted}>{plural(t, t.export.backupNote, plan.count, { version })}</p>
         )}

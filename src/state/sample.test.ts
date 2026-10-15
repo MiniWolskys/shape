@@ -45,6 +45,23 @@ describe('buildSampleLibrary', () => {
     expect(library.paintings.map((p) => p.title)).toEqual(Object.values(titles))
     expect(library.paintings[0]?.id).toMatch(/^chapelle_au_couchant_[a-z0-9]{3}$/)
   })
+
+  it('never reuses a painting or asset id the workspace already has', () => {
+    // The same random sequence twice: the second build first draws the very ids of the first.
+    const seeded = () => {
+      let n = 0
+      return () => (n++ * 0.6180339) % 1
+    }
+    const first = buildSampleLibrary('Sample', titles, seeded())
+    const takenIds = first.library.paintings.map((p) => p.id)
+    const takenAssetIds = Object.keys(first.assets)
+    const { library, assets } = buildSampleLibrary('Sample', titles, seeded(), new Date(), {
+      takenIds,
+      takenAssetIds,
+    })
+    for (const p of library.paintings) expect(takenIds).not.toContain(p.id)
+    for (const id of Object.keys(assets)) expect(takenAssetIds).not.toContain(id)
+  })
 })
 
 describe('openSampleLibrary', () => {

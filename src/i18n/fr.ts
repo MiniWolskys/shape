@@ -514,11 +514,11 @@ export const fr: Dictionary = {
     publishNote: 'Un tableau publié ne peut plus être redimensionné ni supprimé.',
     downloadBackup: 'Télécharger une sauvegarde',
     backupNote: {
-      one: 'Garde {count} tableau non publié. Les fichiers du serveur restent ceux de la v{version}.',
+      one: 'Garde votre tableau non publié. Les fichiers du serveur restent ceux de la v{version}.',
       other:
         'Garde vos {count} tableaux non publiés. Les fichiers du serveur restent ceux de la v{version}.',
     },
-    againNote: 'Rien de nouveau : vous obtenez le même fichier que la dernière fois.',
+    againNote: 'Rien de nouveau : les fichiers du serveur sont exactement ceux de la v{version}.',
     exporting: 'Création du pack…',
     rendering: 'Rendu {done}/{total}…',
     failedReason:

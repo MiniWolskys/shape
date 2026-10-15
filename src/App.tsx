@@ -11,7 +11,7 @@ import { startHashRouting, useNavigation, type Screen } from './state/navigation
 import { useWorkspace } from './state/workspace.ts'
 import { Button } from './ui/Button.tsx'
 import { documentTitle } from './ui/documentTitle.ts'
-import { createScrollMemory } from './ui/scrollMemory.ts'
+import { createScrollMemory, scrollKey } from './ui/scrollMemory.ts'
 import { Toasts } from './ui/Toasts.tsx'
 import { TopBar } from './ui/TopBar.tsx'
 
@@ -77,7 +77,7 @@ function useDocumentTitle(screen: Screen) {
 const HISTORY_MOVE_MS = 1000
 
 function useScrollPerScreen(screen: Screen) {
-  const key = screen.name === 'editor' ? `editor:${screen.paintingId ?? ''}` : screen.name
+  const key = scrollKey(screen)
   const memory = useRef(createScrollMemory())
   const current = useRef(key)
   /** When the browser last moved through its history; a screen change soon after came from it. */
