@@ -148,7 +148,8 @@ function McColorPicker({
   return (
     <div className={own.field}>
       <span className={styles.subheading} aria-hidden="true">
-        {label}: <span className={own.colorName}>{t.mcColors[value]}</span>
+        {format(t.editor.chosenColor, { label })}{' '}
+        <span className={own.colorName}>{t.mcColors[value]}</span>
       </span>
       <div className={own.swatches} role="radiogroup" aria-label={label} onKeyDown={onKeyDown}>
         {MC_COLORS.map((c, index) => (

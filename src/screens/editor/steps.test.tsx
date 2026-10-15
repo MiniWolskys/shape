@@ -331,6 +331,13 @@ describe('editor steps', () => {
       expect(screen.getByText(p.id)).toBeInTheDocument()
       expect(screen.getByText('Never changes')).toBeInTheDocument()
     })
+
+    it('labels the chosen colours with French punctuation in French', async () => {
+      useLanguage.setState({ language: 'fr' })
+      await open(flatPainting({ titleColor: 'yellow' }), 'details')
+      const group = screen.getByRole('radiogroup', { name: 'Couleur du titre' })
+      expect(group.previousElementSibling?.textContent).toBe('Couleur du titre : Jaune')
+    })
   })
 
   it('closing the editor forgets the shared render', async () => {

@@ -267,6 +267,7 @@ export const fr: Dictionary = {
     titleColor: 'Couleur du titre',
     author: 'Auteur',
     authorColor: "Couleur de l'auteur",
+    chosenColor: '{label} :',
   },
   shapes: {
     full: 'Tableau entier',

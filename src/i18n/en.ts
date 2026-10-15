@@ -260,6 +260,7 @@ export const en = {
     titleColor: 'Title color',
     author: 'Author',
     authorColor: 'Author color',
+    chosenColor: '{label}:',
   },
   shapes: {
     full: 'Full painting',
