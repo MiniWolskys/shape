@@ -3,36 +3,33 @@ import { SHAPE_IDS } from '../../domain/types.ts'
 import { shapeIcon, thumbnailSpec } from './shapeThumbnails.ts'
 
 describe('thumbnailSpec', () => {
-  it('draws big paintings as at most 2×2 blocks at 16 px per block, so leads stay readable', () => {
-    expect(thumbnailSpec({ width: 16, height: 16, pixelsPerBlock: 64 })).toEqual({
-      width: 2,
-      height: 2,
-      pixelsPerBlock: 16,
-    })
-    expect(thumbnailSpec({ width: 8, height: 4, pixelsPerBlock: 32 })).toEqual({
-      width: 2,
-      height: 1,
-      pixelsPerBlock: 16,
-    })
-    expect(thumbnailSpec({ width: 16, height: 3, pixelsPerBlock: 16 })).toEqual({
-      width: 2,
-      height: 1,
-      pixelsPerBlock: 16,
-    })
-  })
-
-  it('keeps small paintings whole, never with more pixels per block than they have', () => {
-    expect(thumbnailSpec({ width: 1, height: 2, pixelsPerBlock: 32 })).toEqual({
-      width: 1,
-      height: 2,
-      pixelsPerBlock: 16,
-    })
-    expect(thumbnailSpec({ width: 2, height: 2, pixelsPerBlock: 4 })).toEqual({
-      width: 2,
-      height: 2,
-      pixelsPerBlock: 4,
-    })
-  })
+  it.each([
+    [
+      { width: 16, height: 16, pixelsPerBlock: 64 },
+      { width: 4, height: 4 },
+    ],
+    [
+      { width: 8, height: 4, pixelsPerBlock: 32 },
+      { width: 4, height: 2 },
+    ],
+    [
+      { width: 16, height: 3, pixelsPerBlock: 16 },
+      { width: 4, height: 1 },
+    ],
+    [
+      { width: 1, height: 2, pixelsPerBlock: 32 },
+      { width: 2, height: 4 },
+    ],
+    [
+      { width: 1, height: 1, pixelsPerBlock: 4 },
+      { width: 4, height: 4 },
+    ],
+  ])(
+    'draws %o with its aspect, 4 blocks on its longest side at 16 px per block (R30)',
+    (p, size) => {
+      expect(thumbnailSpec(p)).toEqual({ ...size, pixelsPerBlock: 16 })
+    },
+  )
 })
 
 describe('shapeIcon', () => {

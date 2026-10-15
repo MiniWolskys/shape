@@ -5,14 +5,14 @@ import type { Raster } from '../../imaging/raster.ts'
 import { hashString, makeShapeContext, SHAPES } from '../../imaging/shapes.ts'
 import { applyWindow } from '../../imaging/window.ts'
 import { useEditor } from '../../state/editor.ts'
-import { outlinePath } from './pixelTools.ts'
+import { outlinePath } from '../../imaging/outline.ts'
 
 /**
- * Thumbnails show the painting at most this many blocks on a side, at up to 16 px per block: a
- * big painting's lead lines would be noise at a few pixels per block (I9).
+ * Thumbnails show the painting with its own aspect, 4 blocks on its longest side, at 16 px per
+ * block (R30): a big painting's lead lines would be noise at a few pixels per block (I9).
  */
-const THUMB_BLOCKS = 2
-const THUMB_MAX_PPB = 16
+const THUMB_BLOCKS = 4
+const THUMB_PPB = 16
 const CACHE_LIMIT = SHAPE_IDS.length * 6
 /** Shape icons, shown until a thumbnail is drawn: pixels per side and per block. */
 const ICON_PIXELS = 24
@@ -42,18 +42,18 @@ function pictureId(source: Raster | null): number {
 }
 
 /**
- * The size a painting's shape thumbnails are drawn at: the painting scaled down to fit
- * 2×2 blocks (smaller ones stay whole), at 16 px per block or the painting's own if fewer. The
- * shape is drawn for that size, so its leads have the density they have per block in the game.
+ * The size a painting's shape thumbnails are drawn at: its blocks scaled so the longest side is
+ * 4 (at least 1 per side, rounded), at 16 px per block. The shape is worked out for that size,
+ * so its leads have the density they have per block in the game.
  */
 export function thumbnailSpec(
   p: Pick<Painting, 'width' | 'height' | 'pixelsPerBlock'>,
 ): Pick<Painting, 'width' | 'height' | 'pixelsPerBlock'> {
-  const k = Math.min(1, THUMB_BLOCKS / Math.max(p.width, p.height))
+  const k = THUMB_BLOCKS / Math.max(p.width, p.height)
   return {
     width: Math.max(1, Math.round(p.width * k)),
     height: Math.max(1, Math.round(p.height * k)),
-    pixelsPerBlock: Math.min(THUMB_MAX_PPB, p.pixelsPerBlock),
+    pixelsPerBlock: THUMB_PPB,
   }
 }
 
