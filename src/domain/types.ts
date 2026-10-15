@@ -35,6 +35,46 @@ export const MC_COLOR_HEX: Record<McColor, string> = {
   yellow: '#FFFF55',
   white: '#FFFFFF',
 }
+export const DYE_IDS = [
+  'white',
+  'light_gray',
+  'gray',
+  'black',
+  'brown',
+  'red',
+  'orange',
+  'yellow',
+  'lime',
+  'green',
+  'cyan',
+  'light_blue',
+  'blue',
+  'purple',
+  'magenta',
+  'pink',
+] as const
+export type DyeId = (typeof DYE_IDS)[number]
+
+/** The 16 Minecraft dye colours (wool swatches of the design page). */
+export const DYE_HEX: Record<DyeId, string> = {
+  white: '#f9fffe',
+  light_gray: '#9d9d97',
+  gray: '#474f52',
+  black: '#1d1d21',
+  brown: '#835432',
+  red: '#b02e26',
+  orange: '#f9801d',
+  yellow: '#fed83d',
+  lime: '#80c71f',
+  green: '#5e7c16',
+  cyan: '#169c9c',
+  light_blue: '#3ab3da',
+  blue: '#3c44aa',
+  purple: '#8932b8',
+  magenta: '#c74ebd',
+  pink: '#f38baa',
+}
+
 export const SHAPE_IDS = [
   'full',
   'oculus',

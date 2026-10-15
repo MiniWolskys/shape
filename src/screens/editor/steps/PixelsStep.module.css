@@ -1,0 +1,152 @@
+/* Tools column, drawn over the top-left corner of the canvas. */
+.tools {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.tool {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tool:hover {
+  color: var(--text);
+}
+
+.tool[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Selection outline: dashes over a solid line, so it shows on any colour. */
+.outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.outlineLine,
+.outlineDash {
+  fill: none;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.outlineLine {
+  stroke: var(--selection-line);
+}
+
+.outlineDash {
+  stroke: var(--selection-dash);
+  stroke-dasharray: 4 4;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .outlineDash {
+    animation: march 0.6s linear infinite;
+  }
+}
+
+@keyframes march {
+  to {
+    stroke-dashoffset: -8;
+  }
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px 5px 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: 600 12.5px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.preset:hover {
+  color: var(--text);
+}
+
+.preset[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Swatches show their colour over a checkerboard, so see-through presets read as such. */
+.chip,
+.dye {
+  background:
+    linear-gradient(var(--swatch), var(--swatch)),
+    conic-gradient(
+        var(--check-light-b) 25%,
+        var(--check-light-a) 0 50%,
+        var(--check-light-b) 0 75%,
+        var(--check-light-a) 0
+      )
+      0 0 / 8px 8px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.dyes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dye {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.dye[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.apply {
+  flex: 1;
+  justify-content: center;
+}
+
+.wall {
+  display: grid;
+  margin: 0;
+  padding: 8px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}

@@ -87,6 +87,11 @@
   padding: 16px;
 }
 
+/* Room for the tools column, so it never sits over the painting's edge. */
+.area[data-tools] .center {
+  padding-left: 72px;
+}
+
 .painting {
   position: relative;
   flex: none;
@@ -118,6 +123,13 @@
     var(--block) var(--block),
     var(--pixel) var(--pixel),
     var(--pixel) var(--pixel);
+}
+
+.tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
 }
 
 .overlay {

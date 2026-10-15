@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShapeError } from '../domain/errors.ts'
 import { createPainting } from '../domain/library.ts'
 import type { Painting } from '../domain/types.ts'
@@ -250,6 +250,22 @@ describe('editor store', () => {
     state().endGesture()
     setBrightness(30)
     expect(state().past).toHaveLength(2)
+  })
+
+  it('a gesture merge holds across pauses until endGesture (one stroke, one step)', () => {
+    vi.useFakeTimers()
+    try {
+      const stroke = { merge: 'stroke', gesture: true } as const
+      state().setEdits(editedLayer(32, 16), stroke)
+      vi.advanceTimersByTime(5000)
+      state().setEdits(editedLayer(32, 16), stroke)
+      expect(state().past).toHaveLength(1)
+      state().endGesture()
+      state().setEdits(editedLayer(32, 16), stroke)
+      expect(state().past).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('undoing back to no edits also forgets the edits id', () => {

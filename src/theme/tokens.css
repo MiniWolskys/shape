@@ -40,4 +40,26 @@
   --grid-pixel: rgba(128, 128, 132, 0.35);
   --grid-block: rgba(20, 20, 24, 0.55);
   --crop-shade: rgba(12, 7, 3, 0.55);
+  /* Pixel selection outline: dashes of one over a solid line of the other */
+  --selection-dash: #ffffff;
+  --selection-line: #000000;
+  /* Colour picker: the saturation/value square fades to these; the hue bar */
+  --picker-white: #ffffff;
+  --picker-black: #000000;
+  --picker-hue: linear-gradient(
+    to right,
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+  );
+  /* "No frame" swatch hatching */
+  --hatch: repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 6px);
+  /* Minecraft item tooltip */
+  --mc-tooltip-bg: #100010;
+  --mc-tooltip-border-top: #5000ff;
+  --mc-tooltip-border-bottom: #28007f;
 }

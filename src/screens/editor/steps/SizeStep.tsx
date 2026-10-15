@@ -34,7 +34,8 @@ interface Size {
 export function SizeStep() {
   const t = useT()
   const painting = useEditor((s) => s.painting)
-  const lockedId = useId()
+  const id = useId()
+  const lockedId = `${id}-locked`
   const [customMode, setCustomMode] = useState(false)
   const [draft, setDraft] = useState<string | null>(null)
   const [pending, setPending] = useState<Size | null>(null)
@@ -106,8 +107,8 @@ export function SizeStep() {
 
       <hr className={styles.separator} />
 
-      <section className={styles.section} aria-labelledby="size-resolution">
-        <h3 id="size-resolution" className={styles.subheading}>
+      <section className={styles.section} aria-labelledby={`${id}-resolution`}>
+        <h3 id={`${id}-resolution`} className={styles.subheading}>
           {t.editor.size.resolution}
         </h3>
         <div className={styles.row}>
@@ -146,8 +147,8 @@ export function SizeStep() {
         </div>
       </section>
 
-      <section className={styles.section} aria-labelledby="size-scaling">
-        <h3 id="size-scaling" className={styles.subheading}>
+      <section className={styles.section} aria-labelledby={`${id}-scaling`}>
+        <h3 id={`${id}-scaling`} className={styles.subheading}>
           {t.editor.size.scaling}
         </h3>
         <Segmented
@@ -165,8 +166,8 @@ export function SizeStep() {
 
       <hr className={styles.separator} />
 
-      <section className={styles.section} aria-labelledby="size-crop">
-        <h3 id="size-crop" className={styles.subheading}>
+      <section className={styles.section} aria-labelledby={`${id}-crop`}>
+        <h3 id={`${id}-crop`} className={styles.subheading}>
           {t.editor.size.crop}
         </h3>
         <CropBox />

@@ -86,7 +86,7 @@ describe('EditorScreen', () => {
       'step',
     )
     await userEvent.click(within(rail()).getByRole('button', { name: /Details/ }))
-    expect(screen.getByText('This step is coming soon.')).toBeInTheDocument()
+    expect(screen.getByRole('figure', { name: 'In-game preview' })).toBeInTheDocument()
   })
 
   it('undoes with Ctrl+Z and redoes with Ctrl+Y and Ctrl+Shift+Z', async () => {

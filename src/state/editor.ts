@@ -29,6 +29,11 @@ export const NO_CROP = { x: 0, y: 0, width: 0, height: 0 } as const
 export interface ChangeOptions {
   /** Consecutive changes sharing this key replace each other in the history. */
   merge?: string
+  /**
+   * With `merge`: keep merging until `endGesture`, however long the pauses (a pencil stroke
+   * held still is still one stroke).
+   */
+  gesture?: boolean
 }
 
 export interface EditorState {
@@ -59,7 +64,7 @@ export interface EditorState {
    * Pushes history. Tools must pass a fresh layer and never mutate `edits` in place: the
    * history keeps references to earlier layers, and the save and render memos compare by identity.
    */
-  setEdits(layer: EditLayer): void
+  setEdits(layer: EditLayer, options?: ChangeOptions): void
   /** Resamples edits; throws ShapeError('published-locked') via updatePainting. */
   resize(width: number, height: number, ppb: number): void
   undo(): void
@@ -147,7 +152,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     const merging =
       options?.merge !== undefined &&
       lastMerge?.key === options.merge &&
-      now - lastMerge.at < MERGE_WINDOW_MS &&
+      (options.gesture === true || now - lastMerge.at < MERGE_WINDOW_MS) &&
       past.length > 0
     lastMerge = options?.merge !== undefined ? { key: options.merge, at: now } : null
     const pushed = merging ? past : [...past, { painting, edits }].slice(-HISTORY_LIMIT)
@@ -260,10 +265,10 @@ export const useEditor = create<EditorState>()((set, get) => {
       commit({ painting: next, edits }, undefined, { source: r })
     },
 
-    setEdits(layer) {
+    setEdits(layer, options) {
       const { painting } = get()
       if (!painting) return
-      commit({ painting, edits: layer })
+      commit({ painting, edits: layer }, options)
     },
 
     resize(width, height, ppb) {

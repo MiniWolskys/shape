@@ -8,10 +8,21 @@ interface SliderProps {
   step?: number
   value: number
   unit?: string
+  disabled?: boolean
   onChange(v: number): void
 }
 
-export function Slider({ id, label, min, max, step = 1, value, unit, onChange }: SliderProps) {
+export function Slider({
+  id,
+  label,
+  min,
+  max,
+  step = 1,
+  value,
+  unit,
+  disabled,
+  onChange,
+}: SliderProps) {
   const shown = unit ? `${value} ${unit}` : String(value)
   return (
     <div className={styles.field}>
@@ -29,6 +40,7 @@ export function Slider({ id, label, min, max, step = 1, value, unit, onChange }:
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         aria-valuetext={shown}
         onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
       />

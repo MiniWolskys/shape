@@ -21,3 +21,8 @@
   accent-color: var(--accent);
   cursor: pointer;
 }
+
+.input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

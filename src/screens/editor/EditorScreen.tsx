@@ -20,7 +20,9 @@ import styles from './EditorScreen.module.css'
 import { StepRail } from './StepRail.tsx'
 import { ImageStep } from './steps/ImageStep.tsx'
 import { SizeStep } from './steps/SizeStep.tsx'
-import { StepPlaceholder } from './steps/StepPlaceholder.tsx'
+import { DetailsStep } from './steps/DetailsStep.tsx'
+import { PixelsPanel, PixelsStage } from './steps/PixelsStep.tsx'
+import { WindowStep } from './steps/WindowStep.tsx'
 
 /**
  * What each step shows: its inspector panel and, optionally, its own stage (a step that paints
@@ -34,9 +36,9 @@ export interface StepView {
 const STEP_VIEWS: Record<EditorStep, StepView> = {
   image: { Panel: ImageStep },
   size: { Panel: SizeStep },
-  window: { Panel: StepPlaceholder },
-  pixels: { Panel: StepPlaceholder },
-  details: { Panel: StepPlaceholder },
+  window: { Panel: WindowStep },
+  pixels: { Panel: PixelsPanel, Stage: PixelsStage },
+  details: { Panel: DetailsStep },
 }
 
 const TOOL_KEYS: Record<string, Tool> = {
@@ -81,6 +83,14 @@ function decodeSource(p: Painting, assets: Assets, t: Dictionary): Raster | null
   }
 }
 
+/**
+ * Edit assets of the open painting that could not be read. A save without new edits keeps
+ * them as they are (they may be readable by a later version) instead of dropping them.
+ */
+let unreadableEditsId: string | null = null
+/** Paintings already warned about, so the warning shows once (not on every reopen). */
+const warnedUnreadable = new Set<string>()
+
 function decodeEdits(p: Painting, assets: Assets, t: Dictionary): EditLayer | null {
   const id = p.recipe.editsId
   if (id === null) return null
@@ -91,7 +101,12 @@ function decodeEdits(p: Painting, assets: Assets, t: Dictionary): EditLayer | nu
     return decodeEditLayer(values, mask)
   } catch (error) {
     console.error(`Could not read the edits of ${p.id}`, error)
-    toast(t.editor.editsUnreadable, 'error')
+    unreadableEditsId = id
+    const key = `${p.id}:${id}`
+    if (!warnedUnreadable.has(key)) {
+      warnedUnreadable.add(key)
+      toast(t.editor.editsUnreadable, 'error')
+    }
     return null
   }
 }
@@ -101,9 +116,10 @@ function savePaintingNow(): Painting | null {
   const { painting, edits } = useEditor.getState()
   if (!painting) return null
   const workspace = useWorkspace.getState()
-  // No edits (none made, or all undone) means no edit assets: the old ones get pruned below.
+  // No edits (none made, or all undone) means no edit assets: the old ones get pruned below,
+  // unless they could not be read, in which case they stay untouched.
   const hasEdits = edits !== null && !isEmptyLayer(edits)
-  let editsId = hasEdits ? painting.recipe.editsId : null
+  let editsId = hasEdits ? (painting.recipe.editsId ?? unreadableEditsId) : unreadableEditsId
   if (hasEdits) {
     if (editsId === null) {
       const { assets } = workspace
@@ -113,6 +129,8 @@ function savePaintingNow(): Painting | null {
     const encoded = encodeEditLayer(edits)
     workspace.setAsset(editsId, encoded.values)
     workspace.setAsset(`${editsId}.mask`, encoded.mask)
+    // New edits replaced the unreadable ones.
+    unreadableEditsId = null
   }
   const saved = updatePainting(painting, { recipe: { ...painting.recipe, editsId } }, new Date())
   workspace.savePainting(saved)
@@ -149,6 +167,7 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
     const t = tRef.current
     const workspace = useWorkspace.getState()
     const p = workspace.findPainting(paintingId)
+    unreadableEditsId = null
     if (!p) {
       toast(t.editor.notFound, 'error')
       go({ name: 'library' })
@@ -158,6 +177,7 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
       .getState()
       .open(p, decodeSource(p, workspace.assets, t), decodeEdits(p, workspace.assets, t))
     return () => {
+      unreadableEditsId = null
       useEditor.getState().close()
       // Pictures chosen but never saved are not needed once the editor is gone.
       useWorkspace.getState().pruneUnreferencedAssets()
@@ -199,6 +219,11 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
         if (key === 'z' && !event.shiftKey) editor.undo()
         else if (key === 'y' || (key === 'z' && event.shiftKey)) editor.redo()
         else return
+        event.preventDefault()
+        return
+      }
+      if (key === 'escape' && editor.selection) {
+        editor.setSelection(null)
         event.preventDefault()
         return
       }

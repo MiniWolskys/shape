@@ -38,11 +38,15 @@ export interface CanvasStageProps {
   overlay?(geometry: StageGeometry): ReactNode
   /** Extra items for the line under the canvas. */
   footer?: ReactNode
+  /** Controls floating over the canvas's top-left corner (the pixel tools), in the Editor view. */
+  tools?: ReactNode
 }
 
 const ZOOM_STEPS = [0.25, 0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64]
 /** Room kept around the painting when fitting it. */
 const FIT_MARGIN = 32
+/** Extra room on the left for the tools column (matches the CSS padding). */
+const TOOLS_ROOM = 56
 /** The pixel grid only shows once pixels are at least this many CSS pixels wide. */
 const GRID_MIN_SCALE = 4
 
@@ -86,7 +90,7 @@ function useBoxSize(ref: { current: HTMLElement | null }) {
   return size
 }
 
-export function CanvasStage({ onPixel, overlay, footer }: CanvasStageProps) {
+export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProps) {
   const t = useT()
   const painting = useEditor((s) => s.painting)
   const view = useEditor((s) => s.view)
@@ -114,7 +118,9 @@ export function CanvasStage({ onPixel, overlay, footer }: CanvasStageProps) {
   )
 
   const shown = view === 'nomod' ? rendered.withoutMod : rendered.raster
-  const fit = shown ? fitScale(shown, box) : 1
+  const withTools = tools !== undefined && view === 'edit'
+  const fitBox = withTools ? { width: box.width - TOOLS_ROOM, height: box.height } : box
+  const fit = shown ? fitScale(shown, fitBox) : 1
   const scale = zoom > 0 ? zoom : fit
 
   // Ctrl + wheel zooms; React wheel listeners are passive, so this one is attached by hand.
@@ -288,10 +294,11 @@ export function CanvasStage({ onPixel, overlay, footer }: CanvasStageProps) {
         )}
       </div>
 
-      <div ref={area} className={styles.area} data-view={view}>
+      <div ref={area} className={styles.area} data-view={view} data-tools={withTools || undefined}>
         <Backdrop kind={view === 'wall' ? 'mid' : kind} className={styles.surface}>
           <div className={styles.center}>{content}</div>
         </Backdrop>
+        {withTools && <div className={styles.tools}>{tools}</div>}
       </div>
 
       <p className={styles.foot}>
