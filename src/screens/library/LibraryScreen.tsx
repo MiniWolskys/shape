@@ -178,7 +178,8 @@ export function LibraryScreen() {
       onDuplicate={() => duplicate(p)}
       onDelete={canDelete(p) ? () => setDeleting(p) : undefined}
       add={
-        add && library
+        // Nothing joins the demo: it can't be exported and closing it deletes it (R23).
+        add && library && !demo
           ? {
               label: format(t.library.addLoose, { name: library.name }),
               onAdd: () => addLoose([p.id]),
@@ -307,7 +308,11 @@ export function LibraryScreen() {
         )}
 
         {library && loose.length > 0 && (
-          <LooseSection count={loose.length} libraryName={library.name} onAddAll={() => addLoose()}>
+          <LooseSection
+            count={loose.length}
+            libraryName={library.name}
+            onAddAll={demo ? undefined : () => addLoose()}
+          >
             {loose.map((p) => card(p, 3, true))}
           </LooseSection>
         )}

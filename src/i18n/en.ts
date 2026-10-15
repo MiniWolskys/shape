@@ -141,9 +141,11 @@ export const en = {
         "{count} paintings haven't been exported yet. Closing {name} deletes them from this browser.",
     },
     demoChanged: {
-      one: 'You changed {count} demo painting. Closing the demo deletes it.',
-      other: 'You changed {count} demo paintings. Closing the demo deletes them.',
+      one: '{count} painting in the demo is yours (made or changed here). Closing the demo deletes it.',
+      other:
+        '{count} paintings in the demo are yours (made or changed here). Closing the demo deletes them.',
     },
+    keepOutside: { one: 'Keep it outside the library', other: 'Keep them outside the library' },
     safe: 'Everything in {name} is in your last download, {file}. Open that file to get it back.',
     empty: '{name} has no paintings, so nothing is lost.',
     demoSafe: 'Nothing is lost: you can open the demo again from Home.',

@@ -99,7 +99,9 @@ keyed by ID, both in IndexedDB and in the library pack.
 - A painting created without a library (“loose painting”) lives in the workspace. With a library open,
   loose paintings are listed under it in “Not in this library”, each with “Add to {library}”.
 - The sample library is a **demo**: its titles follow the language it was opened in, a banner says so,
-  and it can't be exported. A workspace-only flag marks it (never written to packs).
+  and it can't be exported. A workspace-only flag marks it (never written to packs). Paintings
+  made while it is open stay loose, never join it. Closing it names the demo paintings the player
+  made or changed, and offers to keep them outside the library (as loose paintings) or delete them.
 - Renaming an unpublished painting changes its ID: a friend's copy of the old ID becomes a second
   painting on a later merge.
 

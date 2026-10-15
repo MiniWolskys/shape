@@ -245,7 +245,8 @@ export function HomeScreen() {
                     {t.home.createPainting}
                   </span>
                   <span id={ids.createHint} className={styles.cardHint}>
-                    {library
+                    {/* A painting made with the demo open stays outside it (R23). */}
+                    {library && !demo
                       ? format(t.home.createInLibrary, { name: library.name })
                       : t.home.createPaintingHint}
                   </span>

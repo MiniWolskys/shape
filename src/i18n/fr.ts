@@ -144,9 +144,11 @@ export const fr: Dictionary = {
         '{count} tableaux n’ont pas encore été exportés. Fermer {name} les supprime de ce navigateur.',
     },
     demoChanged: {
-      one: 'Vous avez modifié {count} tableau de la démo. Fermer la démo le supprime.',
-      other: 'Vous avez modifié {count} tableaux de la démo. Fermer la démo les supprime.',
+      one: '{count} tableau de la démo est à vous (créé ou modifié ici). Fermer la démo le supprime.',
+      other:
+        '{count} tableaux de la démo sont à vous (créés ou modifiés ici). Fermer la démo les supprime.',
     },
+    keepOutside: { one: 'Le garder hors bibliothèque', other: 'Les garder hors bibliothèque' },
     safe: 'Tous les tableaux de {name} sont dans votre dernier téléchargement, {file}. Ouvrez ce fichier pour les retrouver.',
     empty: '{name} n’a aucun tableau : rien ne sera perdu.',
     demoSafe: 'Rien ne sera perdu : vous pourrez rouvrir la démo depuis l’accueil.',

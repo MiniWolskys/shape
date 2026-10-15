@@ -9,7 +9,8 @@ let folded = false
 interface LooseSectionProps {
   count: number
   libraryName: string
-  onAddAll(): void
+  /** Absent when they can't join the open library (the demo). */
+  onAddAll?: () => void
   /** The loose paintings' cards. */
   children: ReactNode
 }
@@ -41,9 +42,11 @@ export function LooseSection({ count, libraryName, onAddAll, children }: LooseSe
           </p>
         </div>
         <div className={styles.actions}>
-          <Button variant="primary" onClick={onAddAll}>
-            {plural(t, t.library.addAllLoose, count, { name: libraryName })}
-          </Button>
+          {onAddAll && (
+            <Button variant="primary" onClick={onAddAll}>
+              {plural(t, t.library.addAllLoose, count, { name: libraryName })}
+            </Button>
+          )}
           <Button
             variant="ghost"
             aria-expanded={open}

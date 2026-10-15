@@ -112,6 +112,12 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Goes into Ours.')).toBeInTheDocument()
   })
 
+  it('does not say a new painting goes into the demo: it stays outside (R23)', async () => {
+    renderHome()
+    await userEvent.click(screen.getByRole('button', { name: 'Try the sample library' }))
+    expect(screen.getByText('No library needed. Add it to one later.')).toBeInTheDocument()
+  })
+
   it('shows the wall showcase', () => {
     renderHome()
     expect(screen.getByRole('img', { name: /Gothic arch · 3×4 blocks/ })).toBeInTheDocument()

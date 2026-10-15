@@ -54,6 +54,7 @@ export interface WorkspaceState extends Workspace {
   importPack(bytes: Uint8Array): ImportResult
   /** Moves the given loose paintings (all of them by default) into the open library; returns how many. */
   addLooseToLibrary(ids?: string[]): number
+  /** A new painting in the open library, or loose without one or with the demo open (R23). */
   createPainting(): string
   /**
    * A new painting with an id no painting has, not added anywhere (R18): the editor shows it
@@ -86,6 +87,11 @@ export interface WorkspaceState extends Workspace {
    * the library deletes them. In the demo, sample paintings left as built don't count.
    */
   unexportedCount(): number
+  /**
+   * Moves the demo paintings the player made or changed (those unexportedCount counts) out of
+   * the demo into the loose paintings, so closing the demo keeps them; returns how many.
+   */
+  keepDemoWork(): number
   /** Closes the open library, deleting its paintings and their assets. Ask first (see unexportedCount). */
   closeLibrary(): void
   findPainting(id: string): Painting | undefined
@@ -136,6 +142,17 @@ export function createWorkspaceStore(
       let id = makeAssetId(Math.random)
       while (id in assets) id = makeAssetId(Math.random)
       return id
+    }
+
+    /** The open library's paintings that closing it would lose (R15). */
+    const atRisk = (): Painting[] => {
+      const { library, demo, demoIds } = get()
+      if (!library) return []
+      const unexported = unexportedPaintings(library)
+      if (!demo) return unexported
+      // Only sample paintings left as built are safe to drop.
+      const samples = new Set(demoIds)
+      return unexported.filter((p) => !(samples.has(p.id) && p.updatedAt === p.createdAt))
     }
 
     const flush = async () => {
@@ -331,8 +348,8 @@ export function createWorkspaceStore(
 
       createPainting() {
         const p = get().draftPainting()
-        const { library, loose } = get()
-        if (library) set({ library: upsertPainting(library, p) })
+        const { library, loose, demo } = get()
+        if (library && !demo) set({ library: upsertPainting(library, p) })
         else set({ loose: [...loose, p] })
         return p.id
       },
@@ -343,14 +360,15 @@ export function createWorkspaceStore(
       },
 
       savePainting(p) {
-        const { library, loose } = get()
+        const { library, loose, demo } = get()
         if (library?.paintings.some((q) => q.id === p.id)) {
           set({ library: upsertPainting(library, p) })
         } else if (loose.some((q) => q.id === p.id)) {
           set({ loose: loose.map((q) => (q.id === p.id ? p : q)) })
-        } else if (library) {
+        } else if (library && !demo) {
           set({ library: upsertPainting(library, p) })
         } else {
+          // A new painting never joins the demo: it would be lost with it (R23).
           set({ loose: [...loose, p] })
         }
       },
@@ -471,13 +489,19 @@ export function createWorkspaceStore(
       },
 
       unexportedCount() {
-        const { library, demo, demoIds } = get()
-        if (!library) return 0
-        const atRisk = unexportedPaintings(library)
-        if (!demo) return atRisk.length
-        // Only sample paintings left as built are safe to drop.
-        const samples = new Set(demoIds)
-        return atRisk.filter((p) => !(samples.has(p.id) && p.updatedAt === p.createdAt)).length
+        return atRisk().length
+      },
+
+      keepDemoWork() {
+        const { library, loose, demo } = get()
+        if (!library || !demo) return 0
+        const mine = new Set(atRisk())
+        if (mine.size === 0) return 0
+        set({
+          library: { ...library, paintings: library.paintings.filter((p) => !mine.has(p)) },
+          loose: [...loose, ...library.paintings.filter((p) => mine.has(p))],
+        })
+        return mine.size
       },
 
       closeLibrary() {

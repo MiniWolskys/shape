@@ -711,8 +711,28 @@ describe('demo flag (R23)', () => {
     const { s, a } = await demoStore()
     s.getState().duplicatePainting(a, '(copy)')
     expect(s.getState().unexportedCount()).toBe(1)
-    s.getState().createPainting()
-    expect(s.getState().unexportedCount()).toBe(2)
+  })
+
+  it('puts paintings made while the demo is open outside it, as loose paintings', async () => {
+    const { s } = await demoStore()
+    const made = s.getState().createPainting()
+    const draft = s.getState().draftPainting()
+    s.getState().savePainting(draft)
+    expect(s.getState().library?.paintings.map((p) => p.id)).not.toContain(made)
+    expect(s.getState().loose.map((p) => p.id)).toEqual([made, draft.id])
+    expect(s.getState().unexportedCount()).toBe(0)
+  })
+
+  it('keeps the demo paintings the player made or changed, as loose ones', async () => {
+    const { s, a, b } = await demoStore()
+    const p = s.getState().findPainting(a)!
+    s.getState().savePainting(updatePainting(p, { title: 'Mine' }, new Date(Date.now() + 1000)))
+    const copy = s.getState().duplicatePainting(b, '(copy)')
+    expect(s.getState().keepDemoWork()).toBe(2)
+    expect(s.getState().loose.map((q) => q.id)).toEqual([a, copy])
+    expect(s.getState().library?.paintings.map((q) => q.id)).toEqual([b])
+    s.getState().closeLibrary()
+    expect(s.getState().loose).toHaveLength(2)
   })
 
   it('keeps the sample ids across a reload and clears them with the demo', async () => {

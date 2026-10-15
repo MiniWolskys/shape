@@ -54,6 +54,12 @@ export function CloseLibraryDialog({
     go({ name: 'export' })
   }
 
+  /** The demo can't be exported: the player's own paintings move out of it instead. */
+  function keepAndClose() {
+    useWorkspace.getState().keepDemoWork()
+    onConfirm()
+  }
+
   return (
     <Dialog
       open={open}
@@ -69,8 +75,12 @@ export function CloseLibraryDialog({
               <Button variant="danger" onClick={onConfirm}>
                 {plural(t, t.closeLibrary.deleteAndClose, count)}
               </Button>
-              {/* The demo can't be exported (R23): there, deleting is the only way on. */}
-              {!demo && (
+              {/* The demo can't be exported (R23): its paintings can be kept outside it. */}
+              {demo ? (
+                <Button variant="primary" onClick={keepAndClose}>
+                  {plural(t, t.closeLibrary.keepOutside, count)}
+                </Button>
+              ) : (
                 <Button variant="primary" onClick={exportFirst}>
                   {t.closeLibrary.exportFirst}
                 </Button>

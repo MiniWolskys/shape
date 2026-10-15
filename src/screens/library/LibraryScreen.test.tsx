@@ -136,6 +136,37 @@ describe('LibraryScreen', () => {
     expect(screen.getByRole('dialog', { name: 'Start a new library' })).toBeInTheDocument()
   })
 
+  it('offers no Add to the demo for loose paintings (R23)', async () => {
+    await startWith({
+      library: { ...library(sample()), namespace: 'sample' },
+      loose: [painting('Harvest Moon', 'Sam', 'draft')],
+      assets: {},
+      demo: true,
+      demoIds: [],
+    })
+    renderLibrary()
+    const section = screen.getByRole('region', { name: 'Not in this library' })
+    expect(within(section).queryByRole('button', { name: /^Add/ })).toBeNull()
+    expect(within(section).getByText('Harvest Moon')).toBeInTheDocument()
+  })
+
+  it('keeps the demo paintings the player made outside the library when closing it', async () => {
+    const lib = { ...library([painting('Sample', 'Shape')]), namespace: 'sample' }
+    await startWith({ library: lib, loose: [], assets: {}, demo: true, demoIds: [] })
+    renderLibrary()
+    await userEvent.click(screen.getByRole('button', { name: 'Close library' }))
+    const dialog = screen.getByRole('dialog', { name: 'Close Our paintings?' })
+    expect(dialog).toHaveTextContent(
+      '1 painting in the demo is yours (made or changed here). Closing the demo deletes it.',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Delete 1 and close' })).toBeInTheDocument()
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Keep it outside the library' }),
+    )
+    expect(useWorkspace.getState().library).toBeNull()
+    expect(useWorkspace.getState().loose.map((p) => p.title)).toEqual(['Sample'])
+  })
+
   it('treats a library as a demo by its flag, not by its namespace', async () => {
     await startWith({
       library: { ...library(sample()), namespace: 'sample' },
