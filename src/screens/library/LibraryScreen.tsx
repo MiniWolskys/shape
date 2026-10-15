@@ -10,6 +10,7 @@ import { errorMessage } from '../../ui/errors.ts'
 import { Icon } from '../../ui/Icon.tsx'
 import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
+import { CloseLibraryDialog } from '../CloseLibraryDialog.tsx'
 import { NewLibraryDialog } from '../home/NewLibraryDialog.tsx'
 import { importPackFile } from '../packImport.ts'
 import styles from './LibraryScreen.module.css'
@@ -253,8 +254,8 @@ export function LibraryScreen() {
             <Button variant="ghost" onClick={() => setDeleting(null)}>
               {t.common.cancel}
             </Button>
-            <Button variant="primary" onClick={confirmDelete}>
-              {t.common.delete}
+            <Button variant="danger" onClick={confirmDelete}>
+              {t.library.deletePainting}
             </Button>
           </>
         }
@@ -264,25 +265,11 @@ export function LibraryScreen() {
         </p>
       </Dialog>
 
-      <Dialog
+      <CloseLibraryDialog
         open={confirmClose}
-        title={t.library.closeLibrary}
-        onClose={() => setConfirmClose(false)}
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmClose(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button variant="primary" onClick={closeLibrary}>
-              {t.library.closeLibrary}
-            </Button>
-          </>
-        }
-      >
-        <p className={styles.warning}>
-          {format(t.library.closeWarning, { name: library?.name ?? '' })}
-        </p>
-      </Dialog>
+        onCancel={() => setConfirmClose(false)}
+        onConfirm={closeLibrary}
+      />
 
       <NewLibraryDialog
         key={libraryDialog.key}

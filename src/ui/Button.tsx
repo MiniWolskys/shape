@@ -3,7 +3,8 @@ import styles from './Button.module.css'
 import { Icon, type IconName } from './Icon.tsx'
 
 export type ButtonProps = {
-  variant?: 'primary' | 'secondary' | 'ghost'
+  /** `danger`: an irreversible action, labelled by its effect ("Delete 2 and close"). */
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
   size?: 'md' | 'lg'
   icon?: IconName
 } & ButtonHTMLAttributes<HTMLButtonElement>
@@ -21,6 +22,7 @@ export function Button({
     styles.button,
     variant === 'primary' && styles.primary,
     variant === 'ghost' && styles.ghost,
+    variant === 'danger' && styles.danger,
     size === 'lg' && styles.lg,
     className,
   ]

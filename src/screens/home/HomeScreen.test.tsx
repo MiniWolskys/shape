@@ -184,20 +184,24 @@ describe('HomeScreen', () => {
     expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: p.id })
   })
 
-  it('starts a new library with a namespace taken from its name', async () => {
+  it('starts a new library from its name alone, the pack ID under Advanced (R22)', async () => {
     renderHome()
     await userEvent.click(screen.getByRole('button', { name: 'Start a new library' }))
     const dialog = screen.getByRole('dialog', { name: 'Start a new library' })
     await userEvent.type(within(dialog).getByLabelText('Library name'), 'Our Paintings')
-    const namespace = within(dialog).getByLabelText('Namespace')
-    expect(namespace).toHaveValue('our_paintings')
-    await userEvent.clear(namespace)
-    await userEvent.type(namespace, 'Bad Name')
+    const advanced = within(dialog).getByText('Advanced')
+    expect(advanced.closest('details')).not.toHaveAttribute('open')
+    await userEvent.click(advanced)
+    expect(within(dialog).getByText(/can't change after the first export/)).toBeInTheDocument()
+    const packId = within(dialog).getByLabelText('Pack ID')
+    expect(packId).toHaveValue('our_paintings')
+    await userEvent.clear(packId)
+    await userEvent.type(packId, 'Bad Name')
     expect(within(dialog).getByText(/Use only lowercase letters/)).toBeInTheDocument()
     const create = within(dialog).getByRole('button', { name: 'Create library' })
     expect(create).toBeDisabled()
-    await userEvent.clear(namespace)
-    await userEvent.type(namespace, 'ours')
+    await userEvent.clear(packId)
+    await userEvent.type(packId, 'ours')
     await userEvent.click(create)
     expect(useWorkspace.getState().library).toMatchObject({
       name: 'Our Paintings',
@@ -206,15 +210,49 @@ describe('HomeScreen', () => {
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
   })
 
-  it('warns that starting a new library closes the open one', async () => {
+  it('names what a new library would delete before replacing the open one (R15)', async () => {
     useWorkspace.getState().createLibrary('Old one', 'old')
+    act(() => {
+      useWorkspace.getState().createPainting()
+    })
     renderHome()
     await userEvent.click(screen.getByRole('button', { name: 'Start a new library' }))
     const dialog = screen.getByRole('dialog', { name: 'Start a new library' })
-    expect(within(dialog).getByText(/"Old one" will be closed/)).toBeInTheDocument()
+    expect(dialog).toHaveTextContent('This closes Old one.')
     await userEvent.type(within(dialog).getByLabelText('Library name'), 'New one')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Close it and create' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create library' }))
+    const confirm = screen.getByRole('dialog', { name: 'Close Old one?' })
+    expect(confirm).toHaveTextContent("1 painting hasn't been exported yet")
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete 1 and close' }))
     expect(useWorkspace.getState().library?.namespace).toBe('new_one')
+    expect(useWorkspace.getState().library?.paintings).toEqual([])
+  })
+
+  it('keeps the open library when the player picks Export first', async () => {
+    useWorkspace.getState().createLibrary('Old one', 'old')
+    act(() => {
+      useWorkspace.getState().createPainting()
+    })
+    renderHome()
+    await userEvent.click(screen.getByRole('button', { name: 'Try the sample library' }))
+    const confirm = screen.getByRole('dialog', { name: 'Close Old one?' })
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Export first' }))
+    expect(useNavigation.getState().screen).toEqual({ name: 'export' })
+    expect(useWorkspace.getState().library?.namespace).toBe('old')
+    expect(useWorkspace.getState().demo).toBe(false)
+  })
+
+  it('replaces an empty library with the sample after a plain confirm', async () => {
+    useWorkspace.getState().createLibrary('Old one', 'old')
+    renderHome()
+    await userEvent.click(screen.getByRole('button', { name: 'Try the sample library' }))
+    const confirm = screen.getByRole('dialog', { name: 'Close Old one?' })
+    expect(confirm).toHaveTextContent('Old one has no paintings')
+    await userEvent.click(
+      within(confirm).getByRole('button', { name: 'Close it and open the demo' }),
+    )
+    expect(useWorkspace.getState().demo).toBe(true)
+    expect(useNavigation.getState().screen).toEqual({ name: 'library' })
   })
 
   it('opens the sample library', async () => {

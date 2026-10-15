@@ -260,12 +260,20 @@
   color: var(--danger);
 }
 
-.warning {
-  margin: 0;
-  padding: 10px 12px;
-  border-left: 3px solid var(--warn);
-  border-radius: 4px;
-  background: var(--raised);
+.advanced {
+  display: grid;
+  gap: 10px;
+}
+
+.advanced summary {
+  width: max-content;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.advanced[open] summary {
+  margin-bottom: 10px;
 }
 
 @media (max-width: 900px) {

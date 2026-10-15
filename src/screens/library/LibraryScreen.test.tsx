@@ -178,7 +178,7 @@ describe('LibraryScreen', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
     await userEvent.click(
       within(screen.getByRole('dialog', { name: 'Delete this painting?' })).getByRole('button', {
-        name: 'Delete',
+        name: 'Delete painting',
       }),
     )
     expect(cardTitles()).not.toContain('Night Rose')
@@ -267,16 +267,63 @@ describe('LibraryScreen', () => {
     expect(await screen.findByText("This file isn't a Shape library pack.")).toBeInTheDocument()
   })
 
-  it('closes the library after confirming and goes home', async () => {
+  it('names the unexported paintings before closing, offering to export first (R15)', async () => {
     const loose = [painting('Harvest Moon', 'Sam', 'draft')]
     await startWith({ library: library(sample()), loose, assets: {} })
     renderLibrary()
     await userEvent.click(screen.getByRole('button', { name: 'Close library' }))
-    const dialog = screen.getByRole('dialog', { name: 'Close library' })
-    expect(dialog).toHaveTextContent('It stays in your last downloaded library pack.')
+    const dialog = screen.getByRole('dialog', { name: 'Close Our paintings?' })
+    expect(dialog).toHaveTextContent("4 paintings haven't been exported yet")
+    expect(dialog).not.toHaveTextContent(/safe/)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Export first' }))
+    expect(useNavigation.getState().screen).toEqual({ name: 'export' })
+    expect(useWorkspace.getState().library?.paintings).toHaveLength(4)
+  })
+
+  it('deletes the unexported paintings only with the danger action, then goes home', async () => {
+    const loose = [painting('Harvest Moon', 'Sam', 'draft')]
+    await startWith({ library: library(sample()), loose, assets: {} })
+    renderLibrary()
+    await userEvent.click(screen.getByRole('button', { name: 'Close library' }))
+    const dialog = screen.getByRole('dialog', { name: 'Close Our paintings?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete 4 and close' }))
+    expect(useWorkspace.getState().library).toBeNull()
+    expect(useWorkspace.getState().loose).toHaveLength(1)
+    expect(useNavigation.getState().screen).toEqual({ name: 'home' })
+  })
+
+  it('closes an exported library with a plain confirm naming its file', async () => {
+    const exported = {
+      ...library([painting('Old', 'Sam', 'published')]),
+      exportedAt: '2026-10-15T13:00:00.000Z',
+    }
+    await startWith({ library: exported, loose: [painting('Tide', 'Sam')], assets: {} })
+    renderLibrary()
+    await userEvent.click(screen.getByRole('button', { name: 'Close library' }))
+    const dialog = screen.getByRole('dialog', { name: 'Close Our paintings?' })
+    expect(dialog).toHaveTextContent('ours-v7.zip')
+    expect(within(dialog).queryByRole('button', { name: 'Export first' })).toBeNull()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close library' }))
     expect(useWorkspace.getState().library).toBeNull()
-    expect(useNavigation.getState().screen).toEqual({ name: 'home' })
+  })
+
+  it('asks before closing the demo only about the demo paintings that were changed', async () => {
+    const lib = library([painting('Sample', 'Shape')])
+    const [only] = lib.paintings
+    await startWith({
+      library: { ...lib, namespace: 'sample' },
+      loose: [],
+      assets: {},
+      demo: true,
+      demoIds: only ? [only.id] : [],
+    })
+    renderLibrary()
+    await userEvent.click(screen.getByRole('button', { name: 'Close library' }))
+    const dialog = screen.getByRole('dialog', { name: 'Close Our paintings?' })
+    expect(within(dialog).queryByRole('button', { name: 'Export first' })).toBeNull()
+    expect(dialog).toHaveTextContent('open the demo again')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close library' }))
+    expect(useWorkspace.getState().library).toBeNull()
   })
 
   it('lists loose paintings when no library is open', async () => {

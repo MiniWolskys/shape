@@ -79,13 +79,16 @@ export const fr: Dictionary = {
     privacy: 'Tout reste sur votre ordinateur.',
     showcaseCaption: '{shape} · {width}×{height} blocs · sur des briques de pierre',
     newLibraryName: 'Nom de la bibliothèque',
-    namespaceHint: 'Utilisé dans les packs. Lettres minuscules, chiffres, _ . et - uniquement.',
+    advanced: 'Avancé',
+    packId: 'ID du pack',
+    packIdHint:
+      'Permet au serveur de distinguer les bibliothèques. Il ne peut plus changer après le premier export. Minuscules, chiffres, _ . et - uniquement.',
     namespaceInvalid:
       'Utilisez uniquement des lettres minuscules, des chiffres, _ . et -, et pas « minecraft ».',
-    replaceWarning:
-      '« {name} » sera fermée. Elle reste en sécurité dans le dernier pack de bibliothèque que vous avez téléchargé.',
+    replaceHint: 'Cela ferme {name}.',
     createLibrary: 'Créer la bibliothèque',
-    replaceLibrary: 'La fermer et créer',
+    closeForNew: 'Fermer et créer',
+    closeForSample: 'Fermer et ouvrir la démo',
     sampleName: "Tableaux d'exemple",
     sampleTitles: {
       sunsetChapel: 'Chapelle au couchant',
@@ -93,6 +96,23 @@ export const fr: Dictionary = {
       springWindow: 'Fenêtre de printemps',
       frostOculus: 'Oculus de givre',
     },
+  },
+  closeLibrary: {
+    title: 'Fermer {name} ?',
+    unexported: {
+      one: '{count} tableau n’a pas encore été exporté. En fermant {name}, il sera supprimé de ce navigateur.',
+      other:
+        '{count} tableaux n’ont pas encore été exportés. En fermant {name}, ils seront supprimés de ce navigateur.',
+    },
+    demoChanged: {
+      one: 'Vous avez modifié {count} tableau de la démo. Fermer la démo le supprime.',
+      other: 'Vous avez modifié {count} tableaux de la démo. Fermer la démo les supprime.',
+    },
+    safe: 'Tout {name} est dans votre dernier téléchargement, {file}. Ouvrez ce fichier pour la retrouver.',
+    empty: '{name} n’a aucun tableau : rien ne sera perdu.',
+    demoSafe: 'Rien ne sera perdu : vous pourrez rouvrir la démo depuis l’accueil.',
+    exportFirst: 'Exporter d’abord',
+    deleteAndClose: { one: 'Supprimer {count} et fermer', other: 'Supprimer {count} et fermer' },
   },
   library: {
     title: 'Bibliothèque',
@@ -125,6 +145,7 @@ export const fr: Dictionary = {
     closeWarning:
       '« {name} » va être fermée. Elle reste dans le dernier pack de bibliothèque que vous avez téléchargé.',
     confirmDelete: 'Supprimer ce tableau ?',
+    deletePainting: 'Supprimer le tableau',
     deleteWarning: '« {title} » va être supprimé de ce navigateur. Cette action est définitive.',
     looseTitle: 'Vos tableaux (pas encore dans une bibliothèque)',
     looseHint:

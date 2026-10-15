@@ -8,17 +8,16 @@ import { useNavigation } from '../../state/navigation.ts'
 import { openSampleLibrary } from '../../state/sample.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
-import { Dialog } from '../../ui/Dialog.tsx'
 import { Icon } from '../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
 import { TopBar } from '../../ui/TopBar.tsx'
 import styles from './HomeScreen.module.css'
+import { CloseLibraryDialog } from '../CloseLibraryDialog.tsx'
 import { importPackFile } from '../packImport.ts'
 import { NewLibraryDialog } from './NewLibraryDialog.tsx'
 
 const SHOWCASE = { width: 3, height: 4, ppb: 32 }
 const SHOWCASE_FALLBACK_BOX = { width: 480, height: 576 }
-const SAMPLE_NAMESPACE = 'sample'
 
 /** A gothic-arch sunset window, three by four blocks, on a stone wall. */
 function renderShowcase() {
@@ -74,7 +73,11 @@ export function HomeScreen() {
     open: false,
     key: 0,
   })
-  const [confirmSample, setConfirmSample] = useState(false)
+  const demo = useWorkspace((s) => s.demo)
+  /** What the close-library confirm leads to, when it is open (R15). */
+  const [replace, setReplace] = useState<
+    { kind: 'sample' } | { kind: 'create'; name: string; namespace: string } | null
+  >(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const ids = { create: useId(), createHint: useId(), resume: useId(), resumeDetail: useId() }
 
@@ -98,22 +101,33 @@ export function HomeScreen() {
   }
 
   function createLibrary(name: string, namespace: string) {
-    useWorkspace.getState().createLibrary(name, namespace)
     setLibraryDialog((d) => ({ ...d, open: false }))
+    // Replacing an open library asks first (R15).
+    if (library) setReplace({ kind: 'create', name, namespace })
+    else createNow(name, namespace)
+  }
+
+  function createNow(name: string, namespace: string) {
+    useWorkspace.getState().createLibrary(name, namespace)
     go({ name: 'library' })
   }
 
   function openSample() {
-    setConfirmSample(false)
-    if (useWorkspace.getState().library?.namespace !== SAMPLE_NAMESPACE) {
-      openSampleLibrary(t.home.sampleName, t.home.sampleTitles)
-    }
+    openSampleLibrary(t.home.sampleName, t.home.sampleTitles)
     go({ name: 'library' })
   }
 
   function trySample() {
-    if (library && library.namespace !== SAMPLE_NAMESPACE) setConfirmSample(true)
+    if (demo) go({ name: 'library' })
+    else if (library) setReplace({ kind: 'sample' })
     else openSample()
+  }
+
+  function confirmReplace() {
+    const next = replace
+    setReplace(null)
+    if (next?.kind === 'sample') openSample()
+    else if (next?.kind === 'create') createNow(next.name, next.namespace)
   }
 
   const inProgress =
@@ -255,25 +269,12 @@ export function HomeScreen() {
         onClose={() => setLibraryDialog((d) => ({ ...d, open: false }))}
         onCreate={createLibrary}
       />
-      <Dialog
-        open={confirmSample}
-        title={t.home.trySample}
-        onClose={() => setConfirmSample(false)}
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmSample(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button variant="primary" onClick={openSample}>
-              {t.common.confirm}
-            </Button>
-          </>
-        }
-      >
-        <p className={styles.warning}>
-          {format(t.home.replaceWarning, { name: library?.name ?? '' })}
-        </p>
-      </Dialog>
+      <CloseLibraryDialog
+        open={replace !== null}
+        onCancel={() => setReplace(null)}
+        onConfirm={confirmReplace}
+        confirmLabel={replace?.kind === 'sample' ? t.home.closeForSample : t.home.closeForNew}
+      />
     </>
   )
 }

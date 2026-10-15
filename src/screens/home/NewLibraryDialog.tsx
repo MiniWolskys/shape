@@ -13,7 +13,10 @@ interface NewLibraryDialogProps {
   onCreate(name: string, namespace: string): void
 }
 
-/** Asks for a library name and namespace; the namespace follows the name until edited. */
+/**
+ * Asks for a library name (R22). The pack ID (namespace) follows the name; it sits under
+ * "Advanced" because players rarely need it, and it can't change after the first export.
+ */
 export function NewLibraryDialog({ open, replacing, onClose, onCreate }: NewLibraryDialogProps) {
   const t = useT()
   const formId = useId()
@@ -22,6 +25,7 @@ export function NewLibraryDialog({ open, replacing, onClose, onCreate }: NewLibr
   const hintId = useId()
   const [name, setName] = useState('')
   const [customNamespace, setCustomNamespace] = useState<string | null>(null)
+  const [advanced, setAdvanced] = useState(false)
   const namespace = customNamespace ?? namespaceFromName(name)
   const namespaceOk = isValidNamespace(namespace)
   const canCreate = name.trim() !== '' && namespaceOk
@@ -29,6 +33,8 @@ export function NewLibraryDialog({ open, replacing, onClose, onCreate }: NewLibr
   function submit(event: FormEvent) {
     event.preventDefault()
     if (canCreate) onCreate(name.trim(), namespace)
+    // A bad pack ID can only come from the hidden field: show it.
+    else if (!namespaceOk) setAdvanced(true)
   }
 
   return (
@@ -42,15 +48,12 @@ export function NewLibraryDialog({ open, replacing, onClose, onCreate }: NewLibr
             {t.common.cancel}
           </Button>
           <Button variant="primary" type="submit" form={formId} disabled={!canCreate}>
-            {replacing === null ? t.home.createLibrary : t.home.replaceLibrary}
+            {t.home.createLibrary}
           </Button>
         </>
       }
     >
       <form id={formId} className={styles.form} onSubmit={submit} noValidate>
-        {replacing !== null && (
-          <p className={styles.warning}>{format(t.home.replaceWarning, { name: replacing })}</p>
-        )}
         <div className={styles.field}>
           <label htmlFor={nameId}>{t.home.newLibraryName}</label>
           <input
@@ -62,22 +65,32 @@ export function NewLibraryDialog({ open, replacing, onClose, onCreate }: NewLibr
             onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <div className={styles.field}>
-          <label htmlFor={namespaceId}>{t.library.namespace}</label>
-          <input
-            id={namespaceId}
-            className={`${styles.input} ${styles.mono}`}
-            value={namespace}
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={!namespaceOk}
-            aria-describedby={hintId}
-            onChange={(e) => setCustomNamespace(e.target.value)}
-          />
-          <p id={hintId} className={namespaceOk ? styles.hint : styles.invalid}>
-            {namespaceOk ? t.home.namespaceHint : t.home.namespaceInvalid}
-          </p>
-        </div>
+        {replacing !== null && (
+          <p className={styles.hint}>{format(t.home.replaceHint, { name: replacing })}</p>
+        )}
+        <details
+          className={styles.advanced}
+          open={advanced || !namespaceOk}
+          onToggle={(e) => setAdvanced(e.currentTarget.open)}
+        >
+          <summary>{t.home.advanced}</summary>
+          <div className={styles.field}>
+            <label htmlFor={namespaceId}>{t.home.packId}</label>
+            <input
+              id={namespaceId}
+              className={`${styles.input} ${styles.mono}`}
+              value={namespace}
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={!namespaceOk}
+              aria-describedby={hintId}
+              onChange={(e) => setCustomNamespace(e.target.value)}
+            />
+            <p id={hintId} className={namespaceOk ? styles.hint : styles.invalid}>
+              {namespaceOk ? t.home.packIdHint : t.home.namespaceInvalid}
+            </p>
+          </div>
+        </details>
       </form>
     </Dialog>
   )

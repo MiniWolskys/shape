@@ -79,12 +79,15 @@ export const en = {
     privacy: 'Everything stays on your computer.',
     showcaseCaption: '{shape} · {width}×{height} blocks · on stone bricks',
     newLibraryName: 'Library name',
-    namespaceHint: 'Used inside the packs. Lowercase letters, digits, _ . and - only.',
+    advanced: 'Advanced',
+    packId: 'Pack ID',
+    packIdHint:
+      "Used by the server to tell libraries apart. It can't change after the first export. Lowercase letters, digits, _ . and - only.",
     namespaceInvalid: 'Use only lowercase letters, digits, _ . and -, and not "minecraft".',
-    replaceWarning:
-      '"{name}" will be closed. It stays safe in the last library pack you downloaded.',
+    replaceHint: 'This closes {name}.',
     createLibrary: 'Create library',
-    replaceLibrary: 'Close it and create',
+    closeForNew: 'Close it and create',
+    closeForSample: 'Close it and open the demo',
     sampleName: 'Sample paintings',
     sampleTitles: {
       sunsetChapel: 'Sunset Chapel',
@@ -92,6 +95,23 @@ export const en = {
       springWindow: 'Spring Window',
       frostOculus: 'Frost Oculus',
     },
+  },
+  closeLibrary: {
+    title: 'Close {name}?',
+    unexported: {
+      one: "{count} painting hasn't been exported yet. Closing {name} deletes it from this browser.",
+      other:
+        "{count} paintings haven't been exported yet. Closing {name} deletes them from this browser.",
+    },
+    demoChanged: {
+      one: 'You changed {count} demo painting. Closing the demo deletes it.',
+      other: 'You changed {count} demo paintings. Closing the demo deletes them.',
+    },
+    safe: 'Everything in {name} is in your last download, {file}. Open that file to get it back.',
+    empty: '{name} has no paintings, so nothing is lost.',
+    demoSafe: 'Nothing is lost: you can open the demo again from Home.',
+    exportFirst: 'Export first',
+    deleteAndClose: { one: 'Delete {count} and close', other: 'Delete {count} and close' },
   },
   library: {
     title: 'Library',
@@ -123,6 +143,7 @@ export const en = {
     closeLibrary: 'Close library',
     closeWarning: '"{name}" will be closed. It stays in your last downloaded library pack.',
     confirmDelete: 'Delete this painting?',
+    deletePainting: 'Delete painting',
     deleteWarning: `"{title}" will be deleted from this browser. This can't be undone.`,
     looseTitle: 'Your paintings (not in a library yet)',
     looseHint: 'Open a library pack or start a library to export them for your server.',
