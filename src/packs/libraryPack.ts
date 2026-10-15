@@ -163,11 +163,9 @@ const isIntIn = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
 const isOneOf = (v: unknown, values: readonly string[]) =>
   typeof v === 'string' && values.includes(v)
-/** An ISO 8601 UTC timestamp as `Date.toISOString` writes it, naming a real instant. */
+/** An ISO 8601 UTC timestamp exactly as `Date.toISOString` writes it (no impossible dates). */
 const isIsoTime = (v: unknown) =>
-  typeof v === 'string' &&
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(v) &&
-  !Number.isNaN(Date.parse(v))
+  typeof v === 'string' && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString() === v
 
 /** Returns the first problem with a painting entry, or null when it can be used safely. */
 function paintingProblem(p: unknown): string | null {

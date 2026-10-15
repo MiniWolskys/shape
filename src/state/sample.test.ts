@@ -57,6 +57,7 @@ describe('openSampleLibrary', () => {
     expect(library?.namespace).toBe('sample')
     expect(after.map((p) => p.id)).toEqual([loose])
     expect(store.getState().demo).toBe(true)
+    expect(store.getState().demoIds).toEqual(library?.paintings.map((p) => p.id))
     expect(store.getState().unexportedCount()).toBe(0)
     for (const p of library?.paintings ?? []) {
       expect(assets[p.recipe.source?.imageId ?? '']).toBeDefined()

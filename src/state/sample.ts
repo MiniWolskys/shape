@@ -83,5 +83,6 @@ export function openSampleLibrary(
     library: sample.library,
     assets: { ...s.assets, ...sample.assets },
     demo: true,
+    demoIds: sample.library.paintings.map((p) => p.id),
   }))
 }

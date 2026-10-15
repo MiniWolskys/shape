@@ -631,16 +631,51 @@ describe('demo flag (R23)', () => {
     expect(s.getState().demo).toBe(false)
   })
 
-  it('does not count untouched paintings of the demo as unexported', async () => {
-    const s = createWorkspaceStore(memoryStorage())
+  async function demoStore(storage = memoryStorage()) {
+    const s = createWorkspaceStore(storage)
     await s.getState().init()
     s.getState().createLibrary('Sample', 'sample')
     const a = s.getState().createPainting()
-    s.getState().createPainting()
-    s.setState({ demo: true })
+    const b = s.getState().createPainting()
+    s.setState({ demo: true, demoIds: [a, b] })
+    return { s, a, b }
+  }
+
+  it('does not count untouched sample paintings, but counts edited ones', async () => {
+    const { s, a } = await demoStore()
     expect(s.getState().unexportedCount()).toBe(0)
     const p = s.getState().findPainting(a)!
     s.getState().savePainting(updatePainting(p, { title: 'Mine' }, new Date(Date.now() + 1000)))
     expect(s.getState().unexportedCount()).toBe(1)
+  })
+
+  it('counts paintings made in the demo, including duplicates and imported copies', async () => {
+    const { s, a } = await demoStore()
+    s.getState().duplicatePainting(a, '(copy)')
+    expect(s.getState().unexportedCount()).toBe(1)
+    s.getState().createPainting()
+    expect(s.getState().unexportedCount()).toBe(2)
+  })
+
+  it('keeps the sample ids across a reload and clears them with the demo', async () => {
+    const storage = memoryStorage()
+    const { s, a, b } = await demoStore(storage)
+    await vi.advanceTimersByTimeAsync(600)
+    const again = createWorkspaceStore(storage)
+    await again.getState().init()
+    expect(again.getState().demoIds).toEqual([a, b])
+    expect(again.getState().unexportedCount()).toBe(0)
+    s.getState().closeLibrary()
+    expect(s.getState().demoIds).toEqual([])
+  })
+
+  it('opens an imported pack in place of the demo instead of copying into it (R25)', async () => {
+    const { s } = await demoStore()
+    const { bytes, ids } = await packFor('theirs', ['Sunset'])
+    expect(s.getState().importPack(bytes)).toMatchObject({ kind: 'opened', added: 1, kept: 0 })
+    expect(s.getState().library?.namespace).toBe('theirs')
+    expect(s.getState().library?.paintings.map((p) => p.id)).toEqual(ids)
+    expect(s.getState().demo).toBe(false)
+    expect(s.getState().demoIds).toEqual([])
   })
 })

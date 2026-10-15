@@ -111,6 +111,15 @@ describe('library', () => {
     expect(mergeLibraries(never, late).library.exportedAt).toBe(late.exportedAt)
     expect(mergeLibraries(never, never).library.exportedAt).toBeUndefined()
   })
+  it('merge keeps no export time when the local library has published paintings but none', () => {
+    const l = lib('A')
+    const { exportedAt: _, ...published } = {
+      ...publish(l, [l.paintings[0]!.id], now),
+      exportedAt: 'x',
+    }
+    const incoming = { ...lib('B'), exportedAt: '2026-10-09T00:00:00.000Z' }
+    expect(mergeLibraries(published, incoming).library.exportedAt).toBeUndefined()
+  })
   it('merge refuses another namespace', () => {
     expect(() => mergeLibraries(lib('A'), createLibrary('Other', 'other'))).toThrow(/namespace/)
   })
@@ -207,6 +216,22 @@ describe('retitlePainting (R17)', () => {
     expect(retitlePainting(fixed('sunset'), 'Moon', new Set(), later, rnd).id).toMatch(
       /^moon_[a-z0-9]{3}$/,
     )
+  })
+  it('only keeps a three-character suffix', () => {
+    const p = retitlePainting(fixed('sunset_aaa0'), 'Moon', new Set(), later, rnd)
+    expect(p.id).toMatch(/^moon_[a-z0-9]{3}$/)
+  })
+  it('avoids a collision between long titles that share their first 24 characters', () => {
+    const taken = 'the_great_window_of_the_3js'
+    const p = retitlePainting(
+      fixed('painting_3js'),
+      'The great window of the south',
+      new Set([taken]),
+      later,
+      rnd,
+    )
+    expect(p.id).toMatch(/^the_great_window_of_the_[a-z0-9]{3}$/)
+    expect(p.id).not.toBe(taken)
   })
   it('never changes a published id', () => {
     const l = lib('A')

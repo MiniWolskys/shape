@@ -228,7 +228,7 @@ describe('library pack checks', () => {
       delete l.exportedAt
     })
     expect(readLibraryPack(without).library.exportedAt).toBeUndefined()
-    for (const bad of [42, 'yesterday', '2026-13-45T99:00:00.000Z']) {
+    for (const bad of [42, 'yesterday', '2026-13-45T99:00:00.000Z', '2026-02-30T00:00:00.000Z']) {
       const pack = await packWith((l) => {
         l.exportedAt = bad
       })

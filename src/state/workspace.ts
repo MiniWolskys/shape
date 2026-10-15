@@ -39,13 +39,18 @@ export interface WorkspaceState extends Workspace {
   saveError: ShapeErrorCode | null
   /** The open library is the built-in demo (R23): set by openSampleLibrary, persisted locally. */
   demo: boolean
+  /** The demo's sample paintings as built; untouched ones are not counted as unexported. */
+  demoIds: string[]
   init(storage?: WorkspaceStorage): Promise<void>
   /**
    * Replaces the open library with an empty one, deleting its paintings and their assets.
    * Ask first when `unexportedCount()` is above 0.
    */
   createLibrary(name: string, namespace: string): void
-  /** Opens, merges or copies a library pack (R21); throws a ShapeError and changes nothing on bad bytes. */
+  /**
+   * Opens, merges or copies a library pack (R21). With the demo open, the pack replaces it (R25):
+   * ask first (see unexportedCount). Throws a ShapeError and changes nothing on bad bytes.
+   */
   importPack(bytes: Uint8Array): ImportResult
   /** Moves the given loose paintings (all of them by default) into the open library; returns how many. */
   addLooseToLibrary(ids?: string[]): number
@@ -67,7 +72,7 @@ export interface WorkspaceState extends Workspace {
   applyExport(library: Library): void
   /**
    * How many paintings of the open library no downloaded pack holds (R15): closing or replacing
-   * the library deletes them. In the demo, paintings never changed since created don't count.
+   * the library deletes them. In the demo, sample paintings left as built don't count.
    */
   unexportedCount(): number
   /** Closes the open library, deleting its paintings and their assets. Ask first (see unexportedCount). */
@@ -92,6 +97,8 @@ function pruneAssets(assets: Assets, candidates: string[], remaining: Painting[]
   for (const id of drop) delete next[id]
   return next
 }
+
+const NO_DEMO = { demo: false, demoIds: [] as string[] }
 
 const allPaintings = (s: Workspace): Painting[] => [...(s.library?.paintings ?? []), ...s.loose]
 
@@ -121,9 +128,9 @@ export function createWorkspaceStore(
     }
 
     const flush = async () => {
-      const { library, loose, assets, demo } = get()
+      const { library, loose, assets, demo, demoIds } = get()
       try {
-        await storage.save({ library, loose, assets, demo })
+        await storage.save({ library, loose, assets, demo, demoIds })
         if (get().saveError !== null) set({ saveError: null })
       } catch (e) {
         if (e instanceof Error && e.name === 'QuotaExceededError') {
@@ -174,7 +181,8 @@ export function createWorkspaceStore(
           state.library === prev.library &&
           state.loose === prev.loose &&
           state.assets === prev.assets &&
-          state.demo === prev.demo
+          state.demo === prev.demo &&
+          state.demoIds === prev.demoIds
         ) {
           return
         }
@@ -193,6 +201,7 @@ export function createWorkspaceStore(
       ready: false,
       saveError: null,
       demo: false,
+      demoIds: [],
 
       init(next) {
         if (initializing) return initializing
@@ -208,6 +217,7 @@ export function createWorkspaceStore(
               loose: loaded?.loose ?? [],
               assets: loaded?.assets ?? {},
               demo: loaded?.demo ?? false,
+              demoIds: loaded?.demoIds ?? [],
               ready: true,
             })
             startAutosave()
@@ -224,7 +234,7 @@ export function createWorkspaceStore(
         const { library, loose, assets } = get()
         set({
           library: newLibrary(name, namespace),
-          demo: false,
+          ...NO_DEMO,
           assets: library
             ? pruneAssets(assets, library.paintings.flatMap(assetIdsOf), loose)
             : assets,
@@ -233,11 +243,15 @@ export function createWorkspaceStore(
 
       importPack(bytes) {
         const pack = readLibraryPack(bytes)
-        const { library, loose, assets } = get()
+        const { library, loose, assets, demo } = get()
         const source = { sourceName: pack.library.name, sourceNamespace: pack.library.namespace }
         const count = pack.library.paintings.length
-        if (!library) {
-          set({ library: pack.library, assets: { ...assets, ...pack.assets }, demo: false })
+        // The demo counts as no library (R25): the pack replaces it.
+        if (!library || demo) {
+          const kept = library
+            ? pruneAssets(assets, library.paintings.flatMap(assetIdsOf), loose)
+            : assets
+          set({ library: pack.library, assets: { ...kept, ...pack.assets }, ...NO_DEMO })
           return { kind: 'opened', added: count, kept: 0, ...source }
         }
         if (library.namespace !== pack.library.namespace) {
@@ -409,10 +423,13 @@ export function createWorkspaceStore(
       },
 
       unexportedCount() {
-        const { library, demo } = get()
+        const { library, demo, demoIds } = get()
         if (!library) return 0
         const atRisk = unexportedPaintings(library)
-        return demo ? atRisk.filter((p) => p.updatedAt !== p.createdAt).length : atRisk.length
+        if (!demo) return atRisk.length
+        // Only sample paintings left as built are safe to drop.
+        const samples = new Set(demoIds)
+        return atRisk.filter((p) => !(samples.has(p.id) && p.updatedAt === p.createdAt)).length
       },
 
       closeLibrary() {
@@ -420,7 +437,7 @@ export function createWorkspaceStore(
         if (!library) return
         set({
           library: null,
-          demo: false,
+          ...NO_DEMO,
           assets: pruneAssets(assets, library.paintings.flatMap(assetIdsOf), loose),
         })
       },

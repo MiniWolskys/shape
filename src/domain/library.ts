@@ -112,7 +112,11 @@ export function mergeLibraries(local: Library, incoming: Library): MergeResult {
   })
   const added = incoming.paintings.filter((p) => !localIds.has(p.id))
   // The local export time wins: a later incoming one could hide local changes made since (R15).
-  const exportedAt = local.exportedAt ?? incoming.exportedAt
+  // Without one, the incoming time is adopted only if no local painting is published (a local
+  // published painting could carry edits the incoming pack doesn't hold).
+  const exportedAt =
+    local.exportedAt ??
+    (local.paintings.some((p) => p.status === 'published') ? undefined : incoming.exportedAt)
   return {
     library: {
       ...local,
@@ -180,7 +184,7 @@ export function unexportedPaintings(lib: Library): Painting[] {
 
 /**
  * Sets the title (R17). While unpublished the id follows it: `slugify(title)_<suffix>`, keeping
- * the current suffix unless another painting in `takenIds` already has that id.
+ * the current three-character suffix (an id without one gets a fresh one) unless another painting in `takenIds` already has that id.
  * Published ids never change.
  */
 export function retitlePainting(
@@ -192,7 +196,7 @@ export function retitlePainting(
 ): Painting {
   const titled = { ...p, title, updatedAt: now.toISOString() }
   if (p.status === 'published') return titled
-  const suffix = /_([a-z0-9]+)$/.exec(p.id)?.[1]
+  const suffix = /_([a-z0-9]{3})$/.exec(p.id)?.[1]
   let id = suffix ? `${slugify(title)}_${suffix}` : makePaintingId(title, random)
   while (id !== p.id && takenIds.has(id)) id = makePaintingId(title, random)
   return { ...titled, id }

@@ -33,11 +33,13 @@ describe('idbStorage', () => {
   })
 
   it('keeps the demo flag, and reads records saved without it as not a demo', async () => {
-    await createIdbStorage().save({ ...workspace(), demo: true })
+    await createIdbStorage().save({ ...workspace(), demo: true, demoIds: ['a_abc'] })
     expect((await createIdbStorage().load())?.demo).toBe(true)
+    expect((await createIdbStorage().load())?.demoIds).toEqual(['a_abc'])
     const record = await get<Record<string, unknown>>('shape:workspace:v1')
-    await set('shape:workspace:v1', { ...record, demo: undefined })
+    await set('shape:workspace:v1', { ...record, demo: undefined, demoIds: undefined })
     expect((await createIdbStorage().load())?.demo).toBe(false)
+    expect((await createIdbStorage().load())?.demoIds).toEqual([])
   })
 
   it('returns null when nothing is stored', async () => {

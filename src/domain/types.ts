@@ -148,5 +148,7 @@ export interface Workspace {
   assets: Assets
   /** The open library is the built-in demo (sample). Workspace-only, never written to packs. */
   demo?: boolean
+  /** Ids of the demo's sample paintings, as built. Workspace-only, never written to packs. */
+  demoIds?: string[]
 }
 export type Random = () => number // returns [0, 1)

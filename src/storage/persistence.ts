@@ -16,6 +16,7 @@ interface WorkspaceRecord {
   assetIds: string[]
   /** Absent in records saved before the demo flag existed. */
   demo?: boolean
+  demoIds?: string[]
 }
 
 export function createIdbStorage(): WorkspaceStorage {
@@ -35,7 +36,13 @@ export function createIdbStorage(): WorkspaceStorage {
           console.warn(`Stored asset ${id} is missing and was skipped`)
         }
       }
-      return { library: record.library, loose: record.loose, assets, demo: record.demo ?? false }
+      return {
+        library: record.library,
+        loose: record.loose,
+        assets,
+        demo: record.demo ?? false,
+        demoIds: record.demoIds ?? [],
+      }
     },
 
     async save(w) {
@@ -53,6 +60,7 @@ export function createIdbStorage(): WorkspaceStorage {
         loose: w.loose,
         assetIds: ids,
         demo: w.demo ?? false,
+        demoIds: w.demoIds ?? [],
       }
       await set(WORKSPACE_KEY, record)
       const keep = new Set(ids)
