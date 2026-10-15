@@ -1,7 +1,8 @@
+import { useEffect, useRef } from 'react'
 import { useT } from '../i18n/i18n.ts'
 import { useNavigation } from '../state/navigation.ts'
 import styles from './Toasts.module.css'
-import { useToasts, type ToastItem } from './toastStore.ts'
+import { holdToasts, useToasts, type ToastItem } from './toastStore.ts'
 
 function Toast({ item }: { item: ToastItem }) {
   const t = useT()
@@ -52,11 +53,27 @@ function Toast({ item }: { item: ToastItem }) {
  */
 export function Toasts() {
   const toasts = useToasts((s) => s.toasts)
+  const region = useRef<HTMLDivElement>(null)
+  // A focused toast that goes away (its action ran) takes the focus with it, without a blur.
+  useEffect(() => {
+    if (!region.current?.contains(document.activeElement)) holdToasts('focus', false)
+  }, [toasts])
   const inEditor = useNavigation((s) => s.screen.name === 'editor')
   const errors = toasts.filter((item) => item.kind === 'error')
   const others = toasts.filter((item) => item.kind !== 'error')
   return (
-    <div className={styles.region} data-area={inEditor ? 'stage' : undefined}>
+    <div
+      ref={region}
+      className={styles.region}
+      data-area={inEditor ? 'stage' : undefined}
+      onMouseEnter={() => holdToasts('hover', true)}
+      onMouseLeave={() => holdToasts('hover', false)}
+      onFocus={() => holdToasts('focus', true)}
+      onBlur={(event) => {
+        // Focus moving between two toasts stays inside.
+        if (!event.currentTarget.contains(event.relatedTarget)) holdToasts('focus', false)
+      }}
+    >
       <div role="alert" className={styles.stack}>
         {errors.map((item) => (
           <Toast key={item.id} item={item} />

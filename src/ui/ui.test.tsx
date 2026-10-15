@@ -380,6 +380,35 @@ describe('Toasts', () => {
     expect(run).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Crop recentred')).not.toBeInTheDocument()
   })
+  it('waits while the player hovers or focuses the toasts, so an action stays reachable (WCAG 2.2.1)', () => {
+    vi.useFakeTimers()
+    const { container } = render(<Toasts />)
+    const region = container.firstElementChild as HTMLElement
+    act(() => toast('Crop recentred', 'info', { label: 'Undo', run: () => {} }))
+    act(() => vi.advanceTimersByTime(6000))
+    fireEvent.mouseEnter(region)
+    act(() => vi.advanceTimersByTime(60_000))
+    expect(screen.getByText('Crop recentred')).toBeInTheDocument()
+    fireEvent.focusIn(screen.getByRole('button', { name: 'Undo' }))
+    fireEvent.mouseLeave(region)
+    act(() => vi.advanceTimersByTime(60_000))
+    expect(screen.getByText('Crop recentred')).toBeInTheDocument()
+    fireEvent.focusOut(screen.getByRole('button', { name: 'Undo' }))
+    // The time left goes on from where it stopped: 2 s of the 8.
+    act(() => vi.advanceTimersByTime(1900))
+    expect(screen.getByText('Crop recentred')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.queryByText('Crop recentred')).not.toBeInTheDocument()
+
+    // A focused action that ran takes its toast, and the focus, away: the next toast still goes.
+    act(() => toast('Duplicated', 'info', { label: 'Edit', run: () => {} }))
+    const edit = screen.getByRole('button', { name: 'Edit' })
+    edit.focus()
+    fireEvent.click(edit)
+    act(() => toast('Saved'))
+    act(() => vi.advanceTimersByTime(4000))
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+  })
 })
 
 describe('TopBar', () => {
