@@ -71,6 +71,45 @@ describe('editing tools', () => {
     expect(getPixel(out.values, 1, 0)).toEqual([5, 6, 7, 255])
     expect(maskSize(layer.mask)).toBe(0)
   })
+  it('pencil ignores non-finite points and stays fast on huge coordinates', () => {
+    const layer = createEditLayer(4, 4)
+    const nan = pencil(
+      layer,
+      [
+        [NaN, 1],
+        [1, Infinity],
+        [-Infinity, 0],
+      ],
+      [1, 1, 1, 255],
+    )
+    expect(maskSize(nan.mask)).toBe(0)
+    const start = Date.now()
+    const far = pencil(
+      layer,
+      [
+        [0, 0],
+        [1e9, 1e9],
+      ],
+      [1, 1, 1, 255],
+    )
+    expect(Date.now() - start).toBeLessThan(500)
+    expect(maskSize(far.mask)).toBe(4)
+    const across = pencil(
+      layer,
+      [
+        [-1e9, 1],
+        [1e9, 1],
+      ],
+      [1, 1, 1, 255],
+    )
+    expect(maskSize(across.mask)).toBe(4)
+  })
+  it('eyedropper clamps out-of-bounds coordinates', () => {
+    const r = wallImage()
+    expect(eyedropper(r, -1, 1)).toEqual(getPixel(r, 0, 1))
+    expect(eyedropper(r, 9, 9)).toEqual(getPixel(r, 2, 2))
+    expect(eyedropper(r, 1.7, 0.2)).toEqual(getPixel(r, 1, 0))
+  })
   it('eyedropper reads a pixel', () => {
     expect(eyedropper(wallImage(), 1, 1)).toEqual([0, 0, 0, 255])
   })

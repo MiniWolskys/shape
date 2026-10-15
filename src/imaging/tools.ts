@@ -30,6 +30,7 @@ export function selectSimilar(
   }
   const target = getPixel(r, x, y)
   const d = r.data
+  // Inlined max-channel difference (same as colorDistance) to avoid a tuple allocation per pixel.
   const matches = (p: number): boolean => {
     const i = p * 4
     return (
@@ -96,6 +97,74 @@ export function paintMask(layer: EditLayer, mask: Uint8Array, color: RGBA): Edit
   return out
 }
 
+/** Liang-Barsky clip to the pixel grid, rounded back to pixels so work is bounded by size. */
+function clipSegment(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  w: number,
+  h: number,
+): [number, number, number, number] | null {
+  const dx = x1 - x0
+  const dy = y1 - y0
+  let t0 = 0
+  let t1 = 1
+  const edges: Array<[number, number]> = [
+    [-dx, x0],
+    [dx, w - 1 - x0],
+    [-dy, y0],
+    [dy, h - 1 - y0],
+  ]
+  for (const [p, q] of edges) {
+    if (p === 0) {
+      if (q < 0) return null
+    } else {
+      const t = q / p
+      if (p < 0) {
+        if (t > t1) return null
+        if (t > t0) t0 = t
+      } else {
+        if (t < t0) return null
+        if (t < t1) t1 = t
+      }
+    }
+  }
+  return [
+    Math.round(x0 + t0 * dx),
+    Math.round(y0 + t0 * dy),
+    Math.round(x0 + t1 * dx),
+    Math.round(y0 + t1 * dy),
+  ]
+}
+
+function drawLine(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  plot: (x: number, y: number) => void,
+): void {
+  const dx = Math.abs(x1 - x0)
+  const dy = -Math.abs(y1 - y0)
+  const sx = x0 < x1 ? 1 : -1
+  const sy = y0 < y1 ? 1 : -1
+  let err = dx + dy
+  for (;;) {
+    plot(x0, y0)
+    if (x0 === x1 && y0 === y1) break
+    const e2 = 2 * err
+    if (e2 >= dy) {
+      err += dy
+      x0 += sx
+    }
+    if (e2 <= dx) {
+      err += dx
+      y0 += sy
+    }
+  }
+}
+
 /** Draws Bresenham lines through consecutive points; out-of-bounds pixels are ignored. */
 export function pencil(layer: EditLayer, points: Array<[number, number]>, color: RGBA): EditLayer {
   const out = copyLayer(layer)
@@ -104,40 +173,26 @@ export function pencil(layer: EditLayer, points: Array<[number, number]>, color:
   const plot = (x: number, y: number): void => {
     if (x >= 0 && y >= 0 && x < w && y < h) paintAt(out, y * w + x, color)
   }
-  points.forEach(([px, py], idx) => {
+  let prev: [number, number] | undefined
+  for (const [px, py] of points) {
+    if (!Number.isFinite(px) || !Number.isFinite(py)) continue
     const x1 = Math.round(px)
     const y1 = Math.round(py)
-    const prev = points[idx - 1]
     if (!prev) {
       plot(x1, y1)
-      return
+    } else {
+      const seg = clipSegment(prev[0], prev[1], x1, y1, w, h)
+      if (seg) drawLine(seg[0], seg[1], seg[2], seg[3], plot)
     }
-    let x0 = Math.round(prev[0])
-    let y0 = Math.round(prev[1])
-    const dx = Math.abs(x1 - x0)
-    const dy = -Math.abs(y1 - y0)
-    const sx = x0 < x1 ? 1 : -1
-    const sy = y0 < y1 ? 1 : -1
-    let err = dx + dy
-    for (;;) {
-      plot(x0, y0)
-      if (x0 === x1 && y0 === y1) break
-      const e2 = 2 * err
-      if (e2 >= dy) {
-        err += dy
-        x0 += sx
-      }
-      if (e2 <= dx) {
-        err += dx
-        y0 += sy
-      }
-    }
-  })
+    prev = [x1, y1]
+  }
   return out
 }
 
 export function eyedropper(r: Raster, x: number, y: number): RGBA {
-  return getPixel(r, x, y)
+  const cx = Math.min(r.width - 1, Math.max(0, Math.floor(x)))
+  const cy = Math.min(r.height - 1, Math.max(0, Math.floor(y)))
+  return getPixel(r, cx, cy)
 }
 
 export function maskSize(mask: Uint8Array): number {

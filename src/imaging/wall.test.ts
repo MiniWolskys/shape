@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createRaster, getPixel } from './raster.ts'
+import { renderScene } from './scenes.ts'
+import { applyWindow } from './window.ts'
 import { compositeOver, renderStoneWall, renderWallPreview } from './wall.ts'
 
 describe('renderStoneWall', () => {
@@ -50,12 +52,33 @@ describe('renderWallPreview', () => {
     const w = renderWallPreview(painting, 1, 1, 16, { reference: false })
     expect([w.width, w.height]).toEqual([48, 48])
   })
-  it('bottom-aligns the reference with the painting', () => {
+  it('places the framed reference painting bottom-aligned, one block right', () => {
     const painting = createRaster(16, 32, [255, 0, 0, 255])
-    const w = renderWallPreview(painting, 1, 2, 16, { margin: 1 })
-    // reference at block x=2, bottom row of painting is block y=2
-    const ref = getPixel(w, 2 * 16 + 8, 2 * 16 + 8)
-    expect(ref[3]).toBe(255)
-    expect(ref).not.toEqual([255, 0, 0, 255])
+    const withRef = renderWallPreview(painting, 1, 2, 16)
+    const noRef = compositeOver(renderStoneWall(5, 4, 16), painting, 16, 16)
+    // reference block: x = 3 blocks, y = 2 blocks (bottom row of the painting)
+    const rx = 3 * 16
+    const ry = 2 * 16
+    const expected = applyWindow(renderScene('meadow', 16, 16), {
+      shape: 'full',
+      glassOpacity: 1,
+      material: 'dark_oak',
+      thickness: 1,
+      pixelsPerBlock: 16,
+      seed: 0,
+    })
+    expect(getPixel(withRef, rx + 8, ry + 8)).toEqual(getPixel(expected, 8, 8))
+    expect(getPixel(withRef, rx + 8, ry + 8)).not.toEqual(getPixel(noRef, rx + 8, ry + 8))
+    // block row above the reference is plain wall
+    for (const [x, y] of [
+      [rx + 8, ry - 8],
+      [rx + 2, ry - 1],
+    ] as const) {
+      expect(getPixel(withRef, x, y)).toEqual(getPixel(noRef, x, y))
+    }
+    // frame border is dark oak, opaque
+    const border = getPixel(withRef, rx, ry + 8)
+    expect(border[3]).toBe(255)
+    ;[74, 47, 28].forEach((v, c) => expect(Math.abs((border[c] ?? 0) - v)).toBeLessThanOrEqual(16))
   })
 })

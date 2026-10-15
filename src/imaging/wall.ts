@@ -1,9 +1,17 @@
 import { createRaster, type Raster } from './raster.ts'
 import { renderScene } from './scenes.ts'
-import { mulberry32 } from './shapes.ts'
 import { applyWindow } from './window.ts'
 
 const STONE_SEED = 42
+
+/** Per-texel noise in -11..10, a pure function of the texel so wall size never changes it. */
+function texelNoise(tx: number, ty: number): number {
+  let h = (Math.imul(tx, 0x27d4eb2d) ^ Math.imul(ty, 0x165667b1) ^ STONE_SEED) | 0
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b)
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35)
+  h ^= h >>> 16
+  return ((h >>> 0) % 22) - 11
+}
 
 /**
  * Procedural stone bricks, 16 texels per block (each texel is ppb/16 px, at least 1 px).
@@ -14,12 +22,6 @@ export function renderStoneWall(blocksW: number, blocksH: number, pixelsPerBlock
   const height = blocksH * pixelsPerBlock
   const out = createRaster(width, height)
   const texel = Math.max(1, pixelsPerBlock / 16)
-  const cols = Math.ceil(width / texel)
-  const rows = Math.ceil(height / texel)
-  const rand = mulberry32(STONE_SEED)
-  const noise = new Int8Array(cols * rows)
-  for (let i = 0; i < noise.length; i++) noise[i] = Math.floor(rand() * 22) - 11
-
   for (let y = 0; y < height; y++) {
     const ty = Math.floor(y / texel)
     const ly = ty % 16
@@ -29,8 +31,7 @@ export function renderStoneWall(blocksW: number, blocksH: number, pixelsPerBlock
       const tx = Math.floor(x / texel)
       const lx = tx % 16
       const mortarV = upper ? lx === 15 : lx === 7
-      const v =
-        mortarH || mortarV ? 86 : 118 + (noise[ty * cols + tx] ?? 0) + (ly % 8 === 0 ? 14 : 0)
+      const v = mortarH || mortarV ? 86 : 118 + texelNoise(tx, ty) + (ly % 8 === 0 ? 14 : 0)
       const i = (y * width + x) * 4
       out.data[i] = v
       out.data[i + 1] = v
