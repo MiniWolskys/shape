@@ -141,19 +141,19 @@ export function LibraryScreen() {
       <TopBar
         onHome={() => go({ name: 'home' })}
         left={chip && <span className={styles.chip}>{chip}</span>}
+        menu={
+          library
+            ? [
+                { label: t.library.importPack, onSelect: () => fileInput.current?.click() },
+                { label: t.library.closeLibrary, onSelect: () => setConfirmClose(true) },
+              ]
+            : []
+        }
         right={
           library && (
-            <div className={styles.topActions}>
-              <Button variant="ghost" onClick={() => fileInput.current?.click()}>
-                {t.library.importPack}
-              </Button>
-              <Button variant="ghost" onClick={() => setConfirmClose(true)}>
-                {t.library.closeLibrary}
-              </Button>
-              <Button variant="primary" onClick={() => go({ name: 'export' })}>
-                {plural(t, t.library.exportNew, newCount)}
-              </Button>
-            </div>
+            <Button variant="primary" onClick={() => go({ name: 'export' })}>
+              {plural(t, t.library.exportNew, newCount)}
+            </Button>
           )
         }
       />

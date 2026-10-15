@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentType } from 'react'
+import { useEffect, useId, useRef, useState, type ComponentType } from 'react'
 import { makeAssetId } from '../../domain/ids.ts'
 import { retitlePainting, updatePainting } from '../../domain/library.ts'
 import type { Assets, Painting } from '../../domain/types.ts'
@@ -15,6 +15,7 @@ import { errorMessage } from '../../ui/errors.ts'
 import { isTextEntry } from '../../ui/keyboard.ts'
 import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
+import { PHONE, useMediaQuery } from '../../ui/useMediaQuery.ts'
 import { startAutosave, type Autosave } from './autosave.ts'
 import { CanvasStage } from './CanvasStage.tsx'
 import styles from './EditorScreen.module.css'
@@ -161,6 +162,59 @@ function historyPictureIds(): string[] {
 }
 
 type SaveStatus = 'saving' | 'saved' | 'notSaved' | 'failed'
+
+const PHONE_NOTICE_KEY = 'shape:phone-notice-seen'
+/** For browsers whose session storage is blocked: once per page load instead. */
+let phoneNoticeSeen = false
+
+function wasPhoneNoticeSeen(): boolean {
+  if (phoneNoticeSeen) return true
+  try {
+    return sessionStorage.getItem(PHONE_NOTICE_KEY) !== null
+  } catch (error) {
+    console.warn('Could not read the session storage', error)
+    return false
+  }
+}
+
+function markPhoneNoticeSeen(): void {
+  try {
+    sessionStorage.setItem(PHONE_NOTICE_KEY, '1')
+  } catch (error) {
+    console.warn('Could not write the session storage', error)
+    phoneNoticeSeen = true
+  }
+}
+
+/**
+ * On touch screens and phone widths, says once per session that editing works best on a
+ * computer (I24); the editor stays usable underneath.
+ */
+function PhoneNotice() {
+  const t = useT()
+  const phone = useMediaQuery(PHONE)
+  const [seen, setSeen] = useState(wasPhoneNoticeSeen)
+  const id = useId()
+  if (!phone || seen) return null
+  return (
+    <section className={styles.notice} aria-labelledby={id}>
+      <div className={styles.noticeText}>
+        <h2 id={id} className={styles.noticeTitle}>
+          {t.phone.title}
+        </h2>
+        <p className={styles.noticeBody}>{t.phone.body}</p>
+      </div>
+      <Button
+        onClick={() => {
+          markPhoneNoticeSeen()
+          setSeen(true)
+        }}
+      >
+        {t.phone.dismiss}
+      </Button>
+    </section>
+  )
+}
 
 export function EditorScreen({ paintingId }: { paintingId: string | null }) {
   const t = useT()
@@ -345,7 +399,7 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
         left={
           <div className={styles.heading}>
             <Button variant="ghost" icon="arrow-left" onClick={() => leave('library')}>
-              {t.editor.backToLibrary}
+              <span className={styles.narrowHidden}>{t.editor.backToLibrary}</span>
             </Button>
             <h1 className={styles.title}>{title}</h1>
             <span className={styles.chip}>
@@ -356,7 +410,7 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
               })}
             </span>
             <span className={styles.status} data-status={status} role="status">
-              {t.editor.saveStatus[status]}
+              <span className={styles.narrowHidden}>{t.editor.saveStatus[status]}</span>
             </span>
           </div>
         }
@@ -381,6 +435,7 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
           </div>
         }
       />
+      <PhoneNotice />
       {/* A new grid for each opened painting: nothing local to the last one carries over. */}
       <div key={session} className={styles.editor} data-editor-session={session}>
         <StepRail />

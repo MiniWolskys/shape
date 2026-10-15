@@ -16,14 +16,6 @@
   white-space: nowrap;
 }
 
-.topActions {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .library {
   display: grid;
   align-content: start;

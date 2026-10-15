@@ -15,6 +15,9 @@ import { Segmented } from './Segmented.tsx'
 import { Slider } from './Slider.tsx'
 import { toast, useToasts } from './toastStore.ts'
 import { Toasts } from './Toasts.tsx'
+import { TopBar } from './TopBar.tsx'
+import { NARROW } from './useMediaQuery.ts'
+import { stubMedia } from '../test/media.ts'
 
 type View = 'edit' | 'wall' | 'nomod'
 
@@ -360,6 +363,69 @@ describe('Toasts', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(run).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Crop recentred')).not.toBeInTheDocument()
+  })
+})
+
+describe('TopBar', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    act(() => useLanguage.getState().setLanguage('en'))
+  })
+
+  function renderBar(onImport = vi.fn()) {
+    render(
+      <TopBar
+        menu={[{ label: 'Import', onSelect: onImport }]}
+        right={<button type="button">Export</button>}
+      />,
+    )
+    return onImport
+  }
+
+  it('shows secondary actions and the language switch in the bar on wide screens', async () => {
+    const onImport = renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
+    expect(onImport).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument()
+  })
+
+  it('folds them into a "⋯" menu on narrow screens, keeping the main action (I24)', async () => {
+    stubMedia([NARROW])
+    const onImport = renderBar()
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Import' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument()
+
+    const more = screen.getByRole('button', { name: 'More actions' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(more)
+    expect(more).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Import' }))
+    expect(onImport).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+
+    await userEvent.click(more)
+    expect(screen.getByRole('menuitemradio', { name: 'English' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Français' }))
+    expect(useLanguage.getState().language).toBe('fr')
+  })
+
+  it('closes the menu with Escape or a click elsewhere', async () => {
+    stubMedia([NARROW])
+    renderBar()
+    const more = screen.getByRole('button', { name: 'More actions' })
+    await userEvent.click(more)
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(more).toHaveFocus()
+    await userEvent.click(more)
+    await userEvent.click(document.body)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })
 

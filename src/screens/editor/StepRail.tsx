@@ -1,9 +1,10 @@
 import { defaultRecipe } from '../../domain/library.ts'
 import type { Painting } from '../../domain/types.ts'
-import { useT } from '../../i18n/i18n.ts'
+import { format, useT } from '../../i18n/i18n.ts'
 import type { EditLayer } from '../../imaging/edits.ts'
 import { EDITOR_STEPS, useEditor, type EditorStep } from '../../state/editor.ts'
 import { Icon } from '../../ui/Icon.tsx'
+import { NARROW, useMediaQuery } from '../../ui/useMediaQuery.ts'
 import styles from './StepRail.module.css'
 
 const DEFAULT = defaultRecipe()
@@ -39,8 +40,34 @@ export function StepRail() {
   const painting = useEditor((s) => s.painting)
   const edits = useEditor((s) => s.edits)
   const setStep = useEditor((s) => s.setStep)
+  const narrow = useMediaQuery(NARROW)
   if (!painting) return null
   const done = doneSteps(painting, edits)
+
+  if (narrow) {
+    // Phones: one line, "Step 2 of 5 · Size & crop ▾", instead of a rail scrolling sideways.
+    return (
+      <div className={styles.compact}>
+        <select
+          className={styles.select}
+          aria-label={t.editor.stepsLabel}
+          value={step}
+          onChange={(event) => setStep(event.target.value as EditorStep)}
+        >
+          {EDITOR_STEPS.map((s, index) => (
+            <option key={s} value={s}>
+              {format(t.editor.stepOf, {
+                number: index + 1,
+                total: EDITOR_STEPS.length,
+                name: t.editor.steps[s],
+              })}
+              {done[s] ? ' ✓' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  }
 
   return (
     <nav className={styles.rail} aria-label={t.editor.stepsLabel}>

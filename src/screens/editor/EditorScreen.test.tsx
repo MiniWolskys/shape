@@ -12,6 +12,7 @@ import { forgetLastSteps, useEditor } from '../../state/editor.ts'
 import { startHashRouting, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
+import { stubMedia } from '../../test/media.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
 import { useToasts } from '../../ui/toastStore.ts'
 import * as decode from '../../imaging/decode.ts'
@@ -273,6 +274,45 @@ describe('EditorScreen', () => {
     expect(useWorkspace.getState().assets[imageId]).toBeDefined()
     await userEvent.click(screen.getByRole('button', { name: 'Shape · Home' }))
     expect(useNavigation.getState().screen.name).toBe('editor')
+  })
+
+  describe('on phones (I24)', () => {
+    beforeEach(() => sessionStorage.clear())
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('says once per session that editing works best on a computer', async () => {
+      stubMedia(['(pointer: coarse), (max-width: 759px)'])
+      const p = painting()
+      await startWith(p)
+      const view = renderEditor(p.id)
+      const notice = screen.getByRole('region', { name: 'Editing works best on a computer' })
+      await userEvent.click(within(notice).getByRole('button', { name: 'Continue anyway' }))
+      expect(screen.queryByText('Editing works best on a computer')).not.toBeInTheDocument()
+      view.unmount()
+      renderEditor(p.id)
+      expect(screen.queryByText('Editing works best on a computer')).not.toBeInTheDocument()
+    })
+
+    it('says nothing on a computer', async () => {
+      const p = painting()
+      await startWith(p)
+      renderEditor(p.id)
+      expect(screen.queryByText('Editing works best on a computer')).not.toBeInTheDocument()
+    })
+
+    it('turns the step rail into a compact selector on narrow screens', async () => {
+      stubMedia(['(max-width: 759px)'])
+      const p = painting()
+      await startWith(p)
+      renderEditor(p.id)
+      const select = screen.getByRole('combobox', { name: 'Steps' })
+      expect(select).toHaveDisplayValue('Step 1 of 5 · Image')
+      await userEvent.selectOptions(select, 'size')
+      expect(useEditor.getState().step).toBe('size')
+      // A step that holds a real choice keeps its check (I6).
+      expect(select).toHaveDisplayValue('Step 2 of 5 · Size & crop ✓')
+      expect(screen.queryByRole('navigation', { name: 'Steps' })).not.toBeInTheDocument()
+    })
   })
 
   describe('with the browser history (I10)', () => {
