@@ -55,10 +55,17 @@ function pruneAssets(assets: Assets, candidates: string[], remaining: Painting[]
 
 const allPaintings = (s: Workspace): Painting[] => [...(s.library?.paintings ?? []), ...s.loose]
 
-export function createWorkspaceStore(initialStorage: WorkspaceStorage) {
+export function createWorkspaceStore(
+  initialStorage: WorkspaceStorage,
+  options: { flushOnHide?: boolean } = {},
+) {
   let storage = initialStorage
   let timer: ReturnType<typeof setTimeout> | undefined
   let unsubscribe: (() => void) | undefined
+  let saving: Promise<void> | null = null
+  let dirty = false
+  let initializing: Promise<void> | null = null
+  let hideListenersAdded = false
 
   const store = create<WorkspaceState>()((set, get) => {
     const freshId = (title: string) => {
@@ -87,6 +94,39 @@ export function createWorkspaceStore(initialStorage: WorkspaceStorage) {
       }
     }
 
+    // Saves never overlap: a request during a save marks it dirty and one more save follows.
+    const requestFlush = (): Promise<void> => {
+      if (saving) {
+        dirty = true
+        return saving
+      }
+      saving = (async () => {
+        do {
+          dirty = false
+          await flush()
+        } while (dirty)
+      })().finally(() => {
+        saving = null
+      })
+      return saving
+    }
+
+    const flushNow = () => {
+      if (timer === undefined) return
+      clearTimeout(timer)
+      timer = undefined
+      void requestFlush()
+    }
+
+    const addHideListeners = () => {
+      if (!options.flushOnHide || hideListenersAdded || typeof window === 'undefined') return
+      hideListenersAdded = true
+      window.addEventListener('pagehide', flushNow)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushNow()
+      })
+    }
+
     const startAutosave = () => {
       unsubscribe?.()
       unsubscribe = store.subscribe((state, prev) => {
@@ -98,7 +138,10 @@ export function createWorkspaceStore(initialStorage: WorkspaceStorage) {
           return
         }
         clearTimeout(timer)
-        timer = setTimeout(() => void flush(), AUTOSAVE_MS)
+        timer = setTimeout(() => {
+          timer = undefined
+          void requestFlush()
+        }, AUTOSAVE_MS)
       })
     }
 
@@ -110,24 +153,40 @@ export function createWorkspaceStore(initialStorage: WorkspaceStorage) {
       hasSavedWork: false,
       saveError: null,
 
-      async init(next) {
+      init(next) {
+        if (initializing) return initializing
+        if (get().ready && !next) return Promise.resolve()
         if (next) storage = next
         unsubscribe?.()
         clearTimeout(timer)
-        const loaded = await storage.load()
-        set({
-          library: loaded?.library ?? null,
-          loose: loaded?.loose ?? [],
-          assets: loaded?.assets ?? {},
-          hasSavedWork: !!loaded && (loaded.library !== null || loaded.loose.length > 0),
-          ready: true,
-        })
-        startAutosave()
+        initializing = (async () => {
+          try {
+            const loaded = await storage.load()
+            set({
+              library: loaded?.library ?? null,
+              loose: loaded?.loose ?? [],
+              assets: loaded?.assets ?? {},
+              hasSavedWork: !!loaded && (loaded.library !== null || loaded.loose.length > 0),
+              ready: true,
+            })
+            startAutosave()
+            addHideListeners()
+          } finally {
+            initializing = null
+          }
+        })()
+        return initializing
       },
 
       createLibrary(name, namespace) {
         if (!isValidNamespace(namespace)) throw new Error(`Invalid namespace: ${namespace}`)
-        set({ library: newLibrary(name, namespace) })
+        const { library, loose, assets } = get()
+        set({
+          library: newLibrary(name, namespace),
+          assets: library
+            ? pruneAssets(assets, library.paintings.flatMap(assetIdsOf), loose)
+            : assets,
+        })
       },
 
       openLibraryPack(bytes) {
@@ -148,7 +207,16 @@ export function createWorkspaceStore(initialStorage: WorkspaceStorage) {
             if (data) nextAssets[id] = data
           }
         }
-        set({ library: merged.library, assets: nextAssets })
+        // A local draft replaced by a published copy no longer needs its own assets.
+        const kept = new Set(merged.library.paintings)
+        const dropped = library.paintings.filter((p) => !kept.has(p))
+        set({
+          library: merged.library,
+          assets: pruneAssets(nextAssets, dropped.flatMap(assetIdsOf), [
+            ...merged.library.paintings,
+            ...get().loose,
+          ]),
+        })
         return { added: merged.added.length, kept: merged.kept.length }
       },
 
@@ -268,4 +336,4 @@ export function createWorkspaceStore(initialStorage: WorkspaceStorage) {
 
 export type WorkspaceStore = ReturnType<typeof createWorkspaceStore>
 
-export const useWorkspace: WorkspaceStore = createWorkspaceStore(idbStorage)
+export const useWorkspace: WorkspaceStore = createWorkspaceStore(idbStorage, { flushOnHide: true })

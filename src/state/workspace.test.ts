@@ -79,6 +79,117 @@ describe('workspace store', () => {
     expect(s.getState().library?.paintings.map((p) => p.id)).toEqual(ids)
   })
 
+  it('keeps the asset bytes of a kept local painting', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const { bytes, ids } = await packFor('ours', ['Sunset'])
+    s.getState().openLibraryPack(bytes)
+    const local = s.getState().findPainting(ids[0] as string)!
+    const source = { imageId: 'keepimg', width: 1, height: 1 }
+    s.getState().setAsset('keepimg', new Uint8Array([7]))
+    s.getState().savePainting({ ...local, recipe: { ...local.recipe, source } })
+    s.getState().setAsset('img0', new Uint8Array([8]))
+    expect(s.getState().openLibraryPack(bytes)).toEqual({ added: 0, kept: 1 })
+    expect(Array.from(s.getState().assets.keepimg ?? [])).toEqual([7])
+    expect(Array.from(s.getState().assets.img0 ?? [])).toEqual([8])
+  })
+
+  it('prunes assets of a local draft replaced by a published incoming copy', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const { bytes, ids } = await packFor('ours', ['Sunset'])
+    const draft = createPainting({ title: 'Sunset' }, now, () => 0.3)
+    s.getState().savePainting({
+      ...draft,
+      id: ids[0] as string,
+      recipe: { ...draft.recipe, source: { imageId: 'localimg', width: 1, height: 1 } },
+    })
+    s.getState().setAsset('localimg', new Uint8Array([3]))
+    s.getState().openLibraryPack(bytes)
+    expect(s.getState().assets.localimg).toBeUndefined()
+    expect(s.getState().assets.img0).toBeDefined()
+  })
+
+  it('createLibrary prunes the assets of the library it drops', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const id = s.getState().createPainting()
+    const asset = s.getState().putAsset(new Uint8Array([1]))
+    const p = s.getState().findPainting(id)!
+    s.getState().savePainting({
+      ...p,
+      recipe: { ...p.recipe, source: { imageId: asset, width: 1, height: 1 } },
+    })
+    s.getState().createLibrary('Other', 'other')
+    expect(s.getState().assets[asset]).toBeUndefined()
+  })
+
+  it('serializes saves: never overlapping, latest state saved last', async () => {
+    const starts: number[] = []
+    const gates: Array<() => void> = []
+    let active = 0
+    let maxActive = 0
+    const storage: WorkspaceStorage = {
+      ...memoryStorage(),
+      save: (w) => {
+        starts.push(w.loose.length)
+        active++
+        maxActive = Math.max(maxActive, active)
+        return new Promise<void>((resolve) => {
+          gates.push(() => {
+            active--
+            resolve()
+          })
+        })
+      },
+    }
+    const s = createWorkspaceStore(storage)
+    await s.getState().init()
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(600)
+    expect(starts).toEqual([1])
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(600)
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(600)
+    expect(starts).toEqual([1])
+    gates[0]?.()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(starts).toEqual([1, 3])
+    gates[1]?.()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(starts).toEqual([1, 3])
+    expect(maxActive).toBe(1)
+  })
+
+  it('concurrent init calls share one load and keep later changes', async () => {
+    const storage = memoryStorage()
+    const load = vi.spyOn(storage, 'load')
+    const s = createWorkspaceStore(storage)
+    const first = s.getState().init()
+    const second = s.getState().init()
+    await Promise.all([first, second])
+    expect(load).toHaveBeenCalledTimes(1)
+    const id = s.getState().createPainting()
+    await s.getState().init()
+    expect(s.getState().findPainting(id)).toBeDefined()
+  })
+
+  it('flushes a pending autosave when the page is hidden', async () => {
+    const save = vi.fn(() => Promise.resolve())
+    const s = createWorkspaceStore({ ...memoryStorage(), save }, { flushOnHide: true })
+    await s.getState().init()
+    s.getState().createPainting()
+    window.dispatchEvent(new Event('pagehide'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(save).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+
   it('throws on a foreign namespace and leaves state unchanged', async () => {
     const s = createWorkspaceStore(memoryStorage())
     await s.getState().init()
@@ -118,7 +229,9 @@ describe('workspace store', () => {
     const storage: WorkspaceStorage = { ...memoryStorage(), save }
     const s = createWorkspaceStore(storage)
     await s.getState().init()
+    s.setState({ saveError: 'storage-full', ready: true })
     await vi.advanceTimersByTimeAsync(2000)
+    expect(s.getState().saveError).toBe('storage-full')
     expect(save).not.toHaveBeenCalled()
   })
 
