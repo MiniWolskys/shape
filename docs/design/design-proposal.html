@@ -1,0 +1,943 @@
+<title>Easelcraft Design Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Pixelify+Sans:wght@400;600&family=Rubik:wght@400;500;600&family=Cormorant+SC:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a single reading column for the proposal; mockups break out to a wider stage and scale to fit. */
+:root {
+  --bg: #f3f0ec;
+  --surface: #fffdfa;
+  --ink: #221a14;
+  --muted: #6d6157;
+  --line: #ddd4ca;
+  --accent: #b4561a;
+  --accent-soft: #f6e2d2;
+  --ok: #3f7d3a;
+  --font-display: "Young Serif", Georgia, serif;
+  --font-body: "Figtree", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15110e; --surface: #1e1915; --ink: #efe6dc; --muted: #a99a8b; --line: #3a3029;
+    --accent: #ee8a2f; --accent-soft: #3a2616; --ok: #8fc27f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15110e; --surface: #1e1915; --ink: #efe6dc; --muted: #a99a8b; --line: #3a3029;
+  --accent: #ee8a2f; --accent-soft: #3a2616; --ok: #8fc27f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font-body); padding-inline: 16px; padding-block: 0 64px; }
+.wrap { max-width: 1240px; margin: 0 auto; }
+.col { max-width: 760px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.2rem); }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin-bottom: 12px; }
+h3 { font-size: 1.2rem; margin-bottom: 6px; }
+p { margin: 0 0 12px; }
+.eyebrow { font: 600 12px/1 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+section { padding-block: 48px 8px; border-top: 1px solid var(--line); margin-top: 40px; }
+header.hero { padding-block: 56px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: center; }
+.hero .lede { font-size: 1.15rem; color: var(--muted); max-width: 640px; margin-top: 16px; }
+.hero canvas { width: 168px; height: 252px; image-rendering: pixelated; }
+@media (max-width: 640px) { header.hero { grid-template-columns: 1fr; } .hero canvas { width: 112px; height: 168px; } }
+.mono { font-family: var(--font-mono); font-size: .9em; }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .two { grid-template-columns: 1fr; } }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; min-width: 0; }
+.box ul { margin: 0; padding-left: 18px; }
+.box li { margin-bottom: 6px; }
+.tag { display: inline-block; font: 600 11px/1 var(--font-body); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; white-space: nowrap; }
+.t-core { background: var(--accent-soft); color: var(--accent); }
+.t-sec { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.t-new { background: var(--ok); color: var(--surface); }
+.t-qa { background: var(--ink); color: var(--bg); }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font: 600 12px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+tr.group td { background: var(--bg); font-family: var(--font-display); font-size: 1.05rem; padding-top: 16px; }
+td:first-child { font-weight: 600; width: 23%; }
+td:last-child { width: 1%; }
+td .how { color: var(--muted); }
+
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.flow .step { flex: 1 1 160px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.flow .step b { display: block; font-family: var(--font-display); font-weight: 400; font-size: 1.1rem; margin-bottom: 4px; }
+.flow .step span { color: var(--muted); font-size: 14px; }
+.flow .arrow { align-self: center; color: var(--muted); }
+@media (max-width: 720px) { .flow .arrow { display: none; } }
+
+.shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.shape { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.shape canvas { width: 100%; aspect-ratio: 1; max-width: 100%; image-rendering: pixelated; display: block; border-radius: 4px; }
+.shape b { display: block; margin-top: 8px; }
+.shape span { font-size: 13px; color: var(--muted); line-height: 1.4; display: block; }
+
+.dirs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 820px) { .dirs { grid-template-columns: 1fr; } }
+.dir-btn { text-align: left; cursor: pointer; font: inherit; color: inherit; background: var(--surface); border: 2px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 8px; }
+.dir-btn:hover { border-color: var(--muted); }
+.dir-btn[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dir-btn:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.dir-btn .sw { display: flex; gap: 4px; }
+.dir-btn .sw i { width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(0,0,0,.2); }
+.dir-btn h3 { margin: 0; }
+.dir-btn p { margin: 0; color: var(--muted); font-size: 14px; }
+.dir-btn .rec { font-size: 12px; font-weight: 600; color: var(--accent); }
+
+.tones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: -4px 0 8px; font-size: 14px; }
+.tones > span:first-child { font-weight: 600; }
+.tone-seg { display: inline-flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+.tone-seg button { font: 600 13.5px/1 var(--font-body); color: var(--muted); background: transparent; border: 0; border-radius: 7px; padding: 8px 12px; display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.tone-seg button i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .25); }
+.tone-seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.tone-note { color: var(--muted); min-width: 0; }
+.screen { margin-top: 28px; }
+.screen-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; margin-bottom: 10px; }
+.screen-head h3 { margin: 0; }
+.screen-head .n { font-family: var(--font-mono); color: var(--muted); font-size: 13px; }
+.screen-notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 24px; margin-top: 12px; font-size: 14.5px; color: var(--muted); }
+.screen-notes p { margin: 0; }
+.screen-notes b { color: var(--ink); font-weight: 600; }
+.scaler { width: 100%; overflow: hidden; border-radius: 12px; box-shadow: 0 18px 50px rgba(30, 15, 5, .25); }
+.questions { counter-reset: q; display: grid; gap: 10px; padding: 0; list-style: none; }
+.questions li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+
+/* ===================== MOCKUP THEMES ===================== */
+.m-app {
+  --m-bg: #1c130d; --m-panel: #271a11; --m-raised: #362519; --m-line: #4b3525; --m-text: #f4e4cc; --m-muted: #b49a7c;
+  --m-accent: #ee8a2f; --m-accent-ink: #2a1505; --m-ok: #9cc777; --m-warn: #f0c04a; --m-radius: 10px;
+  --m-display: "Young Serif", Georgia, serif; --m-body: "Figtree", system-ui, sans-serif;
+  --m-shadow: inset 0 1px 0 rgba(255, 220, 180, .06), 0 6px 18px rgba(0, 0, 0, .35);
+  --m-check-a: #77777c; --m-check-b: #646469;
+  --m-topbar: repeating-linear-gradient(92deg, #3a2618 0 7px, #34220f 7px 9px, #3d2a1c 9px 19px, #362314 19px 22px);
+  width: 1200px; height: 740px; transform-origin: top left;
+  background: var(--m-bg); color: var(--m-text); font: 14px/1.45 var(--m-body);
+  display: grid; grid-template-rows: 56px 1fr; overflow: hidden;
+}
+.m-app[data-dir="workshop"][data-tone="oak"] {
+  --m-bg: #3a2a1d; --m-panel: #4a3626; --m-raised: #5c4430; --m-line: #6e543c; --m-text: #fcf0de; --m-muted: #d6bb99;
+  --m-accent: #f4973a; --m-accent-ink: #2a1505;
+  --m-shadow: inset 0 1px 0 rgba(255, 230, 200, .08), 0 6px 16px rgba(0, 0, 0, .28);
+  --m-topbar: repeating-linear-gradient(92deg, #6a4a2e 0 7px, #61432a 7px 9px, #6f4f33 9px 19px, #654629 19px 22px);
+}
+.m-app[data-dir="workshop"][data-tone="birch"] {
+  --m-bg: #efe4d2; --m-panel: #fbf5ea; --m-raised: #e5d5bc; --m-line: #d2bd9c; --m-text: #2f1e11; --m-muted: #7b5f44;
+  --m-accent: #e07a22; --m-accent-ink: #2a1505; --m-ok: #8cc46a; --m-warn: #b7791f;
+  --m-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 4px 14px rgba(110, 70, 30, .14);
+  --m-topbar: repeating-linear-gradient(92deg, #dcc196 0 7px, #d3b68a 7px 9px, #e0c79e 9px 19px, #d6ba8e 19px 22px);
+}
+.m-app[data-dir="pixel"] {
+  --m-bg: #1e1e21; --m-panel: #313135; --m-raised: #48484d; --m-line: #0e0e10; --m-text: #f3f3f3; --m-muted: #b0b0b0;
+  --m-accent: #ffb53b; --m-accent-ink: #2b1a00; --m-ok: #5fd36f; --m-warn: #ffdf5e; --m-radius: 0px;
+  --m-display: "Pixelify Sans", "Courier New", monospace; --m-body: "Rubik", system-ui, sans-serif;
+  --m-shadow: inset 3px 3px 0 rgba(255, 255, 255, .16), inset -3px -3px 0 rgba(0, 0, 0, .45);
+  --m-check-a: #3a3a3e; --m-check-b: #2c2c30;
+  --m-topbar: linear-gradient(#3c3c41, #333337);
+}
+.m-app[data-dir="chapel"] {
+  --m-bg: #13111a; --m-panel: #1c1926; --m-raised: #282338; --m-line: #3d3653; --m-text: #eee8f6; --m-muted: #a69ebb;
+  --m-accent: #f2a93b; --m-accent-ink: #2a1700; --m-ok: #4fc08d; --m-warn: #f2c04a; --m-radius: 6px;
+  --m-display: "Cormorant SC", Georgia, serif; --m-body: "Manrope", system-ui, sans-serif;
+  --m-shadow: 0 0 0 1px #2c2740, 0 8px 22px rgba(0, 0, 0, .45);
+  --m-check-a: #2a2638; --m-check-b: #211e2d;
+  --m-topbar: linear-gradient(#1c1926, #1c1926) padding-box, linear-gradient(90deg, #b8324a, #3a6fd8, #2f9e6e, #f2a93b, #7b47c4, #b8324a) border-box;
+}
+.m-app * { box-sizing: border-box; }
+.m-top { display: flex; align-items: center; gap: 14px; padding: 0 18px; background: var(--m-topbar); border-bottom: 1px solid var(--m-line); }
+.m-app[data-dir="chapel"] .m-top { border-bottom: 3px solid transparent; }
+.m-app[data-dir="pixel"] .m-top { border-bottom: 3px solid #0e0e10; }
+.m-logo { display: flex; align-items: center; gap: 10px; font: 22px/1 var(--m-display); }
+.m-logo canvas { width: 22px; height: 32px; image-rendering: pixelated; }
+.m-sp { flex: 1; }
+.m-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--m-raised); color: var(--m-muted); font-size: 12.5px; white-space: nowrap; }
+.m-app[data-dir="pixel"] .m-chip, .m-app[data-dir="chapel"] .m-chip { border-radius: var(--m-radius); }
+.m-chip.on { background: var(--m-accent); color: var(--m-accent-ink); font-weight: 600; }
+.m-btn { font: 600 13.5px/1 var(--m-body); color: var(--m-text); background: var(--m-raised); border: 0; border-radius: var(--m-radius); padding: 10px 14px; box-shadow: var(--m-shadow); display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; cursor: pointer; }
+.m-btn.pri { background: var(--m-accent); color: var(--m-accent-ink); }
+.m-btn.ghost { background: transparent; box-shadow: none; color: var(--m-muted); }
+.m-btn.lg { padding: 14px 20px; font-size: 15px; }
+.m-panel { background: var(--m-panel); border-radius: var(--m-radius); box-shadow: var(--m-shadow); }
+.m-app[data-dir="chapel"] .m-panel { border: 1px solid var(--m-line); }
+.m-h { font: 30px/1.1 var(--m-display); margin: 0; }
+.m-h2 { font: 19px/1.2 var(--m-display); margin: 0; }
+.m-app[data-dir="pixel"] .m-h { font-size: 28px; }
+.m-app[data-dir="chapel"] .m-h { font-size: 34px; font-weight: 600; }
+.m-app[data-dir="chapel"] .m-h2 { font-size: 21px; font-weight: 600; }
+.m-muted { color: var(--m-muted); }
+.m-label { font: 600 11px/1 var(--m-body); letter-spacing: .1em; text-transform: uppercase; color: var(--m-muted); }
+.m-ic { width: 16px; height: 16px; flex: none; }
+.pix { image-rendering: pixelated; display: block; }
+.m-check { background-color: var(--m-check-b); background-image: conic-gradient(var(--m-check-a) 25%, transparent 0 50%, var(--m-check-a) 0 75%, transparent 0); background-size: 16px 16px; }
+
+/* Home */
+.home { display: grid; grid-template-columns: 1.05fr 1fr; gap: 28px; padding: 36px 40px; }
+.home .acts { display: grid; gap: 12px; margin-top: 26px; }
+.drop { border: 2px dashed var(--m-line); border-radius: var(--m-radius); padding: 22px; display: flex; gap: 16px; align-items: center; }
+.m-app[data-dir="pixel"] .drop { border-color: #5a5a60; }
+.drop .big, .start .big { font: 18px/1.2 var(--m-display); color: var(--m-text); }
+.start { display: grid; gap: 8px; align-content: start; padding: 18px; }
+.resume { padding: 16px 18px; display: flex; gap: 14px; align-items: center; }
+.home .steps { display: flex; gap: 12px; margin-top: 22px; }
+.home .steps div { flex: 1; padding: 12px 14px; font-size: 13px; }
+.home .steps b { display: block; font: 15px/1.2 var(--m-display); color: var(--m-text); margin-bottom: 3px; }
+.showcase { position: relative; display: grid; place-items: center; overflow: hidden; }
+.showcase canvas { height: 560px; width: auto; }
+.showcase .cap { position: absolute; left: 14px; bottom: 12px; font-size: 12px; background: rgba(0,0,0,.55); color: #fff; padding: 5px 9px; border-radius: 4px; }
+
+/* Library */
+.lib { padding: 22px 28px; display: grid; grid-template-rows: auto 1fr; gap: 18px; }
+.lib-bar { display: flex; align-items: center; gap: 10px; }
+.loose { display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 12px; border-left: 3px solid var(--m-accent); }
+.search { background: var(--m-panel); border-radius: var(--m-radius); padding: 9px 12px; color: var(--m-muted); width: 240px; box-shadow: var(--m-shadow); }
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; align-content: start; }
+.card { overflow: hidden; display: grid; grid-template-rows: 170px auto; }
+.card .th { display: grid; place-items: center; }
+.card .th canvas { max-height: 150px; max-width: 170px; }
+.card .meta { padding: 10px 12px 12px; display: grid; gap: 3px; }
+.card .t { font: 16px/1.2 var(--m-display); }
+.card .row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--m-muted); }
+.badge { font: 600 10.5px/1 var(--m-body); letter-spacing: .06em; text-transform: uppercase; padding: 4px 6px; border-radius: 4px; display: inline-flex; gap: 4px; align-items: center; }
+.b-pub { background: var(--m-raised); color: var(--m-muted); }
+.b-new { background: var(--m-ok); color: #10200a; }
+.b-draft { border: 1px solid var(--m-warn); color: var(--m-warn); }
+.m-app[data-dir="pixel"] .badge { border-radius: 0; }
+.card.add { border: 2px dashed var(--m-line); background: transparent; box-shadow: none; place-items: center; display: grid; grid-template-rows: 1fr; text-align: center; color: var(--m-muted); }
+
+/* Editor */
+.ed { display: grid; grid-template-columns: 200px 1fr 330px; min-height: 0; }
+.rail { padding: 18px 12px; display: grid; align-content: start; gap: 4px; border-right: 1px solid var(--m-line); }
+.rail .s { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: var(--m-radius); color: var(--m-muted); }
+.rail .s i { font: 600 12px/22px var(--m-body); font-style: normal; width: 22px; height: 22px; text-align: center; border-radius: 50%; background: var(--m-raised); flex: none; }
+.m-app[data-dir="pixel"] .rail .s i { border-radius: 0; }
+.rail .s.done i { background: var(--m-ok); color: #10200a; }
+.rail .s.on { background: var(--m-raised); color: var(--m-text); font-weight: 600; box-shadow: var(--m-shadow); }
+.rail .s.on i { background: var(--m-accent); color: var(--m-accent-ink); }
+.stage { display: grid; grid-template-rows: auto 1fr auto; padding: 14px 18px; gap: 12px; min-width: 0; }
+.seg { display: inline-flex; background: var(--m-panel); border-radius: var(--m-radius); padding: 3px; box-shadow: var(--m-shadow); }
+.seg button { font: 600 12.5px/1 var(--m-body); color: var(--m-muted); background: transparent; border: 0; padding: 8px 12px; border-radius: var(--m-radius); cursor: pointer; }
+.seg button.on { background: var(--m-accent); color: var(--m-accent-ink); }
+.canvas-area { display: grid; place-items: center; border-radius: var(--m-radius); position: relative; overflow: hidden; }
+.canvas-area canvas { height: 470px; width: auto; }
+.stage-foot { display: flex; gap: 10px; align-items: center; font-size: 12.5px; color: var(--m-muted); }
+.insp { padding: 18px; border-left: 1px solid var(--m-line); display: grid; align-content: start; gap: 16px; overflow: hidden; }
+.insp { gap: 12px !important; }
+.insp-sep { height: 1px; background: var(--m-line); }
+.shape-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.shape-grid button { padding: 3px; background: var(--m-panel); border: 2px solid transparent; border-radius: var(--m-radius); cursor: pointer; display: grid; gap: 3px; color: var(--m-muted); font: 500 9.5px/1.1 var(--m-body); }
+.shape-grid button.on { border-color: var(--m-accent); color: var(--m-text); }
+.shape-grid canvas { width: 100%; aspect-ratio: 1; }
+.field { display: grid; gap: 7px; }
+.field .lr { display: flex; justify-content: space-between; font-size: 13px; }
+.field input[type=range] { width: 100%; accent-color: var(--m-accent); }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatches i { width: 24px; height: 24px; border-radius: 5px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.m-app[data-dir="pixel"] .swatches i { border-radius: 0; }
+.swatches i.sel { outline: 2px solid var(--m-accent); outline-offset: 2px; }
+.swatches i.alpha { background-color: #ddd; background-image: conic-gradient(#999 25%, transparent 0 50%, #999 0 75%, transparent 0); background-size: 8px 8px; }
+
+/* Pixel tools */
+.tools { position: absolute; left: 12px; top: 12px; display: grid; gap: 6px; padding: 6px; }
+.tools span { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--m-radius); color: var(--m-muted); }
+.tools span.on { background: var(--m-accent); color: var(--m-accent-ink); }
+.pgrid { position: relative; }
+.pgrid::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(to right, rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.08) 1px, transparent 1px); background-size: 7.34px 7.34px; pointer-events: none; }
+.marquee { position: absolute; border: 2px dashed #fff; outline: 2px dashed #000; outline-offset: -4px; pointer-events: none; }
+.tip { position: absolute; right: 12px; top: 12px; padding: 8px 12px; font-size: 12.5px; }
+.sv { height: 150px; border-radius: var(--m-radius); position: relative; background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(28, 100%, 50%)); }
+.sv::after { content: ""; position: absolute; left: 62%; top: 22%; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000; transform: translate(-50%, -50%); }
+.bar { height: 14px; border-radius: 7px; position: relative; }
+.m-app[data-dir="pixel"] .bar { border-radius: 0; }
+.bar.hue { background: linear-gradient(to right, red, #ff0, lime, cyan, blue, #f0f, red); }
+.bar.alp { background: linear-gradient(to right, transparent, #f2a65a), conic-gradient(#999 25%, #ddd 0 50%, #999 0 75%, #ddd 0) 0 0 / 10px 10px; }
+.bar::after { content: ""; position: absolute; top: -3px; width: 8px; height: 20px; background: #fff; border-radius: 3px; box-shadow: 0 0 0 1px #000; left: var(--x); }
+.hexrow { display: flex; gap: 8px; }
+.hexrow span { flex: 1; background: var(--m-panel); padding: 8px 10px; border-radius: var(--m-radius); font-family: "JetBrains Mono", monospace; font-size: 12.5px; box-shadow: var(--m-shadow); }
+.preset { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: var(--m-radius); background: var(--m-panel); font-size: 12px; box-shadow: var(--m-shadow); }
+.preset i { width: 14px; height: 14px; border-radius: 3px; }
+.mini-wall { border-radius: var(--m-radius); overflow: hidden; }
+.mini-wall canvas { width: 100%; height: auto; }
+
+/* Export */
+.ex { display: grid; grid-template-columns: 1fr 1.05fr 1fr; gap: 18px; padding: 22px 26px; min-height: 0; }
+.ex .col3 { padding: 18px; display: grid; align-content: start; gap: 12px; min-height: 0; overflow: hidden; }
+.pick { display: flex; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--m-radius); }
+.pick.newp { background: var(--m-raised); }
+.pick canvas { width: 34px; height: 34px; object-fit: contain; }
+.pick .nm { flex: 1; min-width: 0; }
+.pick .nm b { display: block; font-weight: 600; font-size: 13px; }
+.pick .nm span { font-size: 11.5px; color: var(--m-muted); }
+.cb { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; flex: none; background: var(--m-accent); color: var(--m-accent-ink); }
+.cb.lock { background: var(--m-raised); color: var(--m-muted); }
+.cb.off { background: transparent; border: 2px solid var(--m-line); }
+.ver { display: flex; align-items: center; gap: 14px; font: 40px/1 var(--m-display); }
+.ver small { font: 13px/1.3 var(--m-body); color: var(--m-muted); display: block; }
+.file { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--m-radius); background: var(--m-raised); }
+.file .fi { flex: 1; }
+.file b { display: block; font-size: 13.5px; }
+.file span { font-size: 12px; color: var(--m-muted); }
+.inside { display: grid; gap: 0; border: 1px solid var(--m-line); border-radius: var(--m-radius); font-size: 12.5px; }
+.inside div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 12px; border-top: 1px solid var(--m-line); }
+.inside div:first-child { border-top: 0; }
+.inside div span:first-child { font-weight: 600; }
+.code { font: 12px/1.6 "JetBrains Mono", monospace; background: #0c0805; color: #f5d9b8; padding: 12px; border-radius: var(--m-radius); white-space: pre; overflow: hidden; }
+.m-app[data-dir="pixel"] .code { background: #0b0b0c; color: #e8e8e8; }
+.m-app[data-dir="chapel"] .code { background: #0b0a10; color: #e2dbf0; }
+.checks { display: grid; gap: 8px; font-size: 13px; }
+.checks div { display: flex; gap: 10px; align-items: flex-start; }
+.checks i { font: 600 11px/20px var(--m-body); font-style: normal; width: 20px; height: 20px; border-radius: 50%; background: var(--m-raised); text-align: center; flex: none; }
+.warn { border-left: 3px solid var(--m-warn); padding: 8px 12px; background: rgba(240, 192, 74, .08); font-size: 12.5px; border-radius: 0 var(--m-radius) var(--m-radius) 0; }
+@media (prefers-reduced-motion: no-preference) { .dir-btn, .m-btn { transition: border-color .15s, transform .15s; } }
+</style>
+
+<div class="wrap">
+<header class="hero">
+  <div>
+    <div class="eyebrow">Design proposal · revision 3 · working name “Easelcraft”</div>
+    <h1>A painting workshop for our Minecraft server</h1>
+    <p class="lede">Everything the app has to do, how each step should feel for a player who has never used an image editor, and three visual directions shown across the same five screens. Pick a direction, or mix parts of them, and I'll write it up as the spec.</p>
+  </div>
+  <canvas id="heroArt" class="pix" width="64" height="96" aria-label="Pixel-art painting with a gothic window shape"></canvas>
+</header>
+
+<section class="col" style="max-width:none">
+  <div class="eyebrow">1 · What I understood</div>
+  <h2>The brief, in short</h2>
+  <div class="two">
+    <div class="box">
+      <h3>You said</h3>
+      <ul>
+        <li>A static web app on GitHub Pages, deployed by CI. No backend, no login, nothing stored on the site.</li>
+        <li>Export is <b>one library pack</b>: the library, the datapack, the resource pack and the SHA1 in a single file, easy to pass between you and to reopen in the app.</li>
+        <li>Someone with no library can just create a painting, and add it to a library later by opening that library.</li>
+        <li>Published paintings are locked, IDs never change, importing only adds.</li>
+        <li>Window-inspired transparency shapes: circle, church stained glass, other window ideas.</li>
+        <li>New: change pixel colors by hand or by group, with a color picker and presets, for example to make them transparent.</li>
+        <li>Production quality, easy for everyday Minecraft players. Warm, wood and orange look, open to other ideas.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>I'm assuming (please correct)</h3>
+      <ul>
+        <li>“Both optional” means both <b>Secondary</b> features ship in v1: basic image editing and the Minecraft look filter.</li>
+        <li>Pack formats come from your 26.3 test packs: data <code>121</code>, resources <code>97</code>. Every export also writes the <code>minecraft:placeable</code> tag with <code>"replace": false</code>, like the test datapack does.</li>
+        <li>Transparency needs the Transparent Paintings mod. Players without it see hidden pixels as opaque, so the app decides which color those pixels get.</li>
+        <li>Desktop first. On a phone you can browse a library and export, but editing is built for a mouse or trackpad.</li>
+        <li>React + TypeScript + Vite, deployed to Pages with GitHub Actions. That part is mine to handle.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">2 · Features</div>
+  <h2>Everything the app needs</h2>
+  <p class="col" style="color:var(--muted)">Grouped by where it lives in the app. <span class="tag t-core">Core</span> is from your notes, <span class="tag t-sec">Secondary</span> is in v1 as agreed, <span class="tag t-new">Added</span> is new in this proposal, <span class="tag t-qa">Quality</span> is what makes it feel finished.</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Feature</th><th>How it should work for the player</th><th>Priority</th></tr></thead>
+    <tbody>
+      <tr class="group"><td colspan="3">Library</td></tr>
+      <tr><td>Create a painting, no library</td><td class="how">“Create a painting” on the home screen goes straight to the editor. The painting is kept in the browser and offered to the next library pack you open, or to a new library.</td><td><span class="tag t-new">Added</span></td></tr>
+      <tr><td>Open a library pack</td><td class="how">Drop the pack anywhere on the home screen, or browse. Shows name, version and painting count before opening.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Start a new library</td><td class="how">Two fields: library name and namespace (<code>ourpaintings</code>), with the namespace checked as you type.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Import a friend's library</td><td class="how">Shows “3 new paintings found, 11 already in your library” and asks before adding. Never removes anything.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Locked published paintings</td><td class="how">Lock badge on the card. Title, author and image stay editable (replacing the image asks first). Size, ID and deletion are disabled, with a one-line reason.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Autosave and resume</td><td class="how">Work is kept in the browser while you edit. Closing the tab by mistake loses nothing; the home screen offers “Resume”.</td><td><span class="tag t-new">Added</span></td></tr>
+      <tr><td>Filter, search, duplicate</td><td class="how">Filter All / New / Published, search by title or author, duplicate a painting to make a variant.</td><td><span class="tag t-qa">Quality</span></td></tr>
+
+      <tr class="group"><td colspan="3">Painting editor</td></tr>
+      <tr><td>Import an image</td><td class="how">Drop a file, browse, or paste from the clipboard. Large photos are handled without freezing the page.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Size in blocks</td><td class="how">A 16 × 16 block grid you hover and click, like picking a table size in a word processor, plus quick presets (1×1, 2×1, 2×2, 4×3…).</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Crop to the block ratio</td><td class="how">The crop box is locked to the chosen ratio. Drag to move, scroll to zoom.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Resolution and scaling</td><td class="how">16, 32 or 64 px per block, or custom up to 64. Sharp (pixel-art) or Smooth scaling, previewed live.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Window &amp; frame</td><td class="how">One step. Pick a shape from a visual grid, or “Full painting” for no cut-out. Outside the shape becomes transparent, so the wall shows around the window. The frame follows the shape's outline: oak, spruce, dark oak, birch, gilded, stone, iron or none, with a thickness slider, redrawn at the chosen resolution so edges stay crisp. See the catalogue below.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Pixel colors</td><td class="how">Color picker (hue, shade, opacity, hex) with presets: Transparent, Glass 25 %, Glass 50 %, the frame colors and the 16 Minecraft dye colors. Tools: pencil, fill, replace a color everywhere (with tolerance), magic wand selection, eyedropper, eraser to transparent.</td><td><span class="tag t-new">Added</span></td></tr>
+      <tr><td>Basic image editing</td><td class="how">Rotate, flip, brightness, contrast, saturation as sliders, applied before the shape.</td><td><span class="tag t-sec">Secondary</span></td></tr>
+      <tr><td>Minecraft look filter</td><td class="how">Reduce to 8 to 64 colors, or to colors taken from Minecraft blocks, with dithering on or off.</td><td><span class="tag t-sec">Secondary</span></td></tr>
+      <tr><td>Title and author</td><td class="how">Text plus one of Minecraft's 16 text colors, shown in an in-game style tooltip preview.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Undo, redo, shortcuts</td><td class="how">Full history while editing a painting. Ctrl+Z, Ctrl+Y, B for pencil, G for fill, and so on.</td><td><span class="tag t-qa">Quality</span></td></tr>
+      <tr><td>Re-edit later</td><td class="how">The library keeps the source image and every setting, so a draft can be reopened and changed, not only the final PNG.</td><td><span class="tag t-new">Added</span></td></tr>
+
+      <tr class="group"><td colspan="3">Preview</td></tr>
+      <tr><td>Editor view</td><td class="how">Neutral checkerboard behind transparent pixels, with Auto, Light, Dark or Sky backdrop. Auto contrasts with the frame. Optional pixel grid and block grid.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>On the wall</td><td class="how">Real scale on a block wall (stone bricks, oak planks, or glass and sky) next to a 1×1 painting for size.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Without the mod</td><td class="how">One toggle shows what players without Transparent Paintings see. The app fills hidden pixels with the frame color so it still looks tidy.</td><td><span class="tag t-new">Added</span></td></tr>
+
+      <tr class="group"><td colspan="3">Export</td></tr>
+      <tr><td>Choose what goes out</td><td class="how">New paintings are checkboxes; published ones are always in and shown locked.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Check before export</td><td class="how">Blocks export on real problems (missing image, duplicate ID) and warns on small ones (no title).</td><td><span class="tag t-qa">Quality</span></td></tr>
+      <tr><td>One library pack</td><td class="how">A single file holds the library, the datapack zip, the resource pack zip, the SHA1 and the server steps. You share it and reopen it in the app. The SHA1 is also shown with a copy button, and the version number goes up automatically.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Server steps</td><td class="how">The upload checklist from your notes, with the <code>server.properties</code> lines ready to copy.</td><td><span class="tag t-new">Added</span></td></tr>
+      <tr><td>What's new</td><td class="how">List of paintings added since the last export, with “Copy for Discord”.</td><td><span class="tag t-core">Core</span></td></tr>
+
+      <tr class="group"><td colspan="3">Whole app</td></tr>
+      <tr><td>Hosting and CI</td><td class="how">Static build on GitHub Pages, deployed by GitHub Actions on every push to main, with tests run first.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>English and French</td><td class="how">Follows the browser language on first visit, switch in the top bar, remembered afterwards.</td><td><span class="tag t-core">Core</span></td></tr>
+      <tr><td>Accessible and fast</td><td class="how">Keyboard reachable, readable contrast, reduced motion respected, image work off the main thread.</td><td><span class="tag t-qa">Quality</span></td></tr>
+      <tr><td>First-run help</td><td class="how">A sample library to play with and short tips in context, no tutorial to sit through.</td><td><span class="tag t-qa">Quality</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">3 · Flow</div>
+  <h2>How a player moves through it</h2>
+  <p class="col" style="color:var(--muted)">Four screens. The editor is a guided sequence of five steps, but every step stays clickable, so experienced players can jump straight to the one they want.</p>
+  <div class="flow">
+    <div class="step"><b>Home</b><span>Create a painting, open a library pack, or resume a draft.</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Library</b><span>All paintings as cards. Add, edit, import a friend's pack.</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Editor</b><span>Image · Size &amp; crop · Window &amp; frame · Colors &amp; pixels · Details</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Export</b><span>Pick, check, download one library pack, follow the server steps.</span></div>
+  </div>
+  <h3 style="margin-top:28px">How the editor builds a painting</h3>
+  <p class="col" style="color:var(--muted)">Three layers, always combined in this order. Going back to an earlier step never throws away later work.</p>
+  <div class="flow">
+    <div class="step"><b>1 · Picture</b><span>Your image, crop, rotation, brightness and contrast, Minecraft look filter.</span></div>
+    <div class="arrow">+</div>
+    <div class="step"><b>2 · Window &amp; frame</b><span>Generated from the shape and frame settings. Change the shape any time and it redraws.</span></div>
+    <div class="arrow">+</div>
+    <div class="step"><b>3 · Your pixel edits</b><span>Painted on top and kept when you change the shape or the picture's brightness.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">4 · Window shapes</div>
+  <h2>Shape catalogue</h2>
+  <p class="col" style="color:var(--muted)">Each shape is generated at the painting's resolution, not stretched from a template. These are drawn live at 32 px per block on a checkerboard, so you see exactly which pixels are transparent. Leaded shapes tint the picture like coloured glass.</p>
+  <div class="shapes" id="shapeCatalogue"></div>
+</section>
+
+<section>
+  <div class="eyebrow">5 · Visual directions</div>
+  <h2>Three looks, same five screens</h2>
+  <p class="col" style="color:var(--muted)">Switch direction to restyle every screen below. Layout and features stay identical so you compare only the look. In the editor mockup, the shape buttons, the view switch and the glass slider work.</p>
+  <div class="dirs" role="group" aria-label="Visual direction">
+    <button class="dir-btn" data-dir="workshop" aria-pressed="true">
+      <div class="sw"><i style="background:#1c130d"></i><i style="background:#362519"></i><i style="background:#b49a7c"></i><i style="background:#ee8a2f"></i><i style="background:#f4e4cc"></i></div>
+      <h3>A · Lantern Workshop</h3>
+      <p>A carpenter's bench at dusk. Walnut panels, oak-grain header, lantern-orange actions, a warm serif for titles.</p>
+      <span class="rec">Chosen · Dusk tone</span>
+    </button>
+    <button class="dir-btn" data-dir="pixel" aria-pressed="false">
+      <div class="sw"><i style="background:#1e1e21"></i><i style="background:#48484d"></i><i style="background:#b0b0b0"></i><i style="background:#ffb53b"></i><i style="background:#5fd36f"></i></div>
+      <h3>B · Crafting Table</h3>
+      <p>Minecraft's own interface. Bevelled stone panels, pixel headings, torch-yellow highlights. Instantly familiar to players.</p>
+    </button>
+    <button class="dir-btn" data-dir="chapel" aria-pressed="false">
+      <div class="sw"><i style="background:#13111a"></i><i style="background:#282338"></i><i style="background:#b8324a"></i><i style="background:#3a6fd8"></i><i style="background:#f2a93b"></i></div>
+      <h3>C · Chapel Glass</h3>
+      <p>Night stone and lead lines, a jewel-tone stripe under the header, candle-amber actions. Echoes the stained glass the app makes.</p>
+    </button>
+  </div>
+  <div class="tones" id="toneRow">
+    <span>Lantern Workshop tone (Dusk chosen)</span>
+    <div class="tone-seg" role="group" aria-label="Lantern Workshop tone">
+      <button type="button" data-tone="dusk" aria-pressed="true"><i style="background:#1c130d"></i>Dusk</button>
+      <button type="button" data-tone="oak" aria-pressed="false"><i style="background:#4a3626"></i>Oak</button>
+      <button type="button" data-tone="birch" aria-pressed="false"><i style="background:#efe4d2"></i>Birch</button>
+    </div>
+    <span class="tone-note" id="toneNote">The darkest wood. Paintings and transparency stand out the most.</span>
+  </div>
+
+  <!-- Screen 1: Home -->
+  <div class="screen">
+    <div class="screen-head"><span class="n">Screen 1</span><h3>Home</h3></div>
+    <div class="scaler"><div class="m-app" data-dir="workshop">
+      <div class="m-top">
+        <div class="m-logo"><canvas class="pix" data-scene="sunset" data-shape="gothic" data-w="1" data-h="2" data-p="16" data-bg="none"></canvas>Easelcraft</div>
+        <div class="m-sp"></div>
+        <span class="m-btn ghost">How it works</span><span class="m-chip">EN · <b style="color:var(--m-text)">FR</b></span>
+      </div>
+      <div class="home">
+        <div>
+          <div class="m-label">Custom paintings · Minecraft 26.3</div>
+          <h1 class="m-h" style="font-size:44px;margin-top:14px;max-width:520px">Turn any picture into a painting you can see through.</h1>
+          <p class="m-muted" style="font-size:15.5px;max-width:480px;margin-top:14px">Shape it like a window, export the packs, add it to your server. Everything stays on your computer.</p>
+          <div class="acts">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="m-panel start"><svg class="m-ic" style="width:30px;height:30px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 15l5-5 4 4 3-3 4 4M12 8v0"/></svg><div class="big">Create a painting</div><div class="m-muted" style="font-size:12.5px">No library needed. Add it to one later.</div><span class="m-btn pri" style="justify-self:start">Start painting</span></div>
+              <div class="drop start"><svg class="m-ic" style="width:30px;height:30px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h6l2 2h8v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 12v5M9.5 14.5 12 12l2.5 2.5"/></svg><div class="big">Open a library pack</div><div class="m-muted" style="font-size:12.5px">Drop <b style="color:var(--m-text)">ourpaintings-v7.zip</b> here</div><span class="m-btn" style="justify-self:start">Browse files</span></div>
+            </div>
+            <div class="m-panel resume">
+              <canvas class="pix" data-scene="night" data-shape="rose" data-w="1" data-h="1" data-p="16" data-bg="check" style="width:44px;height:44px"></canvas>
+              <div style="flex:1"><b>Resume where you left off</b><div class="m-muted" style="font-size:12.5px">ourpaintings v7 · 2 paintings in progress · saved 3 min ago</div></div>
+              <span class="m-btn">Resume</span>
+            </div>
+            <div style="display:flex;gap:10px"><span class="m-btn">Start a new library</span><span class="m-btn ghost">Try the sample library</span></div>
+          </div>
+        </div>
+        <div class="m-panel showcase">
+          <canvas class="pix" data-wall="5x6" data-at="1,1" data-scene="sunset" data-shape="gothic" data-w="3" data-h="4" data-p="32"></canvas>
+          <span class="cap">Gothic arch · 3×4 blocks · on stone bricks</span>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-notes">
+      <p><b>Two ways in.</b> Make a painting right away, or open a library pack. The whole window accepts a dropped pack.</p>
+      <p><b>No lost work.</b> The resume card appears only when a draft exists in this browser.</p>
+      <p><b>Shows the point.</b> The hero image is a window painting on a real wall, not a stock illustration.</p>
+    </div>
+  </div>
+
+  <!-- Screen 2: Library -->
+  <div class="screen">
+    <div class="screen-head"><span class="n">Screen 2</span><h3>Library</h3></div>
+    <div class="scaler"><div class="m-app" data-dir="workshop">
+      <div class="m-top">
+        <div class="m-logo"><canvas class="pix" data-scene="sunset" data-shape="gothic" data-w="1" data-h="2" data-p="16" data-bg="none"></canvas>Easelcraft</div>
+        <span class="m-chip" style="margin-left:12px">ourpaintings · v7 · 14 paintings</span>
+        <div class="m-sp"></div>
+        <span class="m-btn ghost">Import a friend's library</span>
+        <span class="m-btn pri">Export · 3 new</span>
+      </div>
+      <div class="lib" style="grid-template-rows:auto auto 1fr">
+        <div class="m-panel loose"><canvas class="pix" data-scene="autumn" data-shape="quatrefoil" data-w="1" data-h="1" data-p="16" data-bg="check" style="width:34px;height:34px"></canvas><span style="flex:1"><b>“Harvest Moon”</b> <span class="m-muted">was made in this browser and isn't in a library yet.</span></span><span class="m-btn pri">Add to ourpaintings</span><span class="m-btn ghost">Later</span></div>
+        <div class="lib-bar">
+          <span class="m-chip on">All 14</span><span class="m-chip">New 3</span><span class="m-chip">Published 11</span>
+          <div class="m-sp"></div>
+          <span class="search">Search title or author</span>
+          <span class="m-btn pri">+ New painting</span>
+        </div>
+        <div class="grid">
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="sunset" data-shape="gothic" data-w="2" data-h="3" data-p="32" data-bg="none" data-fit="150"></canvas></div><div class="meta"><span class="t">Sunset Chapel</span><div class="row"><span>Sam · 2×3</span><span class="badge b-new">New</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="night" data-shape="rose" data-w="2" data-h="2" data-p="32" data-bg="none" data-fit="150"></canvas></div><div class="meta"><span class="t">Night Rose</span><div class="row"><span>Alex · 2×2</span><span class="badge b-draft">Draft</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="meadow" data-shape="cross" data-w="2" data-h="2" data-p="32" data-bg="none" data-fit="150"></canvas></div><div class="meta"><span class="t">Spring Window</span><div class="row"><span>Lou · 2×2</span><span class="badge b-new">New</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="snow" data-shape="circle" data-w="1" data-h="1" data-p="32" data-bg="none" data-fit="120"></canvas></div><div class="meta"><span class="t">Frost Oculus</span><div class="row"><span>Sam · 1×1</span><span class="badge b-pub"><svg class="m-ic" style="width:11px;height:11px" viewBox="0 0 24 24" fill="currentColor"><path d="M6 10V8a6 6 0 1 1 12 0v2h1v12H5V10zm2 0h8V8a4 4 0 1 0-8 0z"/></svg>Published</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="autumn" data-shape="arch" data-w="1" data-h="2" data-p="32" data-bg="none" data-fit="150"></canvas></div><div class="meta"><span class="t">Autumn Door</span><div class="row"><span>Alex · 1×2</span><span class="badge b-pub"><svg class="m-ic" style="width:11px;height:11px" viewBox="0 0 24 24" fill="currentColor"><path d="M6 10V8a6 6 0 1 1 12 0v2h1v12H5V10zm2 0h8V8a4 4 0 1 0-8 0z"/></svg>Published</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="sunset" data-shape="fanlight" data-w="2" data-h="1" data-p="32" data-bg="none" data-fit="160"></canvas></div><div class="meta"><span class="t">Dusk Fanlight</span><div class="row"><span>Lou · 2×1</span><span class="badge b-pub"><svg class="m-ic" style="width:11px;height:11px" viewBox="0 0 24 24" fill="currentColor"><path d="M6 10V8a6 6 0 1 1 12 0v2h1v12H5V10zm2 0h8V8a4 4 0 1 0-8 0z"/></svg>Published</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="meadow" data-shape="stained" data-w="2" data-h="2" data-p="32" data-bg="none" data-fit="150"></canvas></div><div class="meta"><span class="t">Garden Glass</span><div class="row"><span>Sam · 2×2</span><span class="badge b-pub"><svg class="m-ic" style="width:11px;height:11px" viewBox="0 0 24 24" fill="currentColor"><path d="M6 10V8a6 6 0 1 1 12 0v2h1v12H5V10zm2 0h8V8a4 4 0 1 0-8 0z"/></svg>Published</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="night" data-shape="porthole" data-w="1" data-h="1" data-p="32" data-bg="none" data-fit="120"></canvas></div><div class="meta"><span class="t">Deep Porthole</span><div class="row"><span>Alex · 1×1</span><span class="badge b-pub"><svg class="m-ic" style="width:11px;height:11px" viewBox="0 0 24 24" fill="currentColor"><path d="M6 10V8a6 6 0 1 1 12 0v2h1v12H5V10zm2 0h8V8a4 4 0 1 0-8 0z"/></svg>Published</span></div></div></div>
+          <div class="m-panel card"><div class="th m-check"><canvas class="pix" data-scene="snow" data-shape="lattice" data-w="1" data-h="2" data-p="32" data-bg="none" data-fit="150"></canvas></div><div class="meta"><span class="t">Winter Lattice</span><div class="row"><span>Lou · 1×2</span><span class="badge b-pub"><svg class="m-ic" style="width:11px;height:11px" viewBox="0 0 24 24" fill="currentColor"><path d="M6 10V8a6 6 0 1 1 12 0v2h1v12H5V10zm2 0h8V8a4 4 0 1 0-8 0z"/></svg>Published</span></div></div></div>
+          <div class="card add"><div><div style="font-size:30px">+</div><b style="color:var(--m-text)">New painting</b><div style="font-size:12px">or drop an image here</div></div></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-notes">
+      <p><b>State at a glance.</b> New, Draft and Published badges sit in the same spot on every card.</p>
+      <p><b>Nothing left behind.</b> A painting made without a library is offered to the next library you open. Adding only ever adds.</p>
+      <p><b>Locked, not hidden.</b> Published paintings stay visible and editable for title and author.</p>
+    </div>
+  </div>
+
+  <!-- Screen 3: Editor, window shape -->
+  <div class="screen">
+    <div class="screen-head"><span class="n">Screen 3</span><h3>Editor · Window &amp; frame step</h3></div>
+    <div class="scaler"><div class="m-app" data-dir="workshop">
+      <div class="m-top">
+        <span class="m-btn ghost">← Library</span>
+        <span class="m-h2">Sunset Chapel</span><span class="m-chip">2×3 blocks · 32 px per block</span>
+        <div class="m-sp"></div>
+        <span class="m-btn ghost">Undo</span><span class="m-btn ghost">Redo</span><span class="m-btn pri">Save painting</span>
+      </div>
+      <div class="ed">
+        <div class="rail">
+          <div class="s done"><i>✓</i>Image</div>
+          <div class="s done"><i>✓</i>Size &amp; crop</div>
+          <div class="s on"><i>3</i>Window &amp; frame</div>
+          <div class="s"><i>4</i>Colors &amp; pixels</div>
+          <div class="s"><i>5</i>Details</div>
+          <div style="margin-top:18px;padding:10px;font-size:12px" class="m-muted">Steps are a suggestion. Click any of them at any time.</div>
+        </div>
+        <div class="stage">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="seg" id="viewSeg"><button class="on" data-view="edit">Editor</button><button data-view="wall">On the wall</button><button data-view="nomod">Without the mod</button></div>
+            <div class="m-sp"></div>
+            <span class="m-label">Backdrop</span>
+            <div class="seg" id="bdSeg"><button class="on" data-bd="auto">Auto</button><button data-bd="light">Light</button><button data-bd="dark">Dark</button><button data-bd="sky">Sky</button></div>
+          </div>
+          <div class="canvas-area" id="edArea"><canvas class="pix" id="edMain"></canvas></div>
+          <div class="stage-foot"><span>Transparent pixels: <b id="edStat" style="color:var(--m-text)">38 %</b></span><span>·</span><span id="bdNote">Light checkerboard, picked to contrast with the dark oak frame</span></div>
+        </div>
+        <div class="insp">
+          <div><span class="m-h2">Window shape</span><div class="m-muted" style="font-size:12.5px;margin-top:4px">Outside the shape becomes transparent.</div></div>
+          <div class="shape-grid" id="shapePick"></div>
+          <div class="field"><div class="lr"><span>Glass opacity</span><b id="glassVal">100 %</b></div><input type="range" id="glassRange" min="10" max="100" value="100" aria-label="Glass opacity"></div>
+          <div class="insp-sep"></div>
+          <div><span class="m-h2">Frame</span><div class="m-muted" style="font-size:12.5px;margin-top:4px">Follows the window outline. Lead lines and bars come with the shape.</div></div>
+          <div class="field"><div class="lr"><span>Material</span><b id="frameVal">Dark oak</b></div><div class="swatches" id="framePick"></div></div>
+          <div class="field"><div class="lr"><span>Thickness</span><b id="fwVal">4 px</b></div><input type="range" id="fwRange" min="1" max="8" value="4" aria-label="Frame thickness"></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-notes">
+      <p><b>One frame, one place.</b> The frame follows whichever window you pick. “Full painting” keeps the whole picture with a plain frame.</p>
+      <p><b>See, then tweak.</b> Shapes are picked from real previews of this painting, not from icons. Three views: editor, on the wall, without the mod.</p>
+      <p><b>Try it.</b> Shapes, glass, frame material, thickness and the view switch all work in this mockup.</p>
+    </div>
+  </div>
+
+  <!-- Screen 4: Editor, colors & pixels -->
+  <div class="screen">
+    <div class="screen-head"><span class="n">Screen 4</span><h3>Editor · Colors &amp; pixels step</h3></div>
+    <div class="scaler"><div class="m-app" data-dir="workshop">
+      <div class="m-top">
+        <span class="m-btn ghost">← Library</span>
+        <span class="m-h2">Spring Window</span><span class="m-chip">2×2 blocks · 32 px per block</span>
+        <div class="m-sp"></div>
+        <span class="m-btn ghost">Undo</span><span class="m-btn ghost">Redo</span><span class="m-btn pri">Save painting</span>
+      </div>
+      <div class="ed">
+        <div class="rail">
+          <div class="s done"><i>✓</i>Image</div>
+          <div class="s done"><i>✓</i>Size &amp; crop</div>
+          <div class="s done"><i>✓</i>Window &amp; frame</div>
+          <div class="s on"><i>4</i>Colors &amp; pixels</div>
+          <div class="s"><i>5</i>Details</div>
+        </div>
+        <div class="stage">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="seg"><button class="on">Editor</button><button>On the wall</button><button>Without the mod</button></div>
+            <div class="m-sp"></div><span class="m-chip on">Pixel grid</span><span class="m-chip">700 %</span>
+          </div>
+          <div class="canvas-area m-check">
+            <div class="m-panel tools" aria-label="Tools">
+              <span title="Pencil"><svg class="m-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span>
+              <span title="Fill"><svg class="m-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l7-7 7 7-7 7z"/><path d="M20 15s2 2.5 2 4a2 2 0 0 1-4 0c0-1.5 2-4 2-4z"/></svg></span>
+              <span title="Replace a color everywhere"><svg class="m-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/><path d="M15 5h4v4M9 19H5v-4"/></svg></span>
+              <span class="on" title="Magic wand"><svg class="m-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 15 9M15 4v2M20 9h-2M18.5 5.5 17 7M11 6 9.5 4.5"/></svg></span>
+              <span title="Eyedropper"><svg class="m-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 6l4 4M3 21l2-1 10-10-3-3L2 17z"/><path d="M16 4l4 4 1-1a2.8 2.8 0 0 0-4-4z"/></svg></span>
+              <span title="Eraser to transparent"><svg class="m-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 20h12M4 15l9-9 6 6-7 7H8z"/></svg></span>
+            </div>
+            <div class="pgrid"><canvas class="pix" id="pxMain" data-scene="meadow" data-shape="cross" data-w="2" data-h="2" data-p="32" data-bg="none" style="height:470px;width:470px"></canvas>
+              <div class="marquee" style="left:22px;top:22px;width:206px;height:118px"></div></div>
+            <div class="m-panel tip">Magic wand · <b>1,412 px</b> of sky selected · Shift to add</div>
+          </div>
+          <div class="stage-foot"><span>Tolerance <b style="color:var(--m-text)">12</b></span><span>·</span><span>Contiguous only</span><span>·</span><span>Selection follows the window panes</span></div>
+        </div>
+        <div class="insp">
+          <span class="m-h2">Color</span>
+          <div class="sv"></div>
+          <div class="bar hue" style="--x:7%"></div>
+          <div class="bar alp" style="--x:58%"></div>
+          <div class="hexrow"><span>#F2A65A</span><span>Opacity 60 %</span></div>
+          <div class="field"><span class="m-label">Presets</span>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <span class="preset"><i class="alpha" style="background-color:#ddd;background-image:conic-gradient(#999 25%,transparent 0 50%,#999 0 75%,transparent 0);background-size:6px 6px"></i>Transparent</span>
+              <span class="preset"><i style="background:rgba(170,210,255,.5)"></i>Glass 25 %</span>
+              <span class="preset"><i style="background:rgba(170,210,255,.8)"></i>Glass 50 %</span>
+              <span class="preset"><i style="background:#4a2f1c"></i>Frame</span>
+            </div>
+          </div>
+          <div class="field"><span class="m-label">Minecraft dyes</span>
+            <div class="swatches"><i style="background:#f9fffe"></i><i style="background:#9d9d97"></i><i style="background:#474f52"></i><i style="background:#1d1d21"></i><i style="background:#835432"></i><i style="background:#b02e26"></i><i style="background:#f9801d"></i><i class="sel" style="background:#fed83d"></i><i style="background:#80c71f"></i><i style="background:#5e7c16"></i><i style="background:#169c9c"></i><i style="background:#3ab3da"></i><i style="background:#3c44aa"></i><i style="background:#8932b8"></i><i style="background:#c74ebd"></i><i style="background:#f38baa"></i></div>
+          </div>
+          <div style="display:flex;gap:8px"><span class="m-btn pri" style="flex:1;justify-content:center">Apply to selection</span><span class="m-btn">Clear</span></div>
+          <div class="mini-wall m-panel"><canvas class="pix" data-wall="4x3" data-at="1,0" data-scene="meadow" data-shape="cross" data-w="2" data-h="2" data-p="32"></canvas></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-notes">
+      <p><b>Group edits first.</b> Wand and “replace everywhere” make the common job, turning a whole sky transparent, one click.</p>
+      <p><b>Presets that mean something.</b> Transparent and glass levels sit above the dye colors players already know.</p>
+      <p><b>Always in context.</b> A small in-game preview updates as you paint.</p>
+    </div>
+  </div>
+
+  <!-- Screen 5: Export -->
+  <div class="screen">
+    <div class="screen-head"><span class="n">Screen 5</span><h3>Export</h3></div>
+    <div class="scaler"><div class="m-app" data-dir="workshop">
+      <div class="m-top">
+        <span class="m-btn ghost">← Library</span>
+        <span class="m-h2">Export ourpaintings</span>
+        <div class="m-sp"></div>
+        <span class="m-chip" style="color:var(--m-ok)">All checks passed</span>
+      </div>
+      <div class="ex">
+        <div class="m-panel col3">
+          <span class="m-h2">What goes in</span>
+          <div class="m-label">New · choose</div>
+          <div class="pick newp"><span class="cb">✓</span><canvas class="pix" data-scene="sunset" data-shape="gothic" data-w="2" data-h="3" data-p="16" data-bg="check"></canvas><div class="nm"><b>Sunset Chapel</b><span>Sam · 2×3</span></div></div>
+          <div class="pick newp"><span class="cb">✓</span><canvas class="pix" data-scene="meadow" data-shape="cross" data-w="2" data-h="2" data-p="16" data-bg="check"></canvas><div class="nm"><b>Spring Window</b><span>Lou · 2×2</span></div></div>
+          <div class="pick newp"><span class="cb off"></span><canvas class="pix" data-scene="night" data-shape="rose" data-w="2" data-h="2" data-p="16" data-bg="check"></canvas><div class="nm"><b>Night Rose</b><span>Alex · draft, not ready</span></div></div>
+          <div class="m-label" style="margin-top:6px">Published · always included</div>
+          <div class="pick"><span class="cb lock">✓</span><canvas class="pix" data-scene="snow" data-shape="circle" data-w="1" data-h="1" data-p="16" data-bg="check"></canvas><div class="nm"><b>Frost Oculus</b><span>since v3</span></div></div>
+          <div class="pick"><span class="cb lock">✓</span><canvas class="pix" data-scene="autumn" data-shape="arch" data-w="1" data-h="2" data-p="16" data-bg="check"></canvas><div class="nm"><b>Autumn Door</b><span>since v5</span></div></div>
+          <div class="m-muted" style="font-size:12.5px">+ 9 more published</div>
+        </div>
+        <div class="m-panel col3">
+          <div class="ver"><span class="m-muted">v7</span>→<span style="color:var(--m-accent)">v8</span><small>2 new paintings<br>13 in total</small></div>
+          <div class="file" style="padding:16px"><svg class="m-ic" style="width:30px;height:30px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v4h4M10 6h2M10 9h2M10 12h2v3h-2z"/></svg><div class="fi"><b style="font-size:15px">ourpaintings-v8.zip</b><span>Library pack · 231 KB · share this one file</span></div></div>
+          <div class="inside">
+            <div><span>Library</span><span class="m-muted">13 paintings, sources and settings</span></div>
+            <div><span>Datapack</span><span class="m-muted">ourpaintings-datapack.zip · 4 KB</span></div>
+            <div><span>Resource pack</span><span class="m-muted">ourpaintings-resources.zip · 212 KB</span></div>
+            <div><span>SHA1</span><span class="m-muted">sha1.txt, plus the server steps</span></div>
+          </div>
+          <span class="m-btn pri lg" style="justify-content:center">Download library pack</span>
+          <div class="m-label">What's new in v8</div>
+          <div style="font-size:13px">Sunset Chapel by Sam · Spring Window by Lou</div>
+          <span class="m-btn" style="justify-self:start">Copy for Discord</span>
+        </div>
+        <div class="m-panel col3">
+          <span class="m-h2">Put it on the server</span>
+          <div class="m-label">SHA1 of the resource pack</div>
+          <div style="display:flex;gap:8px;align-items:center"><span class="code" style="flex:1;padding:9px 10px">3f9a1c0e…b27d41e8</span><span class="m-btn pri">Copy</span></div>
+          <div class="code">resource-pack=&lt;your direct link&gt;
+resource-pack-sha1=3f9a1c0e…b27d41e8
+require-resource-pack=true</div>
+          <div class="checks">
+            <div><i>1</i><span>From the library pack, upload the datapack to <b>world/datapacks/</b></span></div>
+            <div><i>2</i><span>Upload its resource pack to your direct-link host</span></div>
+            <div><i>3</i><span>Paste the lines above into <b>server.properties</b></span></div>
+            <div><i>4</i><span>Restart the server. <span class="m-muted">/reload is not enough.</span></span></div>
+          </div>
+          <div class="warn">Never delete or rename a published painting on the server. Placed copies would disappear from the world.</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-notes">
+      <p><b>One file to pass around.</b> The library pack is what you share in Discord and what you open in the app next time.</p>
+      <p><b>Drafts can't slip out.</b> An unfinished painting is unchecked and says why.</p>
+      <p><b>No guessing.</b> SHA1 and the exact server lines are on screen and inside the pack.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">6 · Decisions</div>
+  <h2>Settled so far</h2>
+  <ol class="questions col">
+    <li><b>Look:</b> A · Lantern Workshop, Dusk tone only, with pixel-crisp painting previews and Minecraft dye presets.</li>
+    <li><b>Painting backdrop:</b> paintings always sit on a neutral grey, never on the brown interface. The editor has a backdrop switch (Auto, Light, Dark, Sky). Auto picks the checkerboard that contrasts with the chosen frame, so thin frames stay visible.</li>
+    <li><b>Published paintings:</b> the image can be replaced later. Size and ID stay locked, and the painting can't be deleted.</li>
+    <li><b>Languages:</b> English and French, following the browser language, with a switch in the top bar.</li>
+    <li><b>Library pack:</b> a plain <code>.zip</code>, e.g. <code>ourpaintings-v8.zip</code>, so Windows opens it with no extra tool.</li>
+  </ol>
+  <h3 style="margin-top:28px">Still open: the app name</h3>
+  <p class="col" style="color:var(--muted)">“Easelcraft” is a stand-in. Candidates built on workshop and painting:</p>
+  <ol class="questions col">
+    <li><b>Easelcraft</b> (my pick). Painting plus “craft”, which feels native to Minecraft and reads the same in French.</li>
+    <li><b>Lantern Atelier</b>. “Atelier” is the workshop word in both English and French, and it ties to the Dusk lantern look.</li>
+    <li><b>Block Atelier</b>. Says “Minecraft painting studio” in two words.</li>
+  </ol>
+</section>
+</div>
+
+<script>
+(() => {
+  // ---------- seeded random ----------
+  const rng = (s) => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+  // ---------- scenes (pixel landscapes) ----------
+  const SCENES = {
+    sunset: { top: [70, 40, 96], bot: [250, 162, 80], sun: [255, 222, 130], hills: [[150, 76, 78], [92, 48, 66], [46, 28, 44]] },
+    meadow: { top: [80, 140, 228], bot: [196, 226, 252], sun: [255, 250, 214], hills: [[120, 180, 86], [76, 138, 62], [40, 96, 52]] },
+    night:  { top: [10, 14, 38], bot: [44, 58, 112], sun: [232, 232, 210], hills: [[44, 56, 92], [30, 36, 66], [16, 20, 42]], stars: true },
+    snow:   { top: [140, 172, 214], bot: [226, 234, 244], sun: [255, 255, 250], hills: [[238, 242, 250], [200, 212, 230], [118, 138, 170]] },
+    autumn: { top: [236, 146, 86], bot: [252, 214, 156], sun: [255, 244, 200], hills: [[214, 120, 52], [170, 70, 40], [96, 46, 34]] },
+  };
+  function scenePixel(sc, x, y, W, H, r) {
+    const bands = 12, t = Math.floor((y / H) * bands) / bands;
+    let c = mix(sc.top, sc.bot, t);
+    const sx = W * 0.68, sy = H * 0.46, sr = Math.min(W, H) * 0.12;
+    if (Math.hypot(x - sx, y - sy) < sr) c = sc.sun;
+    else if (sc.stars && r.stars.has(y * W + x)) c = [240, 240, 255];
+    for (let i = 0; i < 3; i++) {
+      const u = x / W, base = 0.56 + 0.13 * i;
+      const h = base + 0.06 * (Math.sin(u * (5 + i * 3) + i * 2.1) * 0.6 + Math.sin(u * (11 + i) + i) * 0.4);
+      if (y / H > h) { c = sc.hills[i]; if (i === 2 && ((x * 7 + y * 3) % 11 === 0)) c = mix(c, [0, 0, 0], .2); }
+    }
+    return c;
+  }
+
+  // ---------- window shapes ----------
+  const OUT = 0, FRAME = 1, LEAD = 2, GLASS = 3;
+  const TINTS = [[200, 50, 70], [50, 100, 210], [240, 170, 50], [40, 160, 100], [130, 70, 190]];
+  const band = (inside, f) => inside(0) ? (f <= 0 || inside(f) ? GLASS : FRAME) : OUT;
+  const rectIn = (x, y, W, H) => (i) => x >= i && x <= W - i && y >= i && y <= H - i;
+  const SHAPES = {
+    circle: { name: 'Oculus', desc: 'A round window. The classic see-through painting.', f(x, y, W, H, f) { const R = Math.min(W, H) / 2, d = Math.hypot(x - W / 2, y - H / 2); return { k: band(i => d <= R - i, f) }; } },
+    arch: { name: 'Round arch', desc: 'Doorway or abbey window with a half-circle top.', f(x, y, W, H, f) { const R = W / 2; return { k: band(i => x >= i && x <= W - i && y <= H - i && (y >= R || Math.hypot(x - R, y - R) <= R - i), f) }; } },
+    gothic: { name: 'Gothic arch', desc: 'Pointed church window with a centre mullion.', f(x, y, W, H, f, ctx) { const h0 = W * 0.866; const k = band(i => x >= i && x <= W - i && y <= H - i && (y >= h0 || (Math.hypot(x, y - h0) <= W - i && Math.hypot(x - W, y - h0) <= W - i)), f); return { k: k === GLASS && Math.abs(x - W / 2) < ctx.lf / 2 && y > h0 * 0.55 ? LEAD : k }; } },
+    rose: { name: 'Rose window', desc: 'Cathedral rose: spokes, rings and coloured panes.', f(x, y, W, H, f, ctx) { const lf = ctx.lf, R = Math.min(W, H) / 2, dx = x - W / 2, dy = y - H / 2, d = Math.hypot(dx, dy); const k = band(i => d <= R - i, f); if (k !== GLASS) return { k }; const hub = R * 0.28; if (Math.abs(d - hub) < lf / 2 || Math.abs(d - R * 0.64) < lf / 2) return { k: LEAD }; const n = 12, seg = Math.PI * 2 / n, a = Math.atan2(dy, dx) + Math.PI; const da = ((a % seg) + seg) % seg; if (d > hub && Math.min(da, seg - da) * d < lf / 2) return { k: LEAD }; const idx = d < hub ? 2 : (Math.floor(a / seg) + (d > R * 0.64 ? 1 : 0)) % 4; return { k: GLASS, tint: TINTS[idx] }; } },
+    stained: { name: 'Stained glass', desc: 'Irregular leaded panes over the picture.', f(x, y, W, H, f, ctx) { const k = band(rectIn(x, y, W, H), f); if (k !== GLASS) return { k }; let d1 = 1e9, d2 = 1e9, id = 0; for (let j = 0; j < ctx.pts.length; j++) { const p = ctx.pts[j], d = Math.hypot(x - p[0], y - p[1]); if (d < d1) { d2 = d1; d1 = d; id = j; } else if (d < d2) d2 = d; } if (d2 - d1 < ctx.lf * 0.75) return { k: LEAD }; return { k: GLASS, tint: TINTS[id % TINTS.length] }; } },
+    cross: { name: 'Four panes', desc: 'Cottage window with a cross of wooden bars.', f(x, y, W, H, f, ctx) { const k = band(rectIn(x, y, W, H), f); return { k: k === GLASS && (Math.abs(x - W / 2) < ctx.lf / 2 || Math.abs(y - H / 2) < ctx.lf / 2) ? FRAME : k }; } },
+    lattice: { name: 'Leaded diamonds', desc: 'Tudor lattice of small diamond panes.', f(x, y, W, H, f, ctx) { const k = band(rectIn(x, y, W, H), f); if (k !== GLASS) return { k }; const s = ctx.p / 2, lw = Math.max(1, ctx.lf / 3), xi = Math.floor(x), yi = Math.floor(y); return { k: ((xi + yi) % s) < lw || ((((xi - yi) % s) + s) % s) < lw ? LEAD : GLASS }; } },
+    quatrefoil: { name: 'Quatrefoil', desc: 'Four-lobed gothic tracery opening.', f(x, y, W, H, f) { const R = Math.min(W, H) / 2, r = R / 2, cx = W / 2, cy = H / 2; return { k: band(i => [[r, 0], [-r, 0], [0, r], [0, -r]].some(([ox, oy]) => Math.hypot(x - cx - ox, y - cy - oy) <= r - i) || (Math.abs(x - cx) <= r * 0.8 - i && Math.abs(y - cy) <= r * 0.8 - i), f) }; } },
+    octagon: { name: 'Octagon', desc: 'Eight-sided baptistery window.', f(x, y, W, H, f) { const R = Math.min(W, H) / 2, dx = Math.abs(x - W / 2), dy = Math.abs(y - H / 2); const m = Math.max(dx, dy, (dx + dy) * 0.7071 * 1.0824); return { k: band(i => m <= R - i, f) }; } },
+    fanlight: { name: 'Fanlight', desc: 'Half-circle over a door, with radiating bars.', f(x, y, W, H, f, ctx) { const r0 = Math.min(W / 2, H), dx = x - W / 2, dy = H - y, d = Math.hypot(dx, dy); const k = band(i => y <= H - i && d <= r0 - i, f); if (k !== GLASS) return { k }; if (d < r0 * 0.28) return { k: FRAME }; const n = 7, a = Math.atan2(dy, dx), seg = Math.PI / n, da = ((a % seg) + seg) % seg; return { k: Math.min(da, seg - da) * d < ctx.lf / 2 ? FRAME : GLASS }; } },
+    shoji: { name: 'Paper screen', desc: 'Japanese shoji: light wood grid, paper panes.', f(x, y, W, H, f, ctx) { const k = band(rectIn(x, y, W, H), f); if (k !== GLASS) return { k }; const s = ctx.p / 2, w = Math.max(1, ctx.lf / 2); return (Math.floor(x) % s) < w || (Math.floor(y) % s) < w ? { k: FRAME, light: true } : { k: GLASS, paper: true }; } },
+    porthole: { name: 'Porthole', desc: 'Ship window: thick ring with rivets.', f(x, y, W, H, f) { const R = Math.min(W, H) / 2, dx = x - W / 2, dy = y - H / 2, d = Math.hypot(dx, dy); const k = band(i => d <= R - i, f * 2); if (k === FRAME) { const a = Math.atan2(dy, dx), seg = Math.PI / 4, da = ((a % seg) + seg) % seg; if (Math.abs(d - (R - f)) < f * 0.45 && Math.min(da, seg - da) * d < f * 0.5) return { k: FRAME, rivet: true }; } return { k }; } },
+    plain: { name: 'Full painting', desc: '', f(x, y, W, H, f) { return { k: band(rectIn(x, y, W, H), f) }; } },
+  };
+
+  // ---------- painting renderer ----------
+  const MATERIALS = { darkoak: { name: 'Dark oak', c: [74, 47, 28] }, oak: { name: 'Oak', c: [160, 120, 72] }, spruce: { name: 'Spruce', c: [112, 80, 48] }, birch: { name: 'Birch', c: [200, 182, 128] }, gilded: { name: 'Gilded', c: [208, 164, 58] }, stone: { name: 'Stone', c: [126, 126, 128] }, iron: { name: 'Iron', c: [196, 198, 202] }, none: { name: 'No frame', c: [74, 47, 28] } };
+  const LEAD_C = [42, 40, 46];
+  function renderPainting({ scene = 'sunset', shape = 'circle', w = 1, h = 1, p = 32, glass = 1, nomod = false, frame = 'darkoak', fw }) {
+    const FRAME_C = MATERIALS[frame].c;
+    const W = w * p, H = h * p, sc = SCENES[scene], sh = SHAPES[shape];
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'), img = g.createImageData(W, H), d = img.data;
+    const r = rng(W * 31 + H * 7 + scene.length), stars = new Set();
+    if (sc.stars) for (let i = 0; i < W * H / 60; i++) stars.add(Math.floor(r() * W * H * 0.5));
+    const pts = []; const pr = rng(W * 13 + H); const n = Math.max(6, Math.round(w * h * 5));
+    for (let i = 0; i < n; i++) pts.push([pr() * W, pr() * H]);
+    const lf = Math.max(2, Math.round(p / 8)), f = frame === 'none' ? 0 : (fw ?? lf), ctx = { pts, p, lf };
+    let transparent = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const o = (y * W + x) * 4, res = sh.f(x + 0.5, y + 0.5, W, H, f, ctx);
+      let col, a = 255;
+      if (res.k === OUT) { col = FRAME_C; a = 0; transparent++; }
+      else if (res.k === FRAME) { const grain = ((y * 5 + Math.floor(x / 3)) % 7) - 3; col = res.light ? [214, 190, 150] : FRAME_C.map(v => v + grain * 3); if (res.rivet) col = [150, 120, 90]; }
+      else if (res.k === LEAD) col = LEAD_C;
+      else {
+        col = scenePixel(sc, x, y, W, H, { stars });
+        if (res.tint) { col = mix(col, res.tint, 0.5); a = 235; }
+        if (res.paper) { col = mix(col, [244, 236, 214], 0.7); a = 225; }
+        a = Math.round(a * glass); if (a < 255) transparent += 1 - a / 255;
+      }
+      if (nomod) a = 255;
+      d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = a;
+    }
+    g.putImageData(img, 0, 0);
+    c.transparentShare = transparent / (W * H);
+    return c;
+  }
+  function drawChecker(g, W, H, cell, a, b) { g.fillStyle = b; g.fillRect(0, 0, W, H); g.fillStyle = a; for (let y = 0; y < H; y += cell) for (let x = (y / cell) % 2 ? cell : 0; x < W; x += cell * 2) g.fillRect(x, y, cell, cell); }
+  function drawStone(g, bw, bh, p) {
+    const s = p / 16, r = rng(42);
+    for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) for (let ty = 0; ty < 16; ty++) for (let tx = 0; tx < 16; tx++) {
+      const row = ty < 8 ? 0 : 1, mortarH = ty === 7 || ty === 15, mortarV = row === 0 ? tx === 15 : tx === 7;
+      const v = mortarH || mortarV ? 86 : 118 + Math.floor(r() * 22) - 11 + (ty % 8 === 0 ? 14 : 0);
+      g.fillStyle = `rgb(${v},${v},${v + 2})`; g.fillRect((bx * 16 + tx) * s, (by * 16 + ty) * s, s, s);
+    }
+  }
+  function themeChecker(el) { const cs = getComputedStyle(el.closest('.m-app') || document.documentElement); return [cs.getPropertyValue('--m-check-a').trim() || '#3b2c22', cs.getPropertyValue('--m-check-b').trim() || '#2f2219']; }
+
+  function paintCanvas(cv, opts = {}) {
+    const ds = cv.dataset;
+    const o = { scene: ds.scene, shape: ds.shape, w: +ds.w || 1, h: +ds.h || 1, p: +ds.p || 32, ...opts };
+    const pc = renderPainting(o);
+    if (ds.wall || opts.wall) {
+      const [bw, bh] = (opts.wall || ds.wall).split('x').map(Number), [ax, ay] = (opts.at || ds.at || '0,0').split(',').map(Number);
+      cv.width = bw * o.p; cv.height = bh * o.p; const g = cv.getContext('2d');
+      drawStone(g, bw, bh, o.p);
+      g.drawImage(pc, ax * o.p, ay * o.p);
+      return pc;
+    }
+    cv.width = pc.width; cv.height = pc.height; const g = cv.getContext('2d');
+    if (ds.bg === 'check') { const [a, b] = themeChecker(cv); drawChecker(g, pc.width, pc.height, Math.max(2, o.p / 4), a, b); }
+    g.drawImage(pc, 0, 0);
+    if (ds.fit) { const k = +ds.fit / Math.max(pc.width, pc.height); cv.style.width = pc.width * k + 'px'; cv.style.height = pc.height * k + 'px'; }
+    return pc;
+  }
+
+  // ---------- hero + catalogue ----------
+  const hero = document.getElementById('heroArt');
+  hero.getContext('2d').drawImage(renderPainting({ scene: 'sunset', shape: 'gothic', w: 2, h: 3, p: 32 }), 0, 0);
+
+  const cat = document.getElementById('shapeCatalogue');
+  const catScenes = ['sunset', 'meadow', 'night', 'autumn', 'snow'];
+  Object.entries(SHAPES).filter(([k]) => k !== 'plain').forEach(([k, s], i) => {
+    const el = document.createElement('div'); el.className = 'shape';
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64; cv.setAttribute('aria-label', s.name + ' window shape example');
+    const g = cv.getContext('2d'); drawChecker(g, 64, 64, 8, '#d9d4cd', '#b9b2a9');
+    g.drawImage(renderPainting({ scene: catScenes[i % catScenes.length], shape: k, w: 2, h: 2, p: 32 }), 0, 0);
+    el.append(cv); el.insertAdjacentHTML('beforeend', `<b>${s.name}</b><span>${s.desc}</span>`);
+    cat.append(el);
+  });
+
+  // ---------- mockups ----------
+  const apps = [...document.querySelectorAll('.m-app')];
+  const renderMockCanvases = () => document.querySelectorAll('.m-app canvas[data-shape]').forEach(cv => paintCanvas(cv));
+
+  // editor live state
+  const ed = { shape: 'gothic', glass: 1, view: 'edit', frame: 'darkoak', fw: 4, bd: 'auto' };
+  const edMain = document.getElementById('edMain');
+  const BACKDROPS = {
+    light: { css: 'conic-gradient(#e4e4e6 25%, #c9c9cd 0 50%, #e4e4e6 0 75%, #c9c9cd 0) 0 0 / 20px 20px', label: 'Light checkerboard' },
+    dark: { css: 'conic-gradient(#3c3c40 25%, #2c2c30 0 50%, #3c3c40 0 75%, #2c2c30 0) 0 0 / 20px 20px', label: 'Dark checkerboard' },
+    sky: { css: 'linear-gradient(#6fa3ea, #c6def8)', label: 'Sky' },
+  };
+  const lum = ([r, g, b]) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  function applyBackdrop() {
+    const m = MATERIALS[ed.frame], autoPick = lum(m.c) < 0.45 || ed.frame === 'none' ? 'light' : 'dark';
+    const pickd = ed.bd === 'auto' ? autoPick : ed.bd;
+    document.getElementById('edArea').style.background = BACKDROPS[pickd].css;
+    document.getElementById('bdNote').textContent = ed.bd === 'auto'
+      ? `${BACKDROPS[pickd].label}, picked to contrast with the ${m.name.toLowerCase()} frame`
+      : `${BACKDROPS[pickd].label}, chosen by hand`;
+  }
+  document.querySelectorAll('#bdSeg button').forEach(b => b.addEventListener('click', () => { ed.bd = b.dataset.bd; document.querySelectorAll('#bdSeg button').forEach(x => x.classList.toggle('on', x === b)); applyBackdrop(); }));
+  function renderEditor() {
+    applyBackdrop();
+    const base = { scene: 'sunset', shape: ed.shape, w: 2, h: 3, p: 32, glass: ed.glass, frame: ed.frame, fw: ed.fw };
+    let pc;
+    edMain.dataset.bg = 'none';
+    if (ed.view === 'wall') { edMain.dataset.wall = '4x5'; edMain.dataset.at = '1,1'; pc = paintCanvas(edMain, base); }
+    else { delete edMain.dataset.wall; pc = paintCanvas(edMain, { ...base, nomod: ed.view === 'nomod' }); }
+    edMain.style.height = '470px'; edMain.style.width = 'auto';
+    document.getElementById('edStat').textContent = Math.round(renderPainting(base).transparentShare * 100) + ' %';
+  }
+  const pick = document.getElementById('shapePick');
+  const framePick = document.getElementById('framePick');
+  Object.entries(MATERIALS).forEach(([k, m]) => {
+    const s = document.createElement('i'); s.tabIndex = 0; s.setAttribute('role', 'button'); s.title = m.name; s.style.cursor = 'pointer';
+    s.style.background = k === 'none' ? 'repeating-linear-gradient(135deg, transparent 0 5px, rgba(200,80,60,.9) 5px 7px)' : `rgb(${m.c})`;
+    if (k === ed.frame) s.className = 'sel';
+    const choose = () => { ed.frame = k; framePick.querySelectorAll('i').forEach(x => x.classList.toggle('sel', x === s)); document.getElementById('frameVal').textContent = m.name; renderEditor(); };
+    s.addEventListener('click', choose); s.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } });
+    framePick.append(s);
+  });
+  document.getElementById('fwRange').addEventListener('input', e => { ed.fw = +e.target.value; document.getElementById('fwVal').textContent = e.target.value + ' px'; renderEditor(); });
+  ['plain', 'circle', 'arch', 'gothic', 'rose', 'stained', 'cross', 'lattice', 'quatrefoil', 'octagon', 'fanlight', 'shoji', 'porthole'].forEach(k => {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.shape = k; if (k === ed.shape) b.className = 'on';
+    const cv = document.createElement('canvas'); cv.className = 'pix'; cv.dataset.scene = 'sunset'; cv.dataset.shape = k; cv.dataset.w = 1; cv.dataset.h = 1; cv.dataset.p = 32; cv.dataset.bg = 'check';
+    b.append(cv, SHAPES[k].name); pick.append(b);
+    b.addEventListener('click', () => { ed.shape = k; pick.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); renderEditor(); });
+  });
+  document.getElementById('glassRange').addEventListener('input', e => { ed.glass = e.target.value / 100; document.getElementById('glassVal').textContent = e.target.value + ' %'; renderEditor(); });
+  document.querySelectorAll('#viewSeg button').forEach(b => b.addEventListener('click', () => { ed.view = b.dataset.view; document.querySelectorAll('#viewSeg button').forEach(x => x.classList.toggle('on', x === b)); renderEditor(); }));
+
+  // direction switch
+  const btns = [...document.querySelectorAll('.dir-btn')];
+  function setDir(dir) {
+    apps.forEach(a => a.dataset.dir = dir);
+    btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
+    document.getElementById('toneRow').hidden = dir !== 'workshop';
+    renderMockCanvases(); renderEditor();
+    try { localStorage.setItem('pw-dir', dir); } catch (e) {}
+  }
+  btns.forEach(b => b.addEventListener('click', () => setDir(b.dataset.dir)));
+  const TONE_NOTES = {
+    dusk: 'The darkest wood. Paintings and transparency stand out the most.',
+    oak: 'Mid-brown, like oak planks. Softer contrast, still easy on the eyes for long sessions.',
+    birch: 'Light birch with dark walnut text. The orange is deepened so it stays readable.',
+  };
+  const toneBtns = [...document.querySelectorAll('.tone-seg button')];
+  function setTone(tone) {
+    apps.forEach(a => a.dataset.tone = tone);
+    toneBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tone === tone)));
+    document.getElementById('toneNote').textContent = TONE_NOTES[tone];
+    renderMockCanvases(); renderEditor();
+  }
+  toneBtns.forEach(b => b.addEventListener('click', () => setTone(b.dataset.tone)));
+
+  // scale mockups to fit
+  function fit() {
+    document.querySelectorAll('.scaler').forEach(s => {
+      const app = s.firstElementChild, k = Math.min(1, s.clientWidth / 1200);
+      app.style.transform = `scale(${k})`; s.style.height = 740 * k + 'px';
+    });
+  }
+  new ResizeObserver(fit).observe(document.body); fit();
+
+  let saved = 'workshop'; try { saved = localStorage.getItem('pw-dir') || 'workshop'; } catch (e) {}
+  setDir(['workshop', 'pixel', 'chapel'].includes(saved) ? saved : 'workshop');
+  if (document.fonts) document.fonts.ready.then(fit);
+})();
+</script>
