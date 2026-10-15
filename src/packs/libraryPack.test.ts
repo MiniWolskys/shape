@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ShapeError } from '../domain/errors.ts'
 import { createLibrary, createPainting, upsertPainting } from '../domain/library.ts'
 import { createEditLayer } from '../imaging/edits.ts'
 import { createRaster, getPixel } from '../imaging/raster.ts'
@@ -174,5 +175,90 @@ describe('library pack', () => {
   it('refuses a library file that is not JSON', () => {
     const bad = zipDeterministic({ 'shape-library.json': new TextEncoder().encode('{nope') })
     expect(() => readLibraryPack(bad)).toThrow(/library/i)
+  })
+})
+
+describe('library pack checks', () => {
+  async function packWith(edit: (library: Record<string, unknown>) => void) {
+    const { lib, p, assets } = sample()
+    const entries = unzipEntries((await writeLibraryPack(lib, [p.id], assets, now)).bytes)
+    const library = JSON.parse(text(entries['shape-library.json'])) as Record<string, unknown>
+    edit(library)
+    entries['shape-library.json'] = new TextEncoder().encode(JSON.stringify(library))
+    return zipDeterministic(entries)
+  }
+  const firstPainting = (library: Record<string, unknown>) =>
+    (library.paintings as Record<string, unknown>[])[0] ?? {}
+  const failure = (fn: () => unknown) => {
+    try {
+      fn()
+    } catch (e) {
+      return e instanceof ShapeError ? `${e.code}: ${e.message}` : 'other'
+    }
+    return 'no error'
+  }
+
+  it('refuses a painting entry that is not a painting', async () => {
+    const partial = await packWith((l) => {
+      l.paintings = [{ id: 'x', status: 'published' }]
+    })
+    expect(failure(() => readLibraryPack(partial))).toMatch(/^not-a-library-pack: .*painting 0/)
+    const nulls = await packWith((l) => {
+      l.paintings = [null]
+    })
+    expect(failure(() => readLibraryPack(nulls))).toMatch(/^not-a-library-pack: .*painting 0/)
+  })
+
+  it('refuses a bad namespace', async () => {
+    const bad = await packWith((l) => {
+      l.namespace = '../x'
+    })
+    expect(failure(() => readLibraryPack(bad))).toMatch(/^not-a-library-pack: .*namespace/)
+  })
+
+  it('refuses ids that could escape their folder', async () => {
+    const badId = await packWith((l) => {
+      firstPainting(l).id = '../evil'
+    })
+    expect(failure(() => readLibraryPack(badId))).toMatch(/^not-a-library-pack: .*painting 0.*id/)
+    const badImage = await packWith((l) => {
+      const recipe = firstPainting(l).recipe as Record<string, unknown>
+      recipe.source = { imageId: '../img', width: 1, height: 1 }
+    })
+    expect(failure(() => readLibraryPack(badImage))).toMatch(/^not-a-library-pack: .*source/)
+  })
+
+  it('refuses out-of-range fields and repeated ids', async () => {
+    const big = await packWith((l) => {
+      firstPainting(l).width = 17
+    })
+    expect(failure(() => readLibraryPack(big))).toMatch(/painting 0 .*width/)
+    const twice = await packWith((l) => {
+      l.paintings = [firstPainting(l), firstPainting(l)]
+    })
+    expect(failure(() => readLibraryPack(twice))).toMatch(/painting 1 repeats/)
+  })
+
+  it('refuses an image and an edit layer with the same asset name', async () => {
+    const { lib, p, assets } = sample()
+    const entries = unzipEntries((await writeLibraryPack(lib, [p.id], assets, now)).bytes)
+    entries['edits/img1.png'] = entries['images/img1.png'] ?? new Uint8Array()
+    expect(failure(() => readLibraryPack(zipDeterministic(entries)))).toMatch(
+      /^not-a-library-pack: .*img1/,
+    )
+  })
+
+  it('names the painting when a stored picture is damaged during export', async () => {
+    const { lib, p } = sample()
+    const error: unknown = await writeLibraryPack(
+      lib,
+      [p.id],
+      { img1: new Uint8Array([1, 2, 3]) },
+      now,
+    ).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ShapeError)
+    expect(error).toMatchObject({ code: 'export-failed' })
+    expect(String((error as Error).message)).toContain('Sunset')
+    expect(String((error as Error).message)).toContain(p.id)
   })
 })

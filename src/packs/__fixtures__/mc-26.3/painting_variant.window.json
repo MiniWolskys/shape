@@ -1,0 +1,7 @@
+{
+  "asset_id": "tptest:window",
+  "width": 2,
+  "height": 2,
+  "title": { "text": "Stained Window", "color": "yellow" },
+  "author": { "text": "Transparent Paintings test", "color": "gray" }
+}

@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "values": [
+    "tptest:gradient",
+    "tptest:cutout",
+    "tptest:window",
+    "tptest:ghost",
+    "tptest:edges",
+    "tptest:opaque"
+  ]
+}

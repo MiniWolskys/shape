@@ -1,6 +1,14 @@
 import { ShapeError } from '../domain/errors.ts'
+import { isValidNamespace } from '../domain/ids.ts'
 import { exportSet, publish } from '../domain/library.ts'
-import type { Assets, Library, Painting } from '../domain/types.ts'
+import {
+  FRAME_MATERIAL_IDS,
+  MC_COLORS,
+  SHAPE_IDS,
+  type Assets,
+  type Library,
+  type Painting,
+} from '../domain/types.ts'
 import type { EditLayer } from '../imaging/edits.ts'
 import { renderPainting } from '../imaging/pipeline.ts'
 import type { Raster } from '../imaging/raster.ts'
@@ -100,8 +108,18 @@ export async function writeLibraryPack(
 
   const textures: Record<string, Uint8Array> = {}
   for (const p of paintings) {
-    const source = p.recipe.source ? decodeAsset(assets, p.recipe.source.imageId) : null
-    textures[p.id] = encodePng(renderPainting(source, editsFor(p, assets), p))
+    let source: Raster | null
+    let edits: EditLayer | null
+    try {
+      source = p.recipe.source ? decodeAsset(assets, p.recipe.source.imageId) : null
+      edits = editsFor(p, assets)
+    } catch (e) {
+      throw new ShapeError(
+        'export-failed',
+        `The stored picture or pixel edits of painting "${p.title}" (${p.id}) are damaged: ${e instanceof Error ? e.message : String(e)} Choose the picture again, then export.`,
+      )
+    }
+    textures[p.id] = encodePng(renderPainting(source, edits, p))
   }
   const datapack = zipDeterministic(buildDatapackFiles(library, paintings))
   const resources = zipDeterministic(buildResourcePackFiles(library, textures))
@@ -134,6 +152,50 @@ function notALibraryPack(why: string): ShapeError {
   return new ShapeError('not-a-library-pack', `This file is not a Shape library pack (${why}).`)
 }
 
+const PAINTING_ID = /^[a-z0-9_]+$/
+/** Asset ids become zip paths, so only plain file-name characters are accepted. */
+const ASSET_ID = /^[A-Za-z0-9_-]+$/
+const STATUSES = ['draft', 'ready', 'published']
+
+type Json = Record<string, unknown>
+const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v)
+const isIntIn = (v: unknown, min: number, max: number) =>
+  typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
+const isOneOf = (v: unknown, values: readonly string[]) =>
+  typeof v === 'string' && values.includes(v)
+
+/** Returns the first problem with a painting entry, or null when it can be used safely. */
+function paintingProblem(p: unknown): string | null {
+  if (!isObject(p)) return 'is not an object'
+  if (typeof p.id !== 'string' || !PAINTING_ID.test(p.id)) return 'has an invalid id'
+  if (typeof p.title !== 'string') return 'has no title'
+  if (typeof p.author !== 'string') return 'has no author'
+  if (!isOneOf(p.titleColor, MC_COLORS)) return 'has an invalid titleColor'
+  if (!isOneOf(p.authorColor, MC_COLORS)) return 'has an invalid authorColor'
+  if (!isIntIn(p.width, 1, 16)) return 'has an invalid width'
+  if (!isIntIn(p.height, 1, 16)) return 'has an invalid height'
+  if (!isIntIn(p.pixelsPerBlock, 1, 64)) return 'has an invalid pixelsPerBlock'
+  if (!isOneOf(p.status, STATUSES)) return 'has an invalid status'
+  const r = p.recipe
+  if (!isObject(r)) return 'has no recipe'
+  if (!isObject(r.window) || !isOneOf(r.window.shape, SHAPE_IDS)) return 'has an invalid shape'
+  if (!isObject(r.frame) || !isOneOf(r.frame.material, FRAME_MATERIAL_IDS)) {
+    return 'has an invalid frame'
+  }
+  if (r.editsId !== null && (typeof r.editsId !== 'string' || !ASSET_ID.test(r.editsId))) {
+    return 'has an invalid editsId'
+  }
+  if (
+    r.source !== null &&
+    (!isObject(r.source) ||
+      typeof r.source.imageId !== 'string' ||
+      !ASSET_ID.test(r.source.imageId))
+  ) {
+    return 'has an invalid source'
+  }
+  return null
+}
+
 function parseLibrary(bytes: Uint8Array): Library {
   let value: unknown
   try {
@@ -143,9 +205,8 @@ function parseLibrary(bytes: Uint8Array): Library {
       `${LIBRARY_ENTRY} is not valid JSON: ${e instanceof Error ? e.message : String(e)}`,
     )
   }
-  if (typeof value !== 'object' || value === null)
-    throw notALibraryPack(`${LIBRARY_ENTRY} is empty`)
-  const { formatVersion, namespace, name, version, paintings } = value as Record<string, unknown>
+  if (!isObject(value)) throw notALibraryPack(`${LIBRARY_ENTRY} is empty`)
+  const { formatVersion, namespace, name, version, paintings } = value
   if (typeof formatVersion === 'number' && formatVersion > FORMAT_VERSION) {
     throw new ShapeError(
       'newer-format',
@@ -154,14 +215,24 @@ function parseLibrary(bytes: Uint8Array): Library {
   }
   if (
     formatVersion !== FORMAT_VERSION ||
-    typeof namespace !== 'string' ||
     typeof name !== 'string' ||
     typeof version !== 'number' ||
     !Array.isArray(paintings)
   ) {
     throw notALibraryPack(`${LIBRARY_ENTRY} is missing library fields`)
   }
-  return value as Library
+  if (typeof namespace !== 'string' || !isValidNamespace(namespace)) {
+    throw notALibraryPack(`${LIBRARY_ENTRY} has an invalid namespace`)
+  }
+  const seen = new Set<string>()
+  paintings.forEach((p: unknown, i) => {
+    const problem = paintingProblem(p)
+    if (problem) throw notALibraryPack(`painting ${i} ${problem}`)
+    const id = (p as Json).id as string
+    if (seen.has(id)) throw notALibraryPack(`painting ${i} repeats the id ${id}`)
+    seen.add(id)
+  })
+  return value as unknown as Library
 }
 
 /** Reads a library pack back into a library and its assets (images and edit layers only). */
@@ -170,10 +241,13 @@ export function readLibraryPack(bytes: Uint8Array): { library: Library; assets: 
   const json = entries[LIBRARY_ENTRY]
   if (!json) throw notALibraryPack(`there is no ${LIBRARY_ENTRY} inside`)
   const library = parseLibrary(json)
-  const assets: Assets = {}
+  // A Map, so names like "constructor" or "__proto__" are plain keys.
+  const assets = new Map<string, Uint8Array>()
   for (const [path, data] of Object.entries(entries)) {
-    const match = /^(?:images|edits)\/([^/]+)\.png$/.exec(path)
-    if (match?.[1]) assets[match[1]] = data
+    const key = /^(?:images|edits)\/([^/]+)\.png$/.exec(path)?.[1]
+    if (!key) continue
+    if (assets.has(key)) throw notALibraryPack(`two files share the asset name ${key}`)
+    assets.set(key, data)
   }
-  return { library, assets }
+  return { library, assets: Object.fromEntries(assets) }
 }
