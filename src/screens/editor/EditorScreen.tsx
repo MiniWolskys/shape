@@ -250,6 +250,7 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
         (s.library?.paintings.some((p) => p.id === openId) ?? false)),
   )
   const session = useEditor((s) => s.session)
+  const storageFailing = useWorkspace((s) => s.saveError !== null)
   // The editing session whose last save failed: opening another painting forgets it.
   const [failedIn, setFailedIn] = useState<number | null>(null)
   const autosave = useRef<Autosave | null>(null)
@@ -414,7 +415,8 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
   }
 
   let status: SaveStatus = 'saved'
-  if (failedIn === session) status = 'failed'
+  // "Saved" would be untrue while the browser storage refuses the workspace (C1).
+  if (failedIn === session || storageFailing) status = 'failed'
   else if (dirty) status = 'saving'
   else if (!stored) status = 'notSaved'
 

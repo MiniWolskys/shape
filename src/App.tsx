@@ -1,17 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import styles from './App.module.css'
-import { useT } from './i18n/i18n.ts'
+import { format, useT } from './i18n/i18n.ts'
 import { EditorScreen } from './screens/editor/EditorScreen.tsx'
 import { ExportScreen } from './screens/export/ExportScreen.tsx'
 import { HomeScreen } from './screens/home/HomeScreen.tsx'
 import { LibraryScreen } from './screens/library/LibraryScreen.tsx'
 import { AppFileDrop } from './screens/AppFileDrop.tsx'
+import { SaveFailureBanner } from './screens/SaveFailureBanner.tsx'
 import { useEditor } from './state/editor.ts'
 import { startHashRouting, useNavigation, type Screen } from './state/navigation.ts'
 import { useWorkspace } from './state/workspace.ts'
 import { Button } from './ui/Button.tsx'
 import { documentTitle } from './ui/documentTitle.ts'
 import { createScrollMemory, scrollKey } from './ui/scrollMemory.ts'
+import { toast } from './ui/toastStore.ts'
 import { Toasts } from './ui/Toasts.tsx'
 import { TopBar } from './ui/TopBar.tsx'
 
@@ -105,11 +107,23 @@ function useScrollPerScreen(screen: Screen) {
   }, [key])
 }
 
+/** Says once when stored pictures or edit layers were missing at load (I1). */
+function useMissingAssetsNotice() {
+  const t = useT()
+  const missing = useWorkspace((s) => s.missingAssets)
+  useEffect(() => {
+    if (missing === 0) return
+    toast(format(t.startup.missingAssets, { count: missing }), 'error')
+    useWorkspace.setState({ missingAssets: 0 })
+  }, [missing, t])
+}
+
 export function App() {
   const ready = useWorkspace((s) => s.ready)
   const screen = useNavigation((s) => s.screen)
   const [storageFailed, setStorageFailed] = useState(false)
   useDocumentTitle(screen)
+  useMissingAssetsNotice()
 
   // The screen lives in the URL: Back, Forward and reloads follow it (I10).
   useEffect(() => startHashRouting(), [])
@@ -133,6 +147,7 @@ export function App() {
 
   return (
     <>
+      {ready && <SaveFailureBanner />}
       {content}
       <AppFileDrop />
       <Toasts />

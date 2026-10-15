@@ -227,6 +227,17 @@ describe('EditorScreen', () => {
     expect(saveStatus()).toHaveTextContent('Saved')
   })
 
+  it('says Couldn’t save instead of Saved while the browser storage refuses saves (C1)', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    expect(saveStatus()).toHaveTextContent('Saved')
+    act(() => useWorkspace.setState({ saveError: 'storage-failed' }))
+    expect(saveStatus()).toHaveTextContent("Couldn't save")
+    act(() => useWorkspace.setState({ saveError: null }))
+    expect(saveStatus()).toHaveTextContent('Saved')
+  })
+
   it('opens the stored picture and edits', async () => {
     const source = createRaster(6, 6, [10, 20, 30, 255])
     const p = painting({

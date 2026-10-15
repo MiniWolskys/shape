@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type { ShapeErrorCode } from '../domain/errors.ts'
 import { isValidNamespace, makeAssetId, makePaintingId } from '../domain/ids.ts'
 import {
   addLoosePaintings,
@@ -38,9 +37,18 @@ export interface ImportResult {
   sourceNamespace: string
 }
 
+/**
+ * Why the workspace is not being saved (C1): the browser's storage is full, or it refused the
+ * write for another reason (a lost connection, a full disk, a private window's limits).
+ */
+export type SaveError = 'storage-full' | 'storage-failed'
+
 export interface WorkspaceState extends Workspace {
   ready: boolean
-  saveError: ShapeErrorCode | null
+  /** Set while saving to the browser storage fails; the next change tries again (C1). */
+  saveError: SaveError | null
+  /** How many stored pictures or edit layers were missing when the workspace was loaded. */
+  missingAssets: number
   /** The open library is the built-in demo (R23): set by openSampleLibrary, persisted locally. */
   demo: boolean
   /** The demo's sample paintings as built; untouched ones are not counted as unexported. */
@@ -171,9 +179,25 @@ const NO_DEMO = { demo: false, demoIds: [] as string[] }
 
 const allPaintings = (s: Workspace): Painting[] => [...(s.library?.paintings ?? []), ...s.loose]
 
+/** Quota errors carry this name in every browser (DOMException code 22 in older ones). */
+const isQuotaError = (e: unknown) =>
+  e instanceof Error && (e.name === 'QuotaExceededError' || (e as { code?: unknown }).code === 22)
+
+/** Asks the browser not to evict the workspace under storage pressure or after a week (I5). */
+function askToPersist(): void {
+  const storage = typeof navigator === 'undefined' ? undefined : navigator.storage
+  if (typeof storage?.persist !== 'function') return
+  storage.persist().then(
+    (granted) => {
+      if (!granted) console.info('The browser may clear the workspace under storage pressure')
+    },
+    (error: unknown) => console.warn('Could not ask the browser to keep the workspace', error),
+  )
+}
+
 export function createWorkspaceStore(
   initialStorage: WorkspaceStorage,
-  options: { flushOnHide?: boolean } = {},
+  options: { flushOnHide?: boolean; persistStorage?: boolean } = {},
 ) {
   let storage = initialStorage
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -182,6 +206,7 @@ export function createWorkspaceStore(
   let dirty = false
   let initializing: Promise<void> | null = null
   let hideListenersAdded = false
+  let persistAsked = false
 
   const store = create<WorkspaceState>()((set, get) => {
     const freshId = (title: string) => {
@@ -212,12 +237,14 @@ export function createWorkspaceStore(
       try {
         await storage.save({ library, loose, assets, demo, demoIds })
         if (get().saveError !== null) set({ saveError: null })
-      } catch (e) {
-        if (e instanceof Error && e.name === 'QuotaExceededError') {
-          set({ saveError: 'storage-full' })
-        } else {
-          console.error('Autosave failed', e)
+        if (options.persistStorage && !persistAsked) {
+          persistAsked = true
+          askToPersist()
         }
+      } catch (e) {
+        // Never silent (C1): the app shows it until a later save succeeds.
+        console.error('Autosave failed', e)
+        set({ saveError: isQuotaError(e) ? 'storage-full' : 'storage-failed' })
       }
     }
 
@@ -280,6 +307,7 @@ export function createWorkspaceStore(
       assets: {},
       ready: false,
       saveError: null,
+      missingAssets: 0,
       demo: false,
       demoIds: [],
 
@@ -298,6 +326,7 @@ export function createWorkspaceStore(
               assets: loaded?.assets ?? {},
               demo: loaded?.demo ?? false,
               demoIds: loaded?.demoIds ?? [],
+              missingAssets: loaded?.missingAssets ?? 0,
               ready: true,
             })
             startAutosave()
@@ -582,4 +611,7 @@ export function createWorkspaceStore(
 
 export type WorkspaceStore = ReturnType<typeof createWorkspaceStore>
 
-export const useWorkspace: WorkspaceStore = createWorkspaceStore(idbStorage, { flushOnHide: true })
+export const useWorkspace: WorkspaceStore = createWorkspaceStore(idbStorage, {
+  flushOnHide: true,
+  persistStorage: true,
+})

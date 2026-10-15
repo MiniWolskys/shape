@@ -9,6 +9,21 @@ export const fr: Dictionary = {
     storageBody:
       'Shape fonctionne quand même, mais rien ne sera enregistré dans ce navigateur. Téléchargez votre pack de bibliothèque avant de fermer l’onglet.',
     continueWithoutSaving: 'Continuer sans enregistrer',
+    missingAssets:
+      '{count} images ou retouches enregistrées sont introuvables dans ce navigateur. Les tableaux qui ont perdu leur image doivent la recevoir à nouveau.',
+  },
+  saveFailure: {
+    message:
+      'Votre travail n’est pas enregistré : {reason}. Exportez votre pack de bibliothèque pour le garder.',
+    full: 'le stockage du navigateur est plein',
+    failed: 'le navigateur a refusé de l’enregistrer',
+    export: 'Exporter le pack de bibliothèque',
+    retry: 'Réessayer',
+  },
+  otherTab: {
+    title: 'Shape est ouvert dans un autre onglet',
+    body: 'Un seul onglet à la fois peut modifier vos tableaux, pour qu’aucun ne défasse le travail de l’autre. Utilisez Shape ici pour continuer dans cet onglet : l’autre s’arrête.',
+    useHere: 'Utiliser ici',
   },
   common: {
     cancel: 'Annuler',

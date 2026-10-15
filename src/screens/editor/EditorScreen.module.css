@@ -1,8 +1,9 @@
 .page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
+  /* The save failure banner (C1), when shown, sits above the editor. */
+  height: calc(100vh - var(--save-banner-height, 0px));
+  height: calc(100dvh - var(--save-banner-height, 0px));
 }
 
 /* "Editing works best on a computer" (I24), above the editor. */

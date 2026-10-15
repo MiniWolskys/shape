@@ -10,6 +10,20 @@ export const en = {
     storageBody:
       'Shape still works, but nothing you make will be saved in this browser. Download your library pack before you close the tab.',
     continueWithoutSaving: 'Continue without saving',
+    missingAssets:
+      "{count} stored pictures or pixel edits couldn't be found in this browser. Paintings that lost their picture need it chosen again.",
+  },
+  saveFailure: {
+    message: "Your work isn't being saved: {reason}. Export your library pack to keep it.",
+    full: "your browser's storage is full",
+    failed: 'your browser refused to store it',
+    export: 'Export library pack',
+    retry: 'Try again',
+  },
+  otherTab: {
+    title: 'Shape is open in another tab',
+    body: 'Only one tab at a time can change your paintings, so that neither undoes the other. Use Shape here to carry on in this tab: the other one stops.',
+    useHere: 'Use here',
   },
   common: {
     cancel: 'Cancel',

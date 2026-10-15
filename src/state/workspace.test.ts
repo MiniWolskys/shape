@@ -258,6 +258,7 @@ describe('workspace store', () => {
   })
 
   it('sets storage-full on quota errors and clears it after a good save', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
     let fail = true
     const storage: WorkspaceStorage = {
       ...memoryStorage(),
@@ -277,21 +278,56 @@ describe('workspace store', () => {
     s.getState().createPainting()
     await vi.advanceTimersByTimeAsync(600)
     expect(s.getState().saveError).toBeNull()
+    vi.mocked(console.error).mockRestore()
   })
 
-  it('keeps saveError null and logs other save failures', async () => {
+  it('surfaces every other save failure, retries on the next change and clears on success (C1)', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const storage: WorkspaceStorage = {
-      ...memoryStorage(),
-      save: () => Promise.reject(new Error('boom')),
-    }
-    const s = createWorkspaceStore(storage)
+    let fail = true
+    const save = vi.fn(() =>
+      fail
+        ? Promise.reject(new DOMException('Connection lost', 'UnknownError'))
+        : Promise.resolve(),
+    )
+    const s = createWorkspaceStore({ ...memoryStorage(), save })
     await s.getState().init()
     s.getState().createPainting()
     await vi.advanceTimersByTimeAsync(600)
-    expect(s.getState().saveError).toBeNull()
+    expect(s.getState().saveError).toBe('storage-failed')
     expect(log).toHaveBeenCalled()
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(600)
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(s.getState().saveError).toBe('storage-failed')
+    fail = false
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(600)
+    expect(s.getState().saveError).toBeNull()
     log.mockRestore()
+  })
+
+  it('asks the browser once to keep its storage, after the first good save (I5)', async () => {
+    const persist = vi.fn(() => Promise.resolve(true))
+    vi.stubGlobal('navigator', { ...navigator, storage: { persist } })
+    const s = createWorkspaceStore(memoryStorage(), { persistStorage: true })
+    await s.getState().init()
+    expect(persist).not.toHaveBeenCalled()
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(600)
+    s.getState().createPainting()
+    await vi.advanceTimersByTimeAsync(600)
+    expect(persist).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('counts the stored assets that were missing at load (I1)', async () => {
+    const storage = memoryStorage()
+    const s = createWorkspaceStore({
+      ...storage,
+      load: async () => ({ library: null, loose: [], assets: {}, missingAssets: 2 }),
+    })
+    await s.getState().init()
+    expect(s.getState().missingAssets).toBe(2)
   })
 
   it('refuses to delete a published painting', async () => {

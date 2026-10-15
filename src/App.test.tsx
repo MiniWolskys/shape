@@ -1,4 +1,12 @@
-import { act, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.tsx'
@@ -64,6 +72,63 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Continue without saving' }))
     expect(useWorkspace.getState().ready).toBe(true)
     expect(screen.getByRole('button', { name: 'Create a painting' })).toBeInTheDocument()
+  })
+
+  describe('save failures (C1)', () => {
+    const banner = () => screen.queryByText(/Your work isn't being saved/)
+    afterEach(() => useWorkspace.setState({ saveError: null }))
+
+    it('says the work is not being saved until a save succeeds, and offers Export and Retry', async () => {
+      await startWith(createLibrary('Ours', 'ours'))
+      const persistNow = vi.fn(() => Promise.resolve())
+      const realPersistNow = useWorkspace.getState().persistNow
+      useWorkspace.setState({ persistNow })
+      useNavigation.setState({ screen: { name: 'library' } })
+      render(<App />)
+      expect(banner()).not.toBeInTheDocument()
+      act(() => useWorkspace.setState({ saveError: 'storage-full' }))
+      const message = banner()
+      expect(message).toHaveTextContent(
+        "Your work isn't being saved: your browser's storage is full. Export your library pack to keep it.",
+      )
+      const alert = message?.closest('[role="alert"]') as HTMLElement
+      expect(alert).not.toBeNull()
+      // It stays until a save works: nothing closes it.
+      expect(within(alert).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+      await userEvent.click(within(alert).getByRole('button', { name: 'Try again' }))
+      expect(persistNow).toHaveBeenCalledTimes(1)
+      await userEvent.click(within(alert).getByRole('button', { name: 'Export library pack' }))
+      expect(useNavigation.getState().screen).toEqual({ name: 'export' })
+      act(() => useWorkspace.setState({ saveError: null }))
+      expect(banner()).not.toBeInTheDocument()
+      useWorkspace.setState({ persistNow: realPersistNow })
+    })
+
+    it('words other failures, in French too, without Export when there is no library', async () => {
+      await startWith(null as unknown as Library)
+      useNavigation.setState({ screen: { name: 'home' } })
+      render(<App />)
+      act(() => useWorkspace.setState({ saveError: 'storage-failed' }))
+      expect(banner()).toHaveTextContent('your browser refused to store it')
+      expect(screen.queryByRole('button', { name: 'Export library pack' })).not.toBeInTheDocument()
+      act(() => useLanguage.getState().setLanguage('fr'))
+      expect(
+        screen.getByText(/Votre travail n’est pas enregistré.: le navigateur a refusé/),
+      ).toBeInTheDocument()
+      act(() => useLanguage.getState().setLanguage('en'))
+    })
+  })
+
+  it('tells the player when stored pictures were missing at load (I1)', async () => {
+    const storage = memoryStorage()
+    await useWorkspace.getState().init({
+      ...storage,
+      load: async () => ({ library: null, loose: [], assets: {}, missingAssets: 2 }),
+    })
+    render(<App />)
+    expect(
+      await screen.findByText(/2 stored pictures or pixel edits couldn't be found/),
+    ).toBeInTheDocument()
   })
 
   it('routes to the export screen, which sends players without a library home', async () => {
