@@ -51,12 +51,12 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Create a painting' })).toBeInTheDocument()
   })
 
-  it('routes to a placeholder for screens not built yet, with a way back home', async () => {
+  it('routes to the export screen, which sends players without a library home', async () => {
     await useWorkspace.getState().init(memoryStorage())
     useNavigation.setState({ screen: { name: 'export' } })
     render(<App />)
-    expect(screen.getByRole('heading', { name: 'Export' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Back to home' }))
+    expect(await screen.findByText(/Exporting needs a library/)).toBeInTheDocument()
     expect(useNavigation.getState().screen).toEqual({ name: 'home' })
+    expect(screen.getByRole('button', { name: 'Create a painting' })).toBeInTheDocument()
   })
 })

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import styles from './App.module.css'
 import { useT } from './i18n/i18n.ts'
 import { EditorScreen } from './screens/editor/EditorScreen.tsx'
+import { ExportScreen } from './screens/export/ExportScreen.tsx'
 import { HomeScreen } from './screens/home/HomeScreen.tsx'
 import { LibraryScreen } from './screens/library/LibraryScreen.tsx'
 import { useNavigation, type Screen } from './state/navigation.ts'
@@ -39,28 +40,7 @@ function StorageFailure() {
   )
 }
 
-/** Stands in for a screen a later task builds. */
-function Placeholder({ title }: { title: string }) {
-  const t = useT()
-  const go = useNavigation((s) => s.go)
-  return (
-    <div className={styles.page}>
-      <TopBar />
-      <main className={styles.centered}>
-        <div className={styles.notice}>
-          <h1 className={styles.title}>{title}</h1>
-          <p className={styles.body}>{t.placeholder.soon}</p>
-          <Button icon="arrow-left" onClick={() => go({ name: 'home' })}>
-            {t.placeholder.backHome}
-          </Button>
-        </div>
-      </main>
-    </div>
-  )
-}
-
 function Route({ screen }: { screen: Screen }) {
-  const t = useT()
   switch (screen.name) {
     case 'home':
       return <HomeScreen />
@@ -69,7 +49,7 @@ function Route({ screen }: { screen: Screen }) {
     case 'editor':
       return <EditorScreen key={screen.paintingId} paintingId={screen.paintingId} />
     case 'export':
-      return <Placeholder title={t.export.title} />
+      return <ExportScreen />
   }
 }
 
