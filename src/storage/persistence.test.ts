@@ -42,6 +42,18 @@ describe('idbStorage', () => {
     expect((await createIdbStorage().load())?.demoIds).toEqual([])
   })
 
+  it('sweeps asset keys the record does not list, left by a crash mid-save (T7)', async () => {
+    const storage = createIdbStorage()
+    await storage.save(workspace({ a: new Uint8Array([1]) }))
+    await set('shape:assets:orphan', new Uint8Array([9]))
+    await set('shape:language', 'fr')
+    const loaded = await createIdbStorage().load()
+    expect(Object.keys(loaded?.assets ?? {})).toEqual(['a'])
+    expect(await get('shape:assets:orphan')).toBeUndefined()
+    expect(await get('shape:assets:a')).toBeDefined()
+    expect(await get('shape:language')).toBe('fr')
+  })
+
   it('returns null when nothing is stored', async () => {
     expect(await createIdbStorage().load()).toBeNull()
   })
@@ -97,6 +109,7 @@ describe('idbStorage', () => {
     const loaded = await storage.load()
     expect(warn).toHaveBeenCalled()
     expect(loaded?.assets.a).toBeUndefined()
+    expect(loaded?.missingAssets).toBe(1)
     warn.mockRestore()
     await set('unused', 1)
   })
