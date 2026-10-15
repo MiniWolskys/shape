@@ -7,13 +7,14 @@ import { useLanguage } from '../../i18n/i18n.ts'
 import { createEditLayer } from '../../imaging/edits.ts'
 import { createRaster } from '../../imaging/raster.ts'
 import { decodeEditLayer, encodePng } from '../../packs/png.ts'
-import { useEditor } from '../../state/editor.ts'
+import { forgetLastSteps, useEditor } from '../../state/editor.ts'
 import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
 import { useToasts } from '../../ui/toastStore.ts'
 import * as decode from '../../imaging/decode.ts'
+import { AUTOSAVE_MS } from './autosave.ts'
 import { CanvasStage } from './CanvasStage.tsx'
 import { EditorScreen } from './EditorScreen.tsx'
 
@@ -24,10 +25,10 @@ function painting(over: Partial<Painting> = {}): Painting {
   return { ...p, pixelsPerBlock: 4, ...over }
 }
 
-async function startWith(p: Painting, extra: Partial<Workspace> = {}) {
+async function startWith(p: Painting | null, extra: Partial<Workspace> = {}) {
   const storage = memoryStorage()
   await storage.save({
-    library: upsertPainting(createLibrary('Ours', 'ours'), p),
+    library: p ? upsertPainting(createLibrary('Ours', 'ours'), p) : null,
     loose: [],
     assets: {},
     ...extra,
@@ -35,10 +36,17 @@ async function startWith(p: Painting, extra: Partial<Workspace> = {}) {
   await useWorkspace.getState().init(storage)
 }
 
-function renderEditor(id: string) {
+/** The editor as the app shows it: following the route, like App does. */
+function Routed() {
+  const screenNow = useNavigation((s) => s.screen)
+  return screenNow.name === 'editor' ? <EditorScreen paintingId={screenNow.paintingId} /> : null
+}
+
+function renderEditor(id: string | null) {
+  useNavigation.setState({ screen: { name: 'editor', paintingId: id } })
   return render(
     <>
-      <EditorScreen paintingId={id} />
+      <Routed />
       <Toasts />
     </>,
   )
@@ -46,25 +54,35 @@ function renderEditor(id: string) {
 
 const rail = () => screen.getByRole('navigation', { name: 'Steps' })
 const title = () => useEditor.getState().painting?.title
+const openId = () => useEditor.getState().painting?.id
+const saveStatus = () => screen.getByText(/^(Saving…|Saved|Not saved yet|Couldn't save)$/)
+const retitle = (next: string) =>
+  act(() => useEditor.getState().change((q) => ({ ...q, title: next })))
+const allPaintings = () => {
+  const { library, loose } = useWorkspace.getState()
+  return [...(library?.paintings ?? []), ...loose]
+}
 
 describe('EditorScreen', () => {
   beforeEach(() => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     useLanguage.setState({ language: 'en' })
     useToasts.setState({ toasts: [] })
+    forgetLastSteps()
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it('shows the title, size chip and a rail with the five steps', async () => {
+  it('shows the title, size chip, save state and a rail with the five steps', async () => {
     const p = painting()
     await startWith(p)
-    useNavigation.setState({ screen: { name: 'editor', paintingId: p.id } })
     renderEditor(p.id)
     expect(screen.getByRole('heading', { name: 'Sunset Chapel', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('2×3 blocks · 4 px per block')).toBeInTheDocument()
+    expect(saveStatus()).toHaveTextContent('Saved')
+    expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument()
     const steps = within(rail()).getAllByRole('button')
     expect(steps.map((b) => b.textContent)).toEqual([
-      '1Image',
+      '1Image, no picture yet',
       '2Size & crop',
       '3Window & frame',
       '4Colors & pixels',
@@ -89,11 +107,24 @@ describe('EditorScreen', () => {
     expect(screen.getByRole('figure', { name: 'In-game preview' })).toBeInTheDocument()
   })
 
+  it('reopens a painting on the step last used for it (M3)', async () => {
+    const p = painting()
+    await startWith(p)
+    const view = renderEditor(p.id)
+    await userEvent.click(within(rail()).getByRole('button', { name: /Window & frame/ }))
+    view.unmount()
+    renderEditor(p.id)
+    expect(within(rail()).getByRole('button', { name: /Window & frame/ })).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
+  })
+
   it('undoes with Ctrl+Z and redoes with Ctrl+Y and Ctrl+Shift+Z', async () => {
     const p = painting()
     await startWith(p)
     renderEditor(p.id)
-    act(() => useEditor.getState().change((q) => ({ ...q, title: 'Changed' })))
+    retitle('Changed')
     await userEvent.keyboard('{Control>}z{/Control}')
     expect(title()).toBe('Sunset Chapel')
     await userEvent.keyboard('{Control>}y{/Control}')
@@ -107,7 +138,7 @@ describe('EditorScreen', () => {
     const p = painting()
     await startWith(p)
     renderEditor(p.id)
-    act(() => useEditor.getState().change((q) => ({ ...q, title: 'Changed' })))
+    retitle('Changed')
     const input = document.createElement('input')
     input.type = 'text'
     document.body.append(input)
@@ -116,15 +147,17 @@ describe('EditorScreen', () => {
     expect(title()).toBe('Changed')
     await userEvent.keyboard('b')
     expect(useEditor.getState().tool).toBe('pencil')
+    expect(useEditor.getState().step).toBe('image')
     input.remove()
   })
 
-  it('picks tools with their letters outside text inputs', async () => {
+  it('picks tools with their letters and goes to Colors & pixels (M3)', async () => {
     const p = painting()
     await startWith(p)
     renderEditor(p.id)
     await userEvent.keyboard('g')
     expect(useEditor.getState().tool).toBe('fill')
+    expect(useEditor.getState().step).toBe('pixels')
     await userEvent.keyboard('w')
     expect(useEditor.getState().tool).toBe('wand')
   })
@@ -160,7 +193,7 @@ describe('EditorScreen', () => {
     expect(useEditor.getState().painting).toMatchObject({ width: 5, height: 3 })
   })
 
-  it('saves with Ctrl+S: edits go to assets and updatedAt changes', async () => {
+  it('saves at once with Ctrl+S, never letting the browser have it', async () => {
     const p = painting()
     await startWith(p)
     renderEditor(p.id)
@@ -168,13 +201,18 @@ describe('EditorScreen', () => {
     layer.mask[3] = 1
     layer.values.data.set([1, 2, 3, 255], 12)
     act(() => {
-      useEditor.getState().change((q) => ({ ...q, title: 'Renamed' }))
+      useEditor.getState().change((q) => ({ ...q, author: 'Ana' }))
       useEditor.getState().setEdits(layer)
     })
-    await userEvent.keyboard('{Control>}s{/Control}')
+    expect(saveStatus()).toHaveTextContent('Saving…')
+    const event = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, cancelable: true })
+    act(() => {
+      window.dispatchEvent(event)
+    })
+    expect(event.defaultPrevented).toBe(true)
 
     const stored = useWorkspace.getState().findPainting(p.id)
-    expect(stored?.title).toBe('Renamed')
+    expect(stored?.author).toBe('Ana')
     expect(stored?.updatedAt).not.toBe(p.updatedAt)
     const editsId = stored?.recipe.editsId
     expect(editsId).toMatch(/^[A-Za-z0-9_-]+$/)
@@ -183,7 +221,7 @@ describe('EditorScreen', () => {
     const mask = editsId ? assets[`${editsId}.mask`] : undefined
     expect(values && mask && decodeEditLayer(values, mask).mask[3]).toBe(1)
     expect(useEditor.getState().dirty).toBe(false)
-    expect(screen.getByText('Saved')).toBeInTheDocument()
+    expect(saveStatus()).toHaveTextContent('Saved')
   })
 
   it('opens the stored picture and edits', async () => {
@@ -200,46 +238,48 @@ describe('EditorScreen', () => {
     expect(screen.getByText('6×6 px picture')).toBeInTheDocument()
   })
 
-  it('asks before leaving with unsaved changes', async () => {
-    const p = painting()
-    await startWith(p)
-    useNavigation.setState({ screen: { name: 'editor', paintingId: p.id } })
-    renderEditor(p.id)
-    act(() => useEditor.getState().change((q) => ({ ...q, title: 'Changed' })))
-    await userEvent.click(screen.getByRole('button', { name: 'Library' }))
-    const dialog = screen.getByRole('dialog', { name: 'Save your changes?' })
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(useNavigation.getState().screen.name).toBe('editor')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Library' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
-    expect(useNavigation.getState().screen).toEqual({ name: 'library' })
-    expect(useWorkspace.getState().findPainting(p.id)?.title).toBe('Sunset Chapel')
-  })
-
-  it('saves and leaves from the unsaved-changes dialog', async () => {
+  it('Back saves what is pending and goes to the library, without asking', async () => {
     const p = painting()
     await startWith(p)
     renderEditor(p.id)
-    act(() => useEditor.getState().change((q) => ({ ...q, title: 'Changed' })))
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
     await userEvent.click(screen.getByRole('button', { name: 'Library' }))
-    const dialog = screen.getByRole('dialog', { name: 'Save your changes?' })
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
-    expect(useWorkspace.getState().findPainting(p.id)?.title).toBe('Changed')
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
   })
 
-  it('warns before unloading the page while there are unsaved changes', async () => {
+  it('the logo saves what is pending and goes home (M14)', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+    await userEvent.click(screen.getByRole('button', { name: 'Shape · Home' }))
+    expect(useNavigation.getState().screen).toEqual({ name: 'home' })
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+  })
+
+  it('saves when the page is hidden, and asks before unloading only with changes pending', async () => {
     const p = painting()
     await startWith(p)
     renderEditor(p.id)
     const clean = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(clean)
     expect(clean.defaultPrevented).toBe(false)
-    act(() => useEditor.getState().change((q) => ({ ...q, title: 'Changed' })))
-    const dirty = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(dirty)
-    expect(dirty.defaultPrevented).toBe(true)
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+    const pending = new Event('beforeunload', { cancelable: true })
+    act(() => {
+      window.dispatchEvent(pending)
+    })
+    expect(pending.defaultPrevented).toBe(true)
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Bo' })))
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Bo')
   })
 
   it('goes to the library with a message when the painting does not exist', async () => {
@@ -248,6 +288,7 @@ describe('EditorScreen', () => {
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
     expect(screen.getByText("This painting doesn't exist anymore.")).toBeInTheDocument()
   })
+
   it('saves no edits after undoing them, so reopening shows none', async () => {
     const p = painting()
     await startWith(p)
@@ -287,18 +328,17 @@ describe('EditorScreen', () => {
     expect(ids()).not.toContain('orphan')
   })
 
-  it('leaving the editor drops pictures that were never saved', async () => {
+  it('leaving drops a picture that was undone before it was saved', async () => {
     const p = painting()
     await startWith(p)
-    const view = renderEditor(p.id)
+    renderEditor(p.id)
     act(() => {
       const id = useWorkspace.getState().putAsset(encodePng(createRaster(4, 4)))
       useEditor.getState().setSource(createRaster(4, 4), id)
+      useEditor.getState().undo()
     })
     expect(Object.keys(useWorkspace.getState().assets)).toHaveLength(1)
     await userEvent.click(screen.getByRole('button', { name: 'Library' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
-    view.unmount()
     expect(useWorkspace.getState().assets).toEqual({})
   })
 
@@ -312,18 +352,6 @@ describe('EditorScreen', () => {
     await userEvent.unhover(grid)
     expect(useEditor.getState().painting).toMatchObject({ width: 5, height: 4 })
     expect(screen.getByText('5 × 4 blocks', { selector: 'p' })).toBeInTheDocument()
-  })
-
-  it('keeps Ctrl+S from reaching the browser while a dialog is open', async () => {
-    const p = painting()
-    await startWith(p)
-    renderEditor(p.id)
-    act(() => useEditor.getState().change((q) => ({ ...q, title: 'Changed' })))
-    await userEvent.click(screen.getByRole('button', { name: 'Library' }))
-    const event = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, cancelable: true })
-    window.dispatchEvent(event)
-    expect(event.defaultPrevented).toBe(true)
-    expect(useWorkspace.getState().findPainting(p.id)?.title).toBe('Sunset Chapel')
   })
 
   it('drops a picture that finishes loading after another painting was opened', async () => {
@@ -346,6 +374,156 @@ describe('EditorScreen', () => {
     expect(useWorkspace.getState().assets).toEqual({})
     expect(useEditor.getState().painting?.recipe.source).toBeNull()
   })
+
+  it('sizes a new painting to its first picture and offers to change it (R20)', async () => {
+    await startWith(null)
+    vi.spyOn(decode, 'fileToRaster').mockResolvedValue(createRaster(400, 300))
+    renderEditor(null)
+    const input = screen.getByLabelText('Choose a picture')
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'a.png')] })
+    await act(async () => {
+      fireEvent.change(input)
+    })
+    expect(useEditor.getState().painting).toMatchObject({ width: 4, height: 3 })
+    expect(screen.getByText('Sized to 4×3 blocks to fit your picture')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Change' }))
+    expect(useEditor.getState().step).toBe('size')
+  })
+
+  it('says the crop was recentred after a turn, and Undo brings it back (M13)', async () => {
+    const p = painting({
+      recipe: {
+        ...painting().recipe,
+        source: { imageId: 'pic', width: 20, height: 30 },
+        crop: { x: 2, y: 3, width: 8, height: 12 },
+      },
+    })
+    await startWith(p, { assets: { pic: encodePng(createRaster(20, 30)) } })
+    renderEditor(p.id)
+    await userEvent.click(screen.getByRole('button', { name: 'Rotate right' }))
+    expect(useEditor.getState().painting?.recipe.crop.width).toBe(0)
+    const note = screen.getByText('Crop recentred').parentElement as HTMLElement
+    await userEvent.click(within(note).getByRole('button', { name: 'Undo' }))
+    expect(useEditor.getState().painting?.recipe).toMatchObject({
+      rotation: 0,
+      crop: { x: 2, y: 3, width: 8, height: 12 },
+    })
+  })
+
+  it('says nothing when the crop was the centred one anyway', async () => {
+    const p = painting({
+      recipe: { ...painting().recipe, source: { imageId: 'pic', width: 20, height: 30 } },
+    })
+    await startWith(p, { assets: { pic: encodePng(createRaster(20, 30)) } })
+    renderEditor(p.id)
+    await userEvent.click(screen.getByRole('button', { name: 'Flip horizontally' }))
+    expect(screen.queryByText('Crop recentred')).not.toBeInTheDocument()
+  })
+})
+
+describe('EditorScreen autosave (R19) and new paintings (R18)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    useLanguage.setState({ language: 'en' })
+    useToasts.setState({ toasts: [] })
+    forgetLastSteps()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+
+  it('saves a change on its own after a short pause, and says so', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+    expect(saveStatus()).toHaveTextContent('Saving…')
+    await wait(AUTOSAVE_MS - 1)
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('')
+    await wait(1)
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+    expect(saveStatus()).toHaveTextContent('Saved')
+  })
+
+  it('waits for a held pointer to be released before saving', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    fireEvent.pointerDown(window)
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+    await wait(AUTOSAVE_MS * 3)
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('')
+    fireEvent.pointerUp(window)
+    await wait(AUTOSAVE_MS)
+    expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+  })
+
+  it('a new title gives an unpublished painting a new id, and the editor follows it (R17)', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    const suffix = p.id.slice(-3)
+    retitle('Rosace du soir')
+    await wait(AUTOSAVE_MS)
+    const id = `rosace_du_soir_${suffix}`
+    expect(openId()).toBe(id)
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: id })
+    expect(allPaintings().map((q) => [q.id, q.title])).toEqual([[id, 'Rosace du soir']])
+    expect(screen.getByRole('heading', { name: 'Rosace du soir', level: 1 })).toBeInTheDocument()
+
+    // Undo stays in the session; saving the older title moves the id back.
+    act(() => useEditor.getState().undo())
+    expect(title()).toBe('Sunset Chapel')
+    await wait(AUTOSAVE_MS)
+    expect(allPaintings().map((q) => q.id)).toEqual([p.id])
+    expect(openId()).toBe(p.id)
+  })
+
+  it('keeps the id of a published painting when its title changes', async () => {
+    const p = painting({ status: 'published', publishedIn: 1 })
+    await startWith(p)
+    renderEditor(p.id)
+    retitle('Rosace du soir')
+    await wait(AUTOSAVE_MS)
+    expect(allPaintings().map((q) => [q.id, q.title])).toEqual([[p.id, 'Rosace du soir']])
+  })
+
+  it('a new painting is not saved until it changes, and leaving it leaves nothing', async () => {
+    await startWith(null)
+    renderEditor(null)
+    expect(saveStatus()).toHaveTextContent('Not saved yet')
+    await wait(AUTOSAVE_MS * 2)
+    expect(allPaintings()).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Library' }))
+    expect(allPaintings()).toEqual([])
+    expect(useWorkspace.getState().assets).toEqual({})
+  })
+
+  it('a new painting enters the workspace on its first change, named after its title', async () => {
+    await startWith(painting())
+    renderEditor(null)
+    const draftId = openId() ?? ''
+    retitle('Night Rose')
+    await wait(AUTOSAVE_MS)
+    const id = openId()
+    expect(id).toBe(`night_rose_${draftId.slice(-3)}`)
+    // A library is open: the new painting goes into it, after the others.
+    expect(useWorkspace.getState().library?.paintings.map((q) => q.id)).toEqual([painting().id, id])
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: id })
+    expect(saveStatus()).toHaveTextContent('Saved')
+  })
+
+  it('without a library a new painting becomes a loose one', async () => {
+    await startWith(null)
+    renderEditor(null)
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+    await wait(AUTOSAVE_MS)
+    expect(useWorkspace.getState().loose.map((q) => q.author)).toEqual(['Ana'])
+  })
 })
 
 describe('CanvasStage', () => {
@@ -355,8 +533,11 @@ describe('CanvasStage', () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
+  const withPicture = () =>
+    painting({ recipe: { ...painting().recipe, source: { imageId: 'pic', width: 8, height: 12 } } })
+
   it('ends a stroke with up when the pointer capture is lost', () => {
-    useEditor.getState().open(painting(), null, null)
+    useEditor.getState().open(withPicture(), createRaster(8, 12), null)
     const onPixel = vi.fn()
     render(<CanvasStage onPixel={onPixel} />)
     const surface = screen.getByRole('img', { name: 'The painting' }).parentElement as HTMLElement
@@ -367,7 +548,7 @@ describe('CanvasStage', () => {
   })
 
   it('makes separate drags separate undo steps', () => {
-    useEditor.getState().open(painting(), null, null)
+    useEditor.getState().open(withPicture(), createRaster(8, 12), null)
     render(<CanvasStage onPixel={() => {}} />)
     const surface = screen.getByRole('img', { name: 'The painting' }).parentElement as HTMLElement
     const brighten = (brightness: number) =>
@@ -384,5 +565,24 @@ describe('CanvasStage', () => {
     act(() => brighten(20))
     fireEvent.pointerUp(surface, { pointerId: 1 })
     expect(useEditor.getState().past).toHaveLength(2)
+  })
+
+  it('without a picture shows a card to add one instead of the painting (I5)', async () => {
+    useEditor.getState().open(painting(), null, null)
+    let finish: (r: ReturnType<typeof createRaster>) => void = () => {}
+    vi.spyOn(decode, 'fileToRaster').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    render(<CanvasStage />)
+    expect(screen.queryByRole('img', { name: 'The painting' })).not.toBeInTheDocument()
+    const card = screen.getByRole('region', { name: 'Drop, paste or choose a picture' })
+    expect(within(card).getByRole('button', { name: 'Browse files' })).toBeInTheDocument()
+    fireEvent.drop(card, {
+      dataTransfer: { files: [new File(['x'], 'a.png', { type: 'image/png' })], types: ['Files'] },
+    })
+    await act(async () => finish(createRaster(4, 4)))
+    expect(useEditor.getState().painting?.recipe.source).not.toBeNull()
   })
 })

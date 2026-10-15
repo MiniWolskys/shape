@@ -71,9 +71,9 @@ export function LibraryScreen() {
   const visible = paintings.filter((p) => FILTERS[filter](p) && matches(p, query))
   const newCount = library ? library.paintings.filter(FILTERS.new).length : 0
 
+  /** A new painting only enters the workspace once it is changed (R18). */
   function createPainting() {
-    const paintingId = useWorkspace.getState().createPainting()
-    go({ name: 'editor', paintingId })
+    go({ name: 'editor', paintingId: null })
   }
 
   async function openPack(file: File) {

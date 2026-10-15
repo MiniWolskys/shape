@@ -3,7 +3,8 @@ import { create } from 'zustand'
 export type Screen =
   | { name: 'home' }
   | { name: 'library' }
-  | { name: 'editor'; paintingId: string }
+  /** `paintingId: null` is a new painting, not in the workspace until its first change (R18). */
+  | { name: 'editor'; paintingId: string | null }
   | { name: 'export' }
 
 interface NavigationState {

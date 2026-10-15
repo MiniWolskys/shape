@@ -306,12 +306,12 @@ describe('LibraryScreen', () => {
     expect(useNavigation.getState().screen).toEqual({ name: 'home' })
   })
 
-  it('creates a new painting and opens it in the editor', async () => {
+  it('opens a new painting in the editor without adding it yet (R18)', async () => {
     await startWith({ library: library(sample()), loose: [], assets: {} })
     renderLibrary()
+    const before = useWorkspace.getState().library?.paintings.length
     await userEvent.click(screen.getByRole('button', { name: 'New painting' }))
-    const screenNow = useNavigation.getState().screen
-    expect(screenNow.name).toBe('editor')
-    expect(useWorkspace.getState().library?.paintings).toHaveLength(5)
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: null })
+    expect(useWorkspace.getState().library?.paintings).toHaveLength(before ?? -1)
   })
 })

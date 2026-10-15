@@ -64,6 +64,16 @@
   color: var(--accent-ink);
 }
 
+/* Image without a picture: a warning dot after its name. */
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
 .hint {
   margin: 0;
   padding: 0 10px;

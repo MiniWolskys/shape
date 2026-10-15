@@ -82,12 +82,11 @@ describe('HomeScreen', () => {
     expect(screen.getByRole('img', { name: /Gothic arch · 3×4 blocks/ })).toBeInTheDocument()
   })
 
-  it('creates a loose painting and opens it in the editor', async () => {
+  it('opens a new painting in the editor without adding it yet (R18)', async () => {
     renderHome()
     await userEvent.click(screen.getByRole('button', { name: 'Create a painting' }))
-    const { loose } = useWorkspace.getState()
-    expect(loose).toHaveLength(1)
-    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: loose[0]?.id })
+    expect(useWorkspace.getState().loose).toHaveLength(0)
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: null })
   })
 
   it('shows a translated error when the dropped file is not a library pack', async () => {

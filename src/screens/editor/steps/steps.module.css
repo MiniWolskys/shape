@@ -174,3 +174,13 @@
   color: var(--warn);
   font-size: 12.5px;
 }
+
+.number[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.invalid {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}

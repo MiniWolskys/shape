@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -15,10 +16,13 @@ import { useEditor, type BackdropChoice, type CanvasView } from '../../state/edi
 import { useRenderedPainting } from '../../state/useRenderedPainting.ts'
 import { autoBackdrop, type BackdropKind } from '../../ui/backdrop.ts'
 import { Backdrop } from '../../ui/Backdrop.tsx'
+import { Button } from '../../ui/Button.tsx'
+import { FileDrop } from '../../ui/FileDrop.tsx'
 import { Icon } from '../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
 import { Segmented } from '../../ui/Segmented.tsx'
 import styles from './CanvasStage.module.css'
+import { IMAGE_TYPES, loadPicture } from './pictureActions.ts'
 
 export type PixelPhase = 'down' | 'move' | 'up'
 
@@ -104,6 +108,8 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
   const backdrop = useEditor((s) => s.backdrop)
   const zoom = useEditor((s) => s.zoom)
   const showGrid = useEditor((s) => s.showGrid)
+  // Nothing to show yet: no picture and no pixels painted (I5).
+  const empty = useEditor((s) => s.painting?.recipe.source === null && s.edits === null)
   const rendered = useRenderedPainting()
   const area = useRef<HTMLDivElement>(null)
   const box = useBoxSize(area)
@@ -247,6 +253,8 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
         })
       : null
 
+  if (empty) return <EmptyStage />
+
   return (
     <section className={styles.stage} aria-label={t.editor.viewLabel}>
       <div className={styles.toolbar}>
@@ -334,5 +342,61 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
         {footer}
       </p>
     </section>
+  )
+}
+
+/**
+ * The stage of a painting without a picture: one card asking for one. The whole stage takes a
+ * click (to browse) or a dropped picture; pasting works while focus is inside.
+ */
+function EmptyStage() {
+  const t = useT()
+  const fileInput = useRef<HTMLInputElement>(null)
+  const titleId = useId()
+  const browse = () => fileInput.current?.click()
+
+  return (
+    <div className={styles.stage} data-empty="">
+      <FileDrop
+        accept={IMAGE_TYPES}
+        onFiles={([file]) => {
+          if (file) void loadPicture(file)
+        }}
+      >
+        <section className={styles.empty} aria-labelledby={titleId} onClick={browse}>
+          <div className={styles.emptyCard}>
+            <Icon name="image" size={40} />
+            <h2 id={titleId} className={styles.emptyTitle}>
+              {t.editor.empty.title}
+            </h2>
+            <p className={styles.emptyHint}>{t.editor.empty.hint}</p>
+            <Button
+              variant="primary"
+              icon="image"
+              onClick={(event) => {
+                // The stage around opens the same picker.
+                event.stopPropagation()
+                browse()
+              }}
+            >
+              {t.editor.image.browse}
+            </Button>
+          </div>
+          <input
+            ref={fileInput}
+            type="file"
+            accept={IMAGE_TYPES}
+            hidden
+            aria-label={t.editor.image.browse}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              const [file] = Array.from(event.target.files ?? [])
+              event.target.value = ''
+              if (file) void loadPicture(file)
+            }}
+          />
+        </section>
+      </FileDrop>
+    </div>
   )
 }

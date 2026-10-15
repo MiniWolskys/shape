@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { makeAssetId } from '../../domain/ids.ts'
-import { updatePainting } from '../../domain/library.ts'
+import { retitlePainting, updatePainting } from '../../domain/library.ts'
 import type { Assets, Painting } from '../../domain/types.ts'
 import { format, useT } from '../../i18n/i18n.ts'
 import type { Dictionary } from '../../i18n/en.ts'
@@ -11,10 +11,10 @@ import { useEditor, type EditorStep, type Tool } from '../../state/editor.ts'
 import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
-import { Dialog } from '../../ui/Dialog.tsx'
 import { errorMessage } from '../../ui/errors.ts'
 import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
+import { startAutosave, type Autosave } from './autosave.ts'
 import { CanvasStage } from './CanvasStage.tsx'
 import styles from './EditorScreen.module.css'
 import { StepRail } from './StepRail.tsx'
@@ -111,11 +111,30 @@ function decodeEdits(p: Painting, assets: Assets, t: Dictionary): EditLayer | nu
   }
 }
 
-/** Writes the editor's painting and edit layer to the workspace; returns the saved painting. */
+/**
+ * The id the painting has once saved. While unpublished it follows the title (R17): a stored
+ * painting is retitled in the workspace; a new one enters it under an id made from its title.
+ */
+function idForTitle(p: Painting): string {
+  const workspace = useWorkspace.getState()
+  const stored = workspace.findPainting(p.id)
+  if (stored) return stored.title === p.title ? p.id : workspace.retitlePainting(p.id, p.title)
+  // A new painting's id was made for an empty title.
+  if (p.title === '') return p.id
+  const { library, loose } = workspace
+  const taken = new Set([...(library?.paintings ?? []), ...loose].map((q) => q.id))
+  return retitlePainting(p, p.title, taken, new Date(), Math.random).id
+}
+
+/**
+ * Writes the editor's painting and edit layer to the workspace (adding a new painting on its
+ * first save, R18); returns the saved painting. The route follows a new id.
+ */
 function savePaintingNow(): Painting | null {
   const { painting, edits } = useEditor.getState()
   if (!painting) return null
   const workspace = useWorkspace.getState()
+  const id = idForTitle(painting)
   // No edits (none made, or all undone) means no edit assets: the old ones get pruned below,
   // unless they could not be read, in which case they stay untouched.
   const hasEdits = edits !== null && !isEmptyLayer(edits)
@@ -132,10 +151,23 @@ function savePaintingNow(): Painting | null {
     // New edits replaced the unreadable ones.
     unreadableEditsId = null
   }
-  const saved = updatePainting(painting, { recipe: { ...painting.recipe, editsId } }, new Date())
+  const saved = updatePainting(
+    { ...painting, id },
+    { recipe: { ...painting.recipe, editsId } },
+    new Date(),
+  )
   workspace.savePainting(saved)
   useEditor.getState().markSaved(saved)
   workspace.pruneUnreferencedAssets(historyPictureIds())
+  const navigation = useNavigation.getState()
+  const { screen } = navigation
+  if (
+    screen.name === 'editor' &&
+    screen.paintingId !== id &&
+    (screen.paintingId === null || screen.paintingId === painting.id)
+  ) {
+    navigation.go({ name: 'editor', paintingId: id })
+  }
   return saved
 }
 
@@ -147,7 +179,9 @@ function historyPictureIds(): string[] {
   return paintings.flatMap((p) => (p.recipe.source ? [p.recipe.source.imageId] : []))
 }
 
-export function EditorScreen({ paintingId }: { paintingId: string }) {
+type SaveStatus = 'saving' | 'saved' | 'notSaved' | 'failed'
+
+export function EditorScreen({ paintingId }: { paintingId: string | null }) {
   const t = useT()
   const go = useNavigation((s) => s.go)
   const painting = useEditor((s) => s.painting)
@@ -155,7 +189,17 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
   const dirty = useEditor((s) => s.dirty)
   const canUndo = useEditor((s) => s.past.length > 0)
   const canRedo = useEditor((s) => s.future.length > 0)
-  const [leaving, setLeaving] = useState(false)
+  const openId = painting?.id
+  const stored = useWorkspace(
+    (s) =>
+      openId !== undefined &&
+      (s.loose.some((p) => p.id === openId) ||
+        (s.library?.paintings.some((p) => p.id === openId) ?? false)),
+  )
+  const session = useEditor((s) => s.session)
+  // The editing session whose last save failed: opening another painting forgets it.
+  const [failedIn, setFailedIn] = useState<number | null>(null)
+  const autosave = useRef<Autosave | null>(null)
 
   // The dictionary is read when opening, but a language change must not reopen the painting.
   const tRef = useRef(t)
@@ -163,56 +207,98 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
     tRef.current = t
   })
 
+  /** Saves now; a failure is shown, and the next change tries again. */
+  const save = useRef(() => {})
+  useEffect(() => {
+    save.current = () => {
+      try {
+        savePaintingNow()
+        setFailedIn(null)
+      } catch (error) {
+        setFailedIn(useEditor.getState().session)
+        toast(errorMessage(error, tRef.current), 'error')
+      }
+    }
+  })
+
+  // Opens the painting the route names, unless it is the open one under a new id (R17).
   useEffect(() => {
     const t = tRef.current
+    const editor = useEditor.getState()
+    if (paintingId !== null && editor.painting?.id === paintingId) return
+    // Another painting takes the open one's place: that one is saved first.
+    autosave.current?.flush()
     const workspace = useWorkspace.getState()
-    const p = workspace.findPainting(paintingId)
     unreadableEditsId = null
+    if (paintingId === null) {
+      editor.open(workspace.draftPainting(), null, null)
+      return
+    }
+    const p = workspace.findPainting(paintingId)
     if (!p) {
       toast(t.editor.notFound, 'error')
       go({ name: 'library' })
       return
     }
-    useEditor
-      .getState()
-      .open(p, decodeSource(p, workspace.assets, t), decodeEdits(p, workspace.assets, t))
+    editor.open(p, decodeSource(p, workspace.assets, t), decodeEdits(p, workspace.assets, t))
+  }, [paintingId, go])
+
+  // Autosave (R19) while the editor is shown; leaving saves what is pending.
+  useEffect(() => {
+    const running = startAutosave(() => save.current())
+    autosave.current = running
     return () => {
+      running.flush()
+      running.stop()
+      autosave.current = null
       unreadableEditsId = null
       useEditor.getState().close()
       // Pictures chosen but never saved are not needed once the editor is gone.
       useWorkspace.getState().pruneUnreferencedAssets()
     }
-  }, [paintingId, go])
+  }, [])
 
-  function save(): boolean {
-    try {
-      savePaintingNow()
-      toast(t.common.saved)
-      return true
-    } catch (error) {
-      toast(errorMessage(error, t), 'error')
-      return false
-    }
-  }
-
-  const saveRef = useRef(save)
+  // Hiding or closing the page saves at once and writes the workspace to storage.
   useEffect(() => {
-    saveRef.current = save
-  })
+    function flushToStorage() {
+      autosave.current?.flush()
+      void useWorkspace.getState().persistNow()
+    }
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') flushToStorage()
+    }
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      const pending = useEditor.getState().dirty
+      flushToStorage()
+      if (!pending) return
+      // The browser asks before leaving, which gives the storage time to finish.
+      event.preventDefault()
+      // Older browsers need returnValue set to show their prompt.
+      event.returnValue = ''
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', flushToStorage)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', flushToStorage)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  }, [])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing) return
       const key = event.key.toLowerCase()
       const mod = event.ctrlKey || event.metaKey
-      const dialogOpen = document.querySelector('dialog[open]') !== null
       if (mod && !event.altKey && key === 's') {
-        // Never let the browser's own Save dialog open, even while ours is showing.
+        // Never let the browser's own Save dialog open: Ctrl+S saves at once.
         event.preventDefault()
-        if (!dialogOpen) saveRef.current()
+        autosave.current?.flush()
+        void useWorkspace.getState().persistNow()
         return
       }
-      if (dialogOpen) return
+      if (document.querySelector('dialog[open]') !== null) return
       const editor = useEditor.getState()
       if (isTextEntry(event.target)) return
       if (mod && !event.altKey) {
@@ -229,36 +315,27 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
       }
       if (event.altKey || event.shiftKey) return
       const tool = TOOL_KEYS[key]
-      if (tool) editor.setTool(tool)
+      if (!tool) return
+      // The tools live on Colors & pixels: their keys go there (M3).
+      editor.setTool(tool)
+      if (editor.step !== 'pixels') editor.setStep('pixels')
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [saveRef])
+  }, [])
 
-  useEffect(() => {
-    if (!dirty) return
-    function onBeforeUnload(event: BeforeUnloadEvent) {
-      event.preventDefault()
-      // Older browsers need returnValue set to show their prompt.
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [dirty])
+  if (!painting) return null
 
-  if (!painting || painting.id !== paintingId) return null
-
-  function back() {
-    if (useEditor.getState().dirty) setLeaving(true)
-    else go({ name: 'library' })
+  /** Back and the logo save what is pending, then leave (M14). */
+  function leave(to: 'library' | 'home') {
+    autosave.current?.flush()
+    go({ name: to })
   }
 
-  function saveAndLeave() {
-    if (save()) {
-      setLeaving(false)
-      go({ name: 'library' })
-    }
-  }
+  let status: SaveStatus = 'saved'
+  if (failedIn === session) status = 'failed'
+  else if (dirty) status = 'saving'
+  else if (!stored) status = 'notSaved'
 
   const { Panel, Stage = DefaultStage } = STEP_VIEWS[step]
   const title = painting.title || t.library.untitled
@@ -266,9 +343,10 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
   return (
     <div className={styles.page}>
       <TopBar
+        onHome={() => leave('home')}
         left={
           <div className={styles.heading}>
-            <Button variant="ghost" icon="arrow-left" onClick={back}>
+            <Button variant="ghost" icon="arrow-left" onClick={() => leave('library')}>
               {t.editor.backToLibrary}
             </Button>
             <h1 className={styles.title}>{title}</h1>
@@ -278,6 +356,9 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
                 height: painting.height,
                 ppb: painting.pixelsPerBlock,
               })}
+            </span>
+            <span className={styles.status} data-status={status} role="status">
+              {t.editor.saveStatus[status]}
             </span>
           </div>
         }
@@ -299,9 +380,6 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
             >
               <span className={styles.narrowHidden}>{t.editor.redo}</span>
             </Button>
-            <Button variant="primary" onClick={() => save()}>
-              {t.editor.savePainting}
-            </Button>
           </div>
         }
       />
@@ -312,32 +390,6 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
           <Panel />
         </aside>
       </div>
-
-      <Dialog
-        open={leaving}
-        title={t.editor.unsavedTitle}
-        onClose={() => setLeaving(false)}
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setLeaving(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button
-              onClick={() => {
-                setLeaving(false)
-                go({ name: 'library' })
-              }}
-            >
-              {t.editor.discard}
-            </Button>
-            <Button variant="primary" onClick={saveAndLeave}>
-              {t.common.save}
-            </Button>
-          </>
-        }
-      >
-        <p className={styles.warning}>{t.editor.unsavedBody}</p>
-      </Dialog>
     </div>
   )
 }

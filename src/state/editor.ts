@@ -53,6 +53,12 @@ export interface EditorState {
   past: Snapshot[]
   future: Snapshot[]
   dirty: boolean
+  /**
+   * Changes every time a painting is opened or closed: work that finishes later (a picture
+   * being decoded) checks it still belongs to the same editing session. Ids can't tell, since a
+   * save may give the open painting a new id.
+   */
+  session: number
   open(p: Painting, source: Raster | null, edits: EditLayer | null): void
   /** Forgets the open painting and its history (when the editor screen goes away). */
   close(): void
@@ -268,6 +274,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     past: [],
     future: [],
     dirty: false,
+    session: 0,
 
     open(p, source, edits) {
       rasters = new Map()
@@ -281,6 +288,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         source,
         edits,
         step: lastSteps.get(p.id) ?? 'image',
+        session: get().session + 1,
         view: 'edit',
         zoom: 0,
         selection: null,
@@ -298,6 +306,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         painting: null,
         source: null,
         edits: null,
+        session: get().session + 1,
         selection: null,
         past: [],
         future: [],

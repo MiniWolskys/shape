@@ -1,20 +1,14 @@
 import { useId, useRef } from 'react'
 import type { Recipe } from '../../../domain/types.ts'
 import { format, useT } from '../../../i18n/i18n.ts'
-import { fileToRaster } from '../../../imaging/decode.ts'
-import { encodePng } from '../../../packs/png.ts'
 import { NO_CROP, useEditor } from '../../../state/editor.ts'
-import { useWorkspace } from '../../../state/workspace.ts'
 import { Button } from '../../../ui/Button.tsx'
-import { errorMessage } from '../../../ui/errors.ts'
 import { FileDrop } from '../../../ui/FileDrop.tsx'
 import { Icon, type IconName } from '../../../ui/Icon.tsx'
 import { Segmented } from '../../../ui/Segmented.tsx'
 import { Slider } from '../../../ui/Slider.tsx'
-import { toast } from '../../../ui/toastStore.ts'
+import { IMAGE_TYPES, loadPicture, noticeCropReset } from '../pictureActions.ts'
 import styles from './steps.module.css'
-
-const IMAGE_TYPES = 'image/*'
 
 type Adjust = Recipe['adjust']
 type McLook = Recipe['mcLook']
@@ -29,9 +23,12 @@ function patchRecipe(patch: (r: Recipe) => Partial<Recipe>, merge?: string) {
 /** A slider drag ends on pointer up: the next drag is its own undo step. */
 const endGesture = () => useEditor.getState().endGesture()
 
-/** A new rotation or flip leaves the crop meaningless: it goes back to the centred crop. */
+/**
+ * A new rotation or flip leaves the crop meaningless: it goes back to the centred crop, and a
+ * crop the player had set is announced with Undo (M13).
+ */
 function turn(patch: (r: Recipe) => Partial<Recipe>) {
-  patchRecipe((r) => ({ ...patch(r), crop: { ...NO_CROP } }))
+  noticeCropReset(() => patchRecipe((r) => ({ ...patch(r), crop: { ...NO_CROP } })))
 }
 
 export function ImageStep() {
@@ -41,19 +38,6 @@ export function ImageStep() {
   const id = useId()
   if (!recipe) return null
   const { source, adjust, mcLook } = recipe
-
-  async function loadPicture(file: File) {
-    // Decoding takes a while: the result only belongs to the painting that asked for it.
-    const forPainting = useEditor.getState().painting?.id
-    try {
-      const raster = await fileToRaster(file)
-      if (useEditor.getState().painting?.id !== forPainting) return
-      const imageId = useWorkspace.getState().putAsset(encodePng(raster))
-      useEditor.getState().setSource(raster, imageId)
-    } catch (error) {
-      toast(errorMessage(error, t), 'error')
-    }
-  }
 
   const setAdjust = (key: keyof Adjust) => (value: number) =>
     patchRecipe((r) => ({ adjust: { ...r.adjust, [key]: value } }), `adjust.${key}`)

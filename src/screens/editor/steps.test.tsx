@@ -426,7 +426,7 @@ describe('editor steps', () => {
       expect(useEditor.getState().painting?.title).toBe('Night Rose')
     })
 
-    it('sets author, colours and status, and shows the ID read-only', async () => {
+    it('sets author and colours, and includes the painting in exports with a switch (R16)', async () => {
       const p = flatPainting()
       await open(p, 'details')
       await userEvent.type(screen.getByRole('textbox', { name: 'Author' }), 'Ana')
@@ -434,10 +434,38 @@ describe('editor steps', () => {
       const titleColors = screen.getByRole('radiogroup', { name: 'Title color' })
       await userEvent.click(within(titleColors).getByRole('radio', { name: 'Aqua' }))
       expect(useEditor.getState().painting?.titleColor).toBe('aqua')
-      await userEvent.click(screen.getByRole('radio', { name: 'Ready' }))
+      const include = screen.getByRole('switch', { name: 'Include in the next export' })
+      expect(include).toBeChecked()
+      expect(
+        screen.getByText('Turn off to keep it as a draft, left out of exports.'),
+      ).toBeInTheDocument()
+      await userEvent.click(include)
+      expect(useEditor.getState().painting?.status).toBe('draft')
+      await userEvent.click(include)
       expect(useEditor.getState().painting?.status).toBe('ready')
-      expect(screen.getByText(p.id)).toBeInTheDocument()
-      expect(screen.getByText('Never changes')).toBeInTheDocument()
+    })
+
+    it('shows the id the painting will have, following the title (R17)', async () => {
+      const p = flatPainting()
+      await open(p, 'details')
+      const suffix = p.id.slice(-3)
+      const idLine = () => screen.getByText('Will be').parentElement as HTMLElement
+      expect(within(idLine()).getByText(p.id)).toBeInTheDocument()
+      const input = screen.getByRole('textbox', { name: 'Title' })
+      await userEvent.clear(input)
+      await userEvent.type(input, 'Rosace du soir')
+      expect(within(idLine()).getByText(`rosace_du_soir_${suffix}`)).toBeInTheDocument()
+    })
+
+    it('says a published painting keeps its id, size and place for good', async () => {
+      const p = flatPainting({ status: 'published', publishedIn: 1 })
+      await open(p, 'details')
+      expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+      expect(
+        screen.getByText("Published: its size can't change and it can't be deleted."),
+      ).toBeInTheDocument()
+      const idLine = screen.getByText(p.id).parentElement as HTMLElement
+      expect(idLine).toHaveTextContent(`${p.id} · never changes`)
     })
 
     it('labels the chosen colours with French punctuation in French', async () => {
@@ -445,6 +473,92 @@ describe('editor steps', () => {
       await open(flatPainting({ titleColor: 'yellow' }), 'details')
       const group = screen.getByRole('radiogroup', { name: 'Couleur du titre' })
       expect(group.previousElementSibling?.textContent).toBe('Couleur du titre : Jaune')
+    })
+  })
+
+  describe('Size & crop', () => {
+    it('keeps an invalid custom resolution as typed and says what fits (M15)', async () => {
+      await open(flatPainting(), 'size')
+      await userEvent.click(screen.getByRole('radio', { name: 'Custom' }))
+      const input = screen.getByRole('spinbutton', { name: 'Custom pixels per block' })
+      await userEvent.clear(input)
+      await userEvent.type(input, '200')
+      await userEvent.tab()
+      expect(input).toHaveValue(200)
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+      expect(screen.getByText('From 1 to 64')).toBeInTheDocument()
+      expect(useEditor.getState().painting?.pixelsPerBlock).toBe(4)
+      await userEvent.clear(input)
+      await userEvent.type(input, '24{Enter}')
+      expect(useEditor.getState().painting?.pixelsPerBlock).toBe(24)
+      expect(screen.queryByText('From 1 to 64')).not.toBeInTheDocument()
+    })
+
+    it('the wheel over the crop box zooms only once the crop frame was clicked (I23)', async () => {
+      await open(flatPainting(), 'size')
+      const frame = screen.getByRole('group', { name: /^Crop area/ })
+      const before = recipe()?.crop
+      fireEvent.wheel(frame, { deltaY: -100 })
+      expect(recipe()?.crop).toEqual(before)
+      fireEvent.pointerDown(frame, { button: 0, pointerId: 1 })
+      fireEvent.pointerUp(frame, { pointerId: 1 })
+      fireEvent.wheel(frame, { deltaY: -100 })
+      expect(recipe()?.crop.width).toBeLessThan(before?.width ?? 0)
+    })
+
+    it('pinching the crop frame apart zooms in, as one undo step', async () => {
+      const big = flatPainting({
+        recipe: { ...flatPainting().recipe, source: { imageId: 'pic', width: 8, height: 12 } },
+      })
+      await open(big, 'size', { assets: { pic: encodePng(createRaster(80, 120, RED)) } })
+      const frame = screen.getByRole('group', { name: /^Crop area/ })
+      const before = recipe()?.crop.width ?? 0
+      const steps = useEditor.getState().past.length
+      fireEvent.pointerDown(frame, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+      fireEvent.pointerDown(frame, { button: 0, pointerId: 2, clientX: 110, clientY: 100 })
+      fireEvent.pointerMove(frame, { pointerId: 2, clientX: 120, clientY: 100 })
+      fireEvent.pointerMove(frame, { pointerId: 2, clientX: 130, clientY: 100 })
+      fireEvent.pointerUp(frame, { pointerId: 2 })
+      fireEvent.pointerUp(frame, { pointerId: 1 })
+      expect(recipe()?.crop.width).toBeLessThan(before)
+      expect(useEditor.getState().past.length).toBe(steps + 1)
+    })
+
+    it('tells touch players to pinch (I23)', async () => {
+      vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: query === '(pointer: coarse)',
+        media: query,
+      }))
+      await open(flatPainting(), 'size')
+      expect(screen.getByText('Drag to move, pinch to zoom.')).toBeInTheDocument()
+      vi.unstubAllGlobals()
+    })
+  })
+
+  describe('Step rail (I6)', () => {
+    const mark = (name: RegExp) =>
+      within(screen.getByRole('navigation', { name: 'Steps' })).getByRole('button', { name })
+
+    it('checks only the steps that are really done', async () => {
+      await open(flatPainting({ title: '' }), 'details')
+      // The picture is there; size (2×3 at 4 px) was chosen; the window is none at 0 px.
+      expect(mark(/Image/)).toHaveAttribute('data-done')
+      expect(mark(/Size & crop/)).toHaveAttribute('data-done')
+      expect(mark(/Window & frame/)).toHaveAttribute('data-done')
+      expect(mark(/Colors & pixels/)).not.toHaveAttribute('data-done')
+      expect(mark(/Details/)).not.toHaveAttribute('data-done')
+      await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), 'Night')
+      expect(mark(/Details/)).toHaveAttribute('data-done')
+    })
+
+    it('marks a new painting without a picture as needing one, and nothing as done', async () => {
+      const p = createPainting({}, now, () => 0.5)
+      await open(p, 'details')
+      expect(mark(/Image/)).toHaveAttribute('data-needed')
+      expect(mark(/Image/)).toHaveAccessibleName(/no picture yet/)
+      for (const name of [/Image/, /Size/, /Window/, /pixels/, /Details/]) {
+        expect(mark(name)).not.toHaveAttribute('data-done')
+      }
     })
   })
 

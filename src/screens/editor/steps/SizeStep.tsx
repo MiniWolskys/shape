@@ -11,6 +11,7 @@ import { Segmented } from '../../../ui/Segmented.tsx'
 import { toast } from '../../../ui/toastStore.ts'
 import { BlockGridPicker } from '../BlockGridPicker.tsx'
 import { CropBox } from '../CropBox.tsx'
+import { noticeCropReset } from '../pictureActions.ts'
 import styles from './steps.module.css'
 
 const PRESETS: Array<[number, number]> = [
@@ -50,7 +51,7 @@ export function SizeStep() {
 
   function apply(size: Size) {
     try {
-      useEditor.getState().resize(size.width, size.height, size.ppb)
+      noticeCropReset(() => useEditor.getState().resize(size.width, size.height, size.ppb))
     } catch (error) {
       toast(errorMessage(error, t), 'error')
     }
@@ -64,12 +65,14 @@ export function SizeStep() {
     else apply(size)
   }
 
+  // A custom value is kept as typed until it is a whole number from 1 to 64 (M15).
+  const customValue = draft === null ? ppb : parseCustom(draft)
+  const customInvalid = customValue === null
+
   function commitCustom() {
-    if (draft === null) return
-    const value = Number.parseInt(draft, 10)
+    if (draft === null || customValue === null) return
     setDraft(null)
-    if (Number.isFinite(value))
-      requestResize({ width, height, ppb: Math.min(64, Math.max(1, value)) })
+    requestResize({ width, height, ppb: customValue })
   }
 
   return (
@@ -136,6 +139,8 @@ export function SizeStep() {
               max={64}
               step={1}
               aria-label={t.editor.size.customValue}
+              aria-invalid={customInvalid || undefined}
+              aria-describedby={customInvalid ? `${id}-custom-error` : undefined}
               value={draft ?? String(ppb)}
               onChange={(event) => setDraft(event.currentTarget.value)}
               onBlur={commitCustom}
@@ -145,6 +150,11 @@ export function SizeStep() {
             />
           )}
         </div>
+        {resolution === 'custom' && customInvalid && (
+          <p id={`${id}-custom-error`} className={styles.invalid}>
+            {t.editor.size.customInvalid}
+          </p>
+        )}
       </section>
 
       <section className={styles.section} aria-labelledby={`${id}-scaling`}>
@@ -198,4 +208,11 @@ export function SizeStep() {
       </Dialog>
     </>
   )
+}
+
+/** A whole number of pixels per block from 1 to 64, or null. */
+function parseCustom(text: string): number | null {
+  if (!/^\s*\d+\s*$/.test(text)) return null
+  const value = Number(text)
+  return value >= 1 && value <= 64 ? value : null
 }

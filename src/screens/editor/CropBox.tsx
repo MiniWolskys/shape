@@ -16,6 +16,13 @@ const ZOOM_FACTOR = 0.9
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
+/** Phones and tablets: the hint talks about pinching instead of the wheel and keys. */
+const coarsePointer = () =>
+  typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+
+type Point = { x: number; y: number }
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
+
 const sameRect = (a: Rect, b: Rect) =>
   a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 
@@ -30,8 +37,9 @@ function writeCrop(rect: Rect, merge?: string) {
 
 /**
  * The rotated and flipped picture with a rectangle locked to the painting's ratio. Drag it to
- * move, scroll or use + / − to resize, arrow keys to nudge. Writes recipe.crop in whole source
- * pixels, always inside the picture.
+ * move, pinch or use + / − to resize, arrow keys to nudge; the wheel resizes once the rectangle
+ * has focus (a click), so scrolling the inspector past it never changes the crop (I23). Writes
+ * recipe.crop in whole source pixels, always inside the picture.
  */
 export function CropBox() {
   const t = useT()
@@ -39,6 +47,9 @@ export function CropBox() {
   const painting = useEditor((s) => s.painting)
   const container = useRef<HTMLDivElement>(null)
   const drag = useRef<{ px: number; py: number; start: Rect } | null>(null)
+  /** Pointers down on the rectangle; two of them pinch. */
+  const pointers = useRef(new Map<number, Point>())
+  const pinch = useRef<{ distance: number; start: Rect } | null>(null)
   const hintId = useId()
 
   const rotation = painting?.recipe.rotation ?? 0
@@ -108,7 +119,7 @@ export function CropBox() {
     const el = container.current
     if (!el) return
     function onWheel(event: WheelEvent) {
-      if (event.deltaY === 0) return
+      if (event.deltaY === 0 || !el?.contains(document.activeElement)) return
       event.preventDefault()
       zoomRef.current(event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR, 'crop.zoom')
     }
@@ -122,17 +133,39 @@ export function CropBox() {
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || !rect) return
+    event.currentTarget.focus()
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    drag.current = { px: event.clientX, py: event.clientY, start: rect }
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    const [a, b] = [...pointers.current.values()]
+    if (a && b) {
+      // A second finger: pinch from here, no more dragging.
+      drag.current = null
+      pinch.current = { distance: distance(a, b), start: rect }
+    } else {
+      drag.current = { px: event.clientX, py: event.clientY, start: rect }
+    }
   }
 
-  /** One drag is one undo step. */
-  function endDrag() {
+  /** One drag or pinch is one undo step. */
+  function endDrag(event: PointerEvent<HTMLDivElement>) {
+    pointers.current.delete(event.pointerId)
+    if (pointers.current.size < 2) pinch.current = null
     drag.current = null
     useEditor.getState().endGesture()
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (pointers.current.has(event.pointerId)) {
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    }
+    const p = pinch.current
+    const [a, b] = [...pointers.current.values()]
+    if (p && a && b) {
+      const now = distance(a, b)
+      const next = now > 0 ? resized(p.start, p.distance / now) : null
+      if (next && rect && !sameRect(next, rect)) writeCrop(next, 'crop.zoom')
+      return
+    }
     const d = drag.current
     if (!d) return
     const next = moved(d.start, (event.clientX - d.px) / scale, (event.clientY - d.py) / scale)
@@ -215,7 +248,7 @@ export function CropBox() {
         </button>
       </div>
       <p id={hintId} className={styles.hint}>
-        {t.editor.size.cropHint}
+        {coarsePointer() ? t.editor.size.cropHintTouch : t.editor.size.cropHint}
       </p>
     </div>
   )

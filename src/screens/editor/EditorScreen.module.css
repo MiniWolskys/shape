@@ -29,6 +29,41 @@
   white-space: nowrap;
 }
 
+/* Autosave state (R19): a green dot when saved, amber while saving, red when it failed. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.status::before {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok);
+  content: '';
+}
+
+.status[data-status='saving']::before {
+  background: var(--warn);
+}
+
+.status[data-status='notSaved']::before {
+  background: var(--line);
+}
+
+.status[data-status='failed'] {
+  color: var(--danger);
+}
+
+.status[data-status='failed']::before {
+  background: var(--danger);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

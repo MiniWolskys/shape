@@ -47,7 +47,8 @@ function Route({ screen }: { screen: Screen }) {
     case 'library':
       return <LibraryScreen />
     case 'editor':
-      return <EditorScreen key={screen.paintingId} paintingId={screen.paintingId} />
+      // No key: a save may give the open painting a new id without leaving the editor (R17).
+      return <EditorScreen paintingId={screen.paintingId} />
     case 'export':
       return <ExportScreen />
   }

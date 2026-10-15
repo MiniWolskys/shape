@@ -1,13 +1,22 @@
 import { useId, useRef, type CSSProperties, type KeyboardEvent } from 'react'
+import { slugify } from '../../../domain/ids.ts'
 import { MC_COLOR_HEX, MC_COLORS, type McColor, type Painting } from '../../../domain/types.ts'
 import { format, useT } from '../../../i18n/i18n.ts'
 import { useEditor } from '../../../state/editor.ts'
-import { Segmented } from '../../../ui/Segmented.tsx'
 import { TooltipPreview } from '../TooltipPreview.tsx'
 import styles from './steps.module.css'
 import own from './DetailsStep.module.css'
 
 const MAX_TEXT = 64
+
+/**
+ * The id an unpublished painting gets once its title is saved (R17): the title's slug with the
+ * id's own suffix. (A clash with another painting picks another suffix, which is rare.)
+ */
+function idForTitle(p: Painting): string {
+  const suffix = /_([a-z0-9]{3})$/.exec(p.id)?.[1]
+  return suffix ? `${slugify(p.title)}_${suffix}` : p.id
+}
 
 /** Typing merges into one undo step per field (until a pause). */
 function patch(fields: Partial<Painting>, merge?: string) {
@@ -82,37 +91,48 @@ export function DetailsStep() {
 
       <hr className={styles.separator} />
 
-      <section className={styles.section} aria-labelledby={`${id}-status`}>
-        <h3 id={`${id}-status`} className={styles.subheading}>
-          {t.editor.details.status}
-        </h3>
+      <section className={styles.section} aria-labelledby={`${id}-id`}>
         {status === 'published' ? (
           <p className={styles.hint}>
-            <b className={own.published}>{t.library.status.published}</b>
-            {' · '}
-            {t.editor.details.publishedNote}
+            <b className={own.published}>{t.editor.details.publishedNote}</b>
           </p>
         ) : (
-          <Segmented
-            label={t.editor.details.status}
-            options={[
-              { value: 'draft', label: t.library.status.draft },
-              { value: 'ready', label: t.library.status.ready },
-            ]}
-            value={status}
-            onChange={(next) => patch({ status: next })}
-          />
+          <>
+            <div className={styles.between}>
+              <label htmlFor={`${id}-include`} className={styles.subheading}>
+                {t.editor.details.include}
+              </label>
+              <input
+                id={`${id}-include`}
+                type="checkbox"
+                role="switch"
+                className={styles.switch}
+                checked={status === 'ready'}
+                aria-describedby={`${id}-include-hint`}
+                onChange={(event) =>
+                  patch({ status: event.currentTarget.checked ? 'ready' : 'draft' })
+                }
+              />
+            </div>
+            <p id={`${id}-include-hint`} className={styles.hint}>
+              {t.editor.details.includeHint}
+            </p>
+          </>
         )}
-      </section>
-
-      <section className={styles.section} aria-labelledby={`${id}-id`}>
         <h3 id={`${id}-id`} className={styles.subheading}>
           {t.editor.paintingId}
         </h3>
-        <div className={own.idRow}>
-          <code className={own.id}>{painting.id}</code>
-          <span className={styles.hint}>{t.editor.details.neverChanges}</span>
-        </div>
+        {status === 'published' ? (
+          <p className={own.idRow}>
+            <code className={own.id}>{painting.id}</code>{' '}
+            <span className={styles.hint}>· {t.editor.details.neverChanges}</span>
+          </p>
+        ) : (
+          <p className={own.idRow}>
+            <span className={styles.hint}>{t.editor.details.willBe}</span>
+            <code className={own.id}>{idForTitle(painting)}</code>
+          </p>
+        )}
       </section>
     </>
   )

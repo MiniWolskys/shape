@@ -158,6 +158,47 @@
   font-weight: 600;
 }
 
+/* No picture yet (I5): one card on a plain surface, never a transparency checkerboard. */
+.stage[data-empty] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.empty {
+  display: grid;
+  height: 100%;
+  min-height: 280px;
+  place-items: center;
+  padding: 24px;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.empty:hover {
+  border-color: var(--accent);
+}
+
+.emptyCard {
+  display: grid;
+  max-width: 340px;
+  justify-items: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 19px;
+}
+
+.emptyHint {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
 @media (max-width: 860px) {
   .stage {
     padding: 12px;

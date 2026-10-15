@@ -84,9 +84,9 @@ export function HomeScreen() {
   const resumeThumb = useMemo(() => renderResumeThumb(), [])
   const [showcaseRef, showcaseBox] = useContentBox(SHOWCASE_FALLBACK_BOX)
 
+  /** A new painting only enters the workspace once it is changed (R18). */
   function createPainting() {
-    const paintingId = useWorkspace.getState().createPainting()
-    go({ name: 'editor', paintingId })
+    go({ name: 'editor', paintingId: null })
   }
 
   async function openPack(file: File) {
