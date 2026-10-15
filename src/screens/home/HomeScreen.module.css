@@ -1,0 +1,286 @@
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 28px;
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 36px 40px;
+}
+
+.intro {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font: 600 11px/1 var(--font-body);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.headline {
+  max-width: 540px;
+  margin-top: 14px;
+  font-size: clamp(32px, 4vw, 44px);
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.headline em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.lede {
+  max-width: 480px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 15.5px;
+}
+
+.actions {
+  display: grid;
+  gap: 12px;
+  max-width: 600px;
+  margin-top: 26px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.card {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 18px;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+}
+
+.createCard {
+  border: 0;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.createCard:hover {
+  background: var(--raised);
+}
+
+.dropCard {
+  border: 2px dashed var(--line);
+}
+
+.cardIcon {
+  color: var(--muted);
+}
+
+.cardTitle {
+  margin: 0;
+  font: 18px/1.2 var(--font-display);
+}
+
+.cardHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.fileName {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cardButton {
+  margin-top: 4px;
+}
+
+/* Look like the shared Button; the whole card is the real button. */
+.fauxPrimary,
+.fauxButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font: 600 13.5px/1 var(--font-body);
+  white-space: nowrap;
+}
+
+.fauxPrimary {
+  margin-top: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.fauxButton {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.createCard:hover .fauxPrimary,
+.resume:hover .fauxButton {
+  filter: brightness(1.08);
+}
+
+.resume {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.resumeThumb {
+  display: grid;
+  flex: none;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.resumeText {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.resumeTitle {
+  font-weight: 600;
+}
+
+.resumeDetail {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.showcase {
+  position: relative;
+  min-width: 0;
+  min-height: 420px;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.caption {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  padding: 5px 9px;
+  border-radius: 4px;
+  background: var(--overlay);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* Sized by the layout, never by the canvas, so the picture can shrink with the window. */
+.stage {
+  position: absolute;
+  inset: 20px 20px 44px;
+  display: grid;
+  place-items: center;
+}
+
+/* New library dialog */
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.hint,
+.invalid {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.invalid {
+  color: var(--danger);
+}
+
+.warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: var(--raised);
+}
+
+@media (max-width: 900px) {
+  .home {
+    grid-template-columns: 1fr;
+    padding: 24px 16px;
+  }
+
+  .showcase {
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 520px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}

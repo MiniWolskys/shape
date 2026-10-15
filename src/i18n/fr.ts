@@ -2,6 +2,17 @@ import type { Dictionary } from './en.ts'
 
 export const fr: Dictionary = {
   app: { name: 'Shape', tagline: 'tableaux Minecraft' },
+  startup: {
+    loading: 'Ouverture de votre espace de travail…',
+    storageTitle: "Le stockage de votre navigateur n'a pas pu être ouvert",
+    storageBody:
+      "Shape fonctionne quand même, mais rien de ce que vous créez ne sera enregistré dans ce navigateur. Téléchargez votre pack de bibliothèque avant de fermer l'onglet.",
+    continueWithoutSaving: 'Continuer sans enregistrer',
+  },
+  placeholder: {
+    soon: 'Cet écran arrive bientôt.',
+    backHome: "Retour à l'accueil",
+  },
   common: {
     save: 'Enregistrer',
     cancel: 'Annuler',
@@ -23,27 +34,46 @@ export const fr: Dictionary = {
     notALibraryPack: "Ce fichier n'est pas un pack de bibliothèque Shape.",
     newerFormat:
       'Ce pack de bibliothèque a été créé par une version plus récente de Shape. Rechargez la page pour mettre à jour.',
-    namespaceMismatch: 'Ce pack appartient à une autre bibliothèque ({namespace}).',
+    namespaceMismatch: "Ce pack n'appartient pas à la bibliothèque ouverte ({namespace}).",
     storageFull:
       'Le stockage de votre navigateur est plein. Exportez votre pack de bibliothèque pour conserver votre travail.',
     exportFailed: "L'export a échoué : {reason}",
     publishedLocked: 'Les tableaux publiés ne peuvent être ni redimensionnés ni supprimés.',
+    unexpected: "Quelque chose s'est mal passé : {reason}",
   },
   home: {
     headlineBefore: '',
     headlineEmphasis: 'Façonnez',
-    headlineAfter: " n'importe quelle image en tableau à travers lequel on voit.",
+    headlineAfter: " n'importe quelle image en un tableau que l'on peut traverser du regard.",
+    eyebrow: 'Tableaux personnalisés · Minecraft 26.3',
     lede: 'Transformez une image en tableau Minecraft, découpez-la en forme de fenêtre et exportez des packs utilisables sur votre serveur.',
     createPainting: 'Créer un tableau',
     createPaintingHint: "Pas besoin de bibliothèque. Ajoutez-le à l'une d'elles plus tard.",
+    startPainting: 'Commencer à peindre',
     openPack: 'Ouvrir un pack de bibliothèque',
     openPackHint: 'Déposez {file} ici ou parcourez',
+    anyPackFile: 'un pack de bibliothèque .zip',
     browse: 'Parcourir les fichiers',
+    packAddedOne: '1 tableau ajouté',
+    packAdded: '{count} tableaux ajoutés',
     newLibrary: 'Commencer une nouvelle bibliothèque',
     resume: 'Reprendre là où vous en étiez',
-    resumeDetail: '{count} tableaux dans {name}',
+    resumeButton: 'Reprendre',
+    resumeLibrary: '{name} v{version}',
+    inProgressOne: '1 tableau en cours',
+    inProgress: '{count} tableaux en cours',
     trySample: "Essayer la bibliothèque d'exemple",
     privacy: 'Tout reste sur votre ordinateur.',
+    showcaseCaption: '{shape} · {width}×{height} blocs · sur des briques de pierre',
+    newLibraryName: 'Nom de la bibliothèque',
+    namespaceHint: 'Utilisé dans les packs. Lettres minuscules, chiffres, _ . et - uniquement.',
+    namespaceInvalid:
+      'Utilisez uniquement des lettres minuscules, des chiffres, _ . et -, et pas « minecraft ».',
+    replaceWarning:
+      '« {name} » sera fermée. Elle reste en sécurité dans le dernier pack de bibliothèque que vous avez téléchargé.',
+    createLibrary: 'Créer la bibliothèque',
+    replaceLibrary: 'La fermer et créer',
+    sampleName: "Tableaux d'exemple",
   },
   library: {
     title: 'Bibliothèque',
@@ -103,7 +133,7 @@ export const fr: Dictionary = {
     rose: 'Rosace',
     stained_glass: 'Vitrail',
     four_panes: 'Quatre carreaux',
-    leaded_diamonds: 'Losanges en plomb',
+    leaded_diamonds: 'Vitrail à losanges',
     quatrefoil: 'Quadrilobe',
     octagon: 'Octogone',
     fanlight: 'Imposte',
@@ -139,7 +169,7 @@ export const fr: Dictionary = {
     white: 'Blanc',
   },
   export: {
-    title: 'Export',
+    title: 'Exporter',
     whatGoesIn: 'Ce que contient le pack',
     newChoose: 'Tableaux nouveaux et modifiés : choisissez lesquels inclure.',
     publishedAlways: 'Les tableaux publiés sont toujours inclus.',

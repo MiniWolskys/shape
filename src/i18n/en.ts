@@ -2,6 +2,17 @@ import type { FrameMaterial, McColor, ShapeId } from '../domain/types.ts'
 
 export const en = {
   app: { name: 'Shape', tagline: 'Minecraft paintings' },
+  startup: {
+    loading: 'Opening your workspace…',
+    storageTitle: "Your browser storage couldn't be opened",
+    storageBody:
+      'Shape still works, but nothing you make will be saved in this browser. Download your library pack before you close the tab.',
+    continueWithoutSaving: 'Continue without saving',
+  },
+  placeholder: {
+    soon: 'This screen is coming soon.',
+    backHome: 'Back to home',
+  },
   common: {
     save: 'Save',
     cancel: 'Cancel',
@@ -23,26 +34,44 @@ export const en = {
     notALibraryPack: "This file isn't a Shape library pack.",
     newerFormat:
       'This library pack was made by a newer version of Shape. Reload the page to update.',
-    namespaceMismatch: 'This pack belongs to another library ({namespace}).',
+    namespaceMismatch: "This pack doesn't belong to the open library ({namespace}).",
     storageFull: "Your browser's storage is full. Export your library pack to keep your work.",
     exportFailed: 'The export failed: {reason}',
     publishedLocked: "Published paintings can't be resized or deleted.",
+    unexpected: 'Something went wrong: {reason}',
   },
   home: {
     headlineBefore: '',
     headlineEmphasis: 'Shape',
     headlineAfter: ' any picture into a painting you can see through.',
+    eyebrow: 'Custom paintings · Minecraft 26.3',
     lede: 'Turn a picture into a Minecraft painting, cut it into a window shape, and export packs your server can use.',
     createPainting: 'Create a painting',
     createPaintingHint: 'No library needed. Add it to one later.',
+    startPainting: 'Start painting',
     openPack: 'Open a library pack',
     openPackHint: 'Drop {file} here or browse',
+    anyPackFile: 'a library pack .zip',
     browse: 'Browse files',
+    packAddedOne: 'Added 1 painting',
+    packAdded: 'Added {count} paintings',
     newLibrary: 'Start a new library',
     resume: 'Resume where you left off',
-    resumeDetail: '{count} paintings in {name}',
+    resumeButton: 'Resume',
+    resumeLibrary: '{name} v{version}',
+    inProgressOne: '1 painting in progress',
+    inProgress: '{count} paintings in progress',
     trySample: 'Try the sample library',
     privacy: 'Everything stays on your computer.',
+    showcaseCaption: '{shape} · {width}×{height} blocks · on stone bricks',
+    newLibraryName: 'Library name',
+    namespaceHint: 'Used inside the packs. Lowercase letters, digits, _ . and - only.',
+    namespaceInvalid: 'Use only lowercase letters, digits, _ . and -, and not "minecraft".',
+    replaceWarning:
+      '"{name}" will be closed. It stays safe in the last library pack you downloaded.',
+    createLibrary: 'Create library',
+    replaceLibrary: 'Close it and create',
+    sampleName: 'Sample paintings',
   },
   library: {
     title: 'Library',
@@ -145,7 +174,7 @@ export const en = {
     downloadPack: 'Download library pack',
     serverSteps: {
       step1: 'Stop your server.',
-      step2: 'Put the data pack in your world’s "datapacks" folder.',
+      step2: 'Put the data pack in your world\'s "datapacks" folder.',
       step3: 'Give the resource pack to your players, or set it as the server resource pack.',
       step4: 'Start the server and run /reload.',
     },
