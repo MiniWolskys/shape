@@ -55,6 +55,11 @@ export interface WorkspaceState extends Workspace {
   /** Moves the given loose paintings (all of them by default) into the open library; returns how many. */
   addLooseToLibrary(ids?: string[]): number
   createPainting(): string
+  /**
+   * A new painting with an id no painting has, not added anywhere (R18): the editor shows it
+   * and `savePainting` adds it on its first change.
+   */
+  draftPainting(): Painting
   savePainting(p: Painting): void
   /**
    * Sets a painting's title. While unpublished its id follows the title (R17); returns the id it
@@ -68,6 +73,8 @@ export interface WorkspaceState extends Workspace {
   setAsset(id: string, bytes: Uint8Array): void
   /** Deletes assets no library or loose painting refers to, except the ids in `keep`. */
   pruneUnreferencedAssets(keep?: string[]): void
+  /** Writes pending changes to storage now instead of after the autosave delay. */
+  persistNow(): Promise<void>
   /**
    * Takes over what an export changed (version, `exportedAt` — now if it has none — and the
    * paintings it published) into the open library as it is now. Ignored when that library is
@@ -323,12 +330,16 @@ export function createWorkspaceStore(
       },
 
       createPainting() {
-        const p0 = newPainting({}, new Date(), Math.random)
-        const p = { ...p0, id: freshId(p0.title) }
+        const p = get().draftPainting()
         const { library, loose } = get()
         if (library) set({ library: upsertPainting(library, p) })
         else set({ loose: [...loose, p] })
         return p.id
+      },
+
+      draftPainting() {
+        const p = newPainting({}, new Date(), Math.random)
+        return { ...p, id: freshId(p.title) }
       },
 
       savePainting(p) {
@@ -420,6 +431,12 @@ export function createWorkspaceStore(
         const used = new Set([...allPaintings(get()).flatMap(assetIdsOf), ...keep])
         const unused = Object.keys(assets).filter((id) => !used.has(id))
         if (unused.length > 0) set({ assets: pruneAssets(assets, unused, allPaintings(get())) })
+      },
+
+      persistNow() {
+        clearTimeout(timer)
+        timer = undefined
+        return requestFlush()
       },
 
       applyExport(exported) {

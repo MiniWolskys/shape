@@ -226,6 +226,26 @@ describe('workspace store', () => {
     expect(Array.from(b.getState().assets[assetId] ?? [])).toEqual([9, 9])
   })
 
+  it('makes a draft painting with a fresh id without adding it (R18)', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const taken = s.getState().createPainting()
+    const draft = s.getState().draftPainting()
+    expect(draft.id).not.toBe(taken)
+    expect(draft).toMatchObject({ title: '', status: 'ready', width: 1, height: 1 })
+    expect(s.getState().findPainting(draft.id)).toBeUndefined()
+    expect(s.getState().loose).toHaveLength(1)
+  })
+
+  it('persistNow writes pending changes at once', async () => {
+    const storage = memoryStorage()
+    const a = createWorkspaceStore(storage)
+    await a.getState().init()
+    const id = a.getState().createPainting()
+    await a.getState().persistNow()
+    expect((await storage.load())?.loose.map((p) => p.id)).toEqual([id])
+  })
+
   it('does not autosave on ready or saveError changes alone', async () => {
     const save = vi.fn(() => Promise.resolve())
     const storage: WorkspaceStorage = { ...memoryStorage(), save }

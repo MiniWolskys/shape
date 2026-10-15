@@ -249,6 +249,17 @@ describe('Toasts', () => {
     act(() => vi.advanceTimersByTime(4000))
     expect(screen.queryByText('Export failed')).not.toBeInTheDocument()
   })
+
+  it('offers an action button that runs once and closes the toast; it stays 8 s', async () => {
+    vi.useFakeTimers()
+    render(<Toasts />)
+    const run = vi.fn()
+    act(() => toast('Crop recentred', 'info', { label: 'Undo', run }))
+    act(() => vi.advanceTimersByTime(4000))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Crop recentred')).not.toBeInTheDocument()
+  })
 })
 
 describe('LanguageSwitch', () => {

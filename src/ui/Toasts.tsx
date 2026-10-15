@@ -16,6 +16,18 @@ export function Toasts() {
             .join(' ')}
         >
           <span className={styles.message}>{item.message}</span>
+          {item.action && (
+            <button
+              type="button"
+              className={styles.action}
+              onClick={() => {
+                dismiss(item.id)
+                item.action?.run()
+              }}
+            >
+              {item.action.label}
+            </button>
+          )}
           <button
             type="button"
             className={styles.dismiss}
