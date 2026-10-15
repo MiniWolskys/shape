@@ -1,13 +1,15 @@
 import { createEditLayer, resampleEdits, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster, RGBA } from '../../imaging/raster.ts'
 import { copyLayer, eyedropper, paintMask, pencilInto, selectSimilar } from '../../imaging/tools.ts'
-import { useEditor, type Tool } from '../../state/editor.ts'
+import { useEditor, type Snapshot, type Tool } from '../../state/editor.ts'
 import {
   beginStroke,
   currentRaster,
   endStroke,
   previewStroke,
 } from '../../state/useRenderedPainting.ts'
+import { currentDictionary } from '../../i18n/i18n.ts'
+import { toast } from '../../ui/toastStore.ts'
 import { TRANSPARENT } from './color.ts'
 import type { PixelPhase } from './CanvasStage.tsx'
 
@@ -37,12 +39,16 @@ export function paintSelection(mask: Uint8Array, color: RGBA): void {
   useEditor.getState().setEdits(paintMask(base, mask, color))
 }
 
-/** The rendered painting the tools pick from; null (and logged) if it can't be rendered. */
+/**
+ * The rendered painting the tools pick from. If it can't be rendered, the tool does nothing
+ * and says so (and the error is logged).
+ */
 function pickable(): Raster | null {
   try {
     return currentRaster()
   } catch (error) {
     console.error('Could not render the painting for the tool', error)
+    toast(currentDictionary().editor.pixels.toolFailed, 'error')
     return null
   }
 }
@@ -62,13 +68,15 @@ type Point = [number, number]
  *
  * A stroke paints into its own copy of the edits, made when it starts, instead of copying the
  * whole layer on every frame (which made the garbage collector stall the stroke). Each frame
- * still commits a new layer object around those pixels, so identity checks see the change; the
- * history only keeps the layer from before the stroke (its moves merge into one undo step),
- * so no layer anything else holds changes underneath it.
+ * still commits a new layer object around those pixels, so identity checks see the change. While
+ * the stroke's moves merge into one undo step, the history only holds the layer from before the
+ * stroke. Anything that may hand the last committed layer to the history or the saved state (a
+ * save, an undo or redo, which also end the merge) changes the history list, and the stroke then
+ * starts a fresh copy, so no layer held elsewhere changes underneath it.
  */
 function paintStroke(stroke: Stroke, points: Point[]): void {
-  if (!stroke.layer || useEditor.getState().edits !== stroke.committed) {
-    // First paint, or the edits changed meanwhile (an undo): start from what is there now.
+  const editor = useEditor.getState()
+  if (!stroke.layer || editor.edits !== stroke.committed || editor.past !== stroke.past) {
     const base = editableLayer()
     if (!base) return
     stroke.layer = copyLayer(base)
@@ -77,8 +85,11 @@ function paintStroke(stroke: Stroke, points: Point[]): void {
   const layer: EditLayer = { values: stroke.layer.values, mask: stroke.layer.mask }
   useEditor.getState().setEdits(layer, STROKE)
   stroke.committed = layer
-  const xs = points.map((p) => Math.round(p[0]))
-  const ys = points.map((p) => Math.round(p[1]))
+  stroke.past = useEditor.getState().past
+  const finite = points.filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y))
+  if (finite.length === 0) return
+  const xs = finite.map((p) => Math.round(p[0]))
+  const ys = finite.map((p) => Math.round(p[1]))
   previewStroke(layer, {
     x0: Math.min(...xs),
     y0: Math.min(...ys),
@@ -95,9 +106,10 @@ export interface Stroke {
   pending: Point[]
   color: RGBA
   cancelFrame: (() => void) | null
-  /** The stroke's own working copy of the edits, and the layer it last committed. */
+  /** The stroke's own working copy of the edits, the layer it last committed, and the history then. */
   layer: EditLayer | null
   committed: EditLayer | null
+  past: readonly Snapshot[] | null
 }
 
 export const newStroke = (): Stroke => ({
@@ -107,6 +119,7 @@ export const newStroke = (): Stroke => ({
   cancelFrame: null,
   layer: null,
   committed: null,
+  past: null,
 })
 
 function nextFrame(task: () => void): () => void {

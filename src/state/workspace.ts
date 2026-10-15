@@ -68,7 +68,11 @@ export interface WorkspaceState extends Workspace {
   setAsset(id: string, bytes: Uint8Array): void
   /** Deletes assets no library or loose painting refers to, except the ids in `keep`. */
   pruneUnreferencedAssets(keep?: string[]): void
-  /** Stores the library a pack was built from, stamping `exportedAt` (now) if it has none. */
+  /**
+   * Takes over what an export changed (version, `exportedAt` — now if it has none — and the
+   * paintings it published) into the open library as it is now. Ignored when that library is
+   * no longer open.
+   */
   applyExport(library: Library): void
   /**
    * How many paintings of the open library no downloaded pack holds (R15): closing or replacing
@@ -418,8 +422,35 @@ export function createWorkspaceStore(
         if (unused.length > 0) set({ assets: pruneAssets(assets, unused, allPaintings(get())) })
       },
 
-      applyExport(library) {
-        set({ library: { ...library, exportedAt: library.exportedAt ?? new Date().toISOString() } })
+      applyExport(exported) {
+        const current = get().library
+        // The library may have been closed or replaced while the pack was built.
+        if (!current || current.namespace !== exported.namespace) return
+        // Only what the export changes is taken over; the rest stays as it is now.
+        const published = new Map(
+          exported.paintings
+            .filter((p) => p.status === 'published' && p.publishedIn === exported.version)
+            .map((p) => [p.id, p]),
+        )
+        const later = (a: string, b: string) => (Date.parse(a) > Date.parse(b) ? a : b)
+        set({
+          library: {
+            ...current,
+            version: exported.version,
+            exportedAt: exported.exportedAt ?? new Date().toISOString(),
+            paintings: current.paintings.map((p) => {
+              const done = published.get(p.id)
+              if (!done || p.status === 'published') return p
+              return {
+                ...p,
+                status: 'published',
+                publishedIn: done.publishedIn,
+                // An edit made after the export started stays newer than it.
+                updatedAt: later(p.updatedAt, done.updatedAt),
+              }
+            }),
+          },
+        })
       },
 
       unexportedCount() {

@@ -8,9 +8,11 @@ interface TopBarProps {
   right?: ReactNode
   /** Makes the logo a button back to the home screen. */
   onHome?(): void
+  /** Keeps that button visible but unusable (work in progress must not be left). */
+  homeDisabled?: boolean
 }
 
-export function TopBar({ left, right, onHome }: TopBarProps) {
+export function TopBar({ left, right, onHome, homeDisabled }: TopBarProps) {
   const t = useT()
   const logo = (
     <>
@@ -27,6 +29,7 @@ export function TopBar({ left, right, onHome }: TopBarProps) {
           className={`${styles.logo} ${styles.homeButton}`}
           aria-label={format(t.app.home, { name: t.app.name })}
           title={format(t.app.home, { name: t.app.name })}
+          disabled={homeDisabled}
           onClick={onHome}
         >
           {logo}

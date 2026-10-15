@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShapeError } from '../../domain/errors.ts'
-import { createLibrary, createPainting, upsertPainting } from '../../domain/library.ts'
+import { createLibrary, createPainting, publish, upsertPainting } from '../../domain/library.ts'
 import type { Assets, Library, Painting, PaintingStatus } from '../../domain/types.ts'
 import { useLanguage } from '../../i18n/i18n.ts'
 import * as libraryPack from '../../packs/libraryPack.ts'
@@ -251,6 +251,41 @@ describe('ExportScreen', () => {
     expect(busy).toHaveAttribute('aria-busy', 'true')
     await act(async () => finish())
     expect(await screen.findByRole('button', { name: 'Download library pack' })).toBeEnabled()
+  })
+
+  it('keeps the way out closed while the pack builds', async () => {
+    vi.spyOn(libraryPack, 'writeLibraryPack').mockImplementation(() => new Promise(() => {}))
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    renderExport()
+    await userEvent.click(downloadButton())
+    expect(await screen.findByRole('button', { name: 'Library' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Shape · Home' })).toBeDisabled()
+  })
+
+  it('leaving during a build downloads nothing and changes nothing', async () => {
+    let finish: () => void = () => {}
+    vi.spyOn(libraryPack, 'writeLibraryPack').mockImplementation(
+      (lib, ids, _assets, now) =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              bytes: new Uint8Array([1]),
+              fileName: 'ours-v8.zip',
+              sha1: 'x',
+              library: { ...publish(lib, ids, now), exportedAt: now.toISOString() },
+            })
+        }),
+    )
+    const save = vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    const view = renderExport()
+    await userEvent.click(downloadButton())
+    await screen.findByRole('button', { name: /Building the pack|Rendering/ })
+    view.unmount()
+    await act(async () => finish())
+    expect(save).not.toHaveBeenCalled()
+    expect(useWorkspace.getState().library?.version).toBe(7)
+    expect(useWorkspace.getState().library?.exportedAt).toBeUndefined()
   })
 
   it('explains a failed export in the active language and keeps the library unpublished', async () => {

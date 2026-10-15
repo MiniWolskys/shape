@@ -74,6 +74,25 @@ describe('buildLibraryPack', () => {
     expect(error).toMatchObject({ code: 'export-failed', message: 'damaged' })
   })
 
+  it('stops the worker when the build is aborted', async () => {
+    const workers: Array<{ terminated: boolean }> = []
+    const Silent = fakeWorker([], [])
+    vi.stubGlobal(
+      'Worker',
+      class extends Silent {
+        constructor() {
+          super()
+          workers.push(this)
+        }
+      },
+    )
+    const abort = new AbortController()
+    const build = buildLibraryPack(lib, [], {}, now, () => {}, abort.signal)
+    abort.abort()
+    await expect(build).rejects.toMatchObject({ name: 'AbortError' })
+    expect(workers[0]?.terminated).toBe(true)
+  })
+
   it('builds on the page when there are no workers', async () => {
     vi.stubGlobal('Worker', undefined)
     const here = vi.spyOn(libraryPack, 'writeLibraryPack').mockResolvedValue(result)

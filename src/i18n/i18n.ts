@@ -64,6 +64,11 @@ export function useT(): Dictionary {
   return dictionaries[useLanguage((s) => s.language)]
 }
 
+/** The active dictionary, for code outside components (e.g. a toast from a tool). */
+export function currentDictionary(): Dictionary {
+  return dictionaries[useLanguage.getState().language]
+}
+
 /** Replaces `{name}` placeholders; unknown placeholders are left as is. */
 export function format(template: string, values: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>

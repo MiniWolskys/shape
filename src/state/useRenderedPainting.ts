@@ -25,6 +25,8 @@ export interface RenderedPainting {
    * slow previews (the wall) can wait for that one instead of drawing twice.
    */
   drawing: boolean
+  /** The last render failed: what is on screen is older than the painting (retried on change). */
+  failed: boolean
 }
 
 /** What the editor shows: the last render (or a stroke drawn over it) and what it was made of. */
@@ -33,7 +35,7 @@ interface Shown extends RenderedPainting {
   job: RenderJob | null
 }
 
-const EMPTY: Shown = { raster: null, transparent: 0, drawing: false, job: null }
+const EMPTY: Shown = { raster: null, transparent: 0, drawing: false, failed: false, job: null }
 
 /**
  * The last render, shared by every caller: the stage, the inspector previews and the pixel
@@ -115,10 +117,13 @@ function getScheduler(): RenderScheduler {
     rendered({ raster, transparent, job }: RenderResult) {
       // A stroke draws over what is on screen; its own render follows when it ends.
       if (useStroke.getState().active) return
-      useShown.setState({ raster, transparent, drawing: false, job })
+      useShown.setState({ raster, transparent, drawing: false, failed: false, job })
     },
     failed(message: string) {
       console.error('Could not render the painting', message)
+      // The same inputs are tried again on the next change, even one that leads back to them.
+      lastRequested = null
+      useShown.setState({ failed: true })
     },
   }
   const created = createRenderScheduler(
@@ -208,8 +213,9 @@ export function useRenderedPainting(): RenderedPainting {
   const raster = useShown((s) => s.raster)
   const transparent = useShown((s) => s.transparent)
   const drawing = useShown((s) => s.drawing)
+  const failed = useShown((s) => s.failed)
   useEffect(follow, [])
-  return { raster, transparent, drawing }
+  return { raster, transparent, drawing, failed }
 }
 
 /** The stroke being drawn over the last render. */

@@ -155,6 +155,7 @@ export const en = {
     zoomLevel: 'Zoom {percent} %',
     pixelGrid: 'Pixel grid',
     transparentPixels: 'Transparent pixels:',
+    renderFailed: 'This painting could not be drawn. Change a setting to try again.',
     percent: '{value} %',
     image: {
       heading: 'Picture',
@@ -209,6 +210,7 @@ export const en = {
       px: 'px',
     },
     pixels: {
+      toolFailed: 'The painting could not be drawn, so this tool can’t be used now.',
       tools: 'Tools',
       toolHint: '{tool} ({key})',
       tolerance: 'Tolerance',

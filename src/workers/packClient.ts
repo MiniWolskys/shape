@@ -27,7 +27,8 @@ async function buildHere(request: PackRequest, onProgress: Progress): Promise<Li
 /**
  * Builds the library pack (see writeLibraryPack) in a worker, so the page stays responsive,
  * reporting each painting as it starts rendering. Without workers, or if the worker cannot
- * start, it builds on this thread. Errors keep their ShapeError code.
+ * start, it builds on this thread. Errors keep their ShapeError code. Aborting `signal` stops
+ * the worker and rejects with an AbortError (a build on this thread runs to its end).
  */
 export function buildLibraryPack(
   library: Library,
@@ -35,6 +36,7 @@ export function buildLibraryPack(
   assets: Assets,
   now: Date,
   onProgress: Progress,
+  signal?: AbortSignal,
 ): Promise<LibraryPackResult> {
   const request: PackRequest = { library, selectedIds, assets, now: now.toISOString() }
   if (typeof Worker !== 'function') return buildHere(request, onProgress)
@@ -54,12 +56,20 @@ export function buildLibraryPack(
         return
       }
       worker.terminate()
+      signal?.removeEventListener('abort', stop)
       if (reply.kind === 'packed') resolve(reply.result)
       else reject(reply.code ? new ShapeError(reply.code, reply.message) : new Error(reply.message))
     }
+    const stop = () => {
+      worker.terminate()
+      reject(new DOMException('The export was cancelled', 'AbortError'))
+    }
+    if (signal?.aborted) return stop()
+    signal?.addEventListener('abort', stop, { once: true })
     worker.onerror = (event) => {
       console.error('The export worker stopped; building on the page instead', event.message)
       worker.terminate()
+      signal?.removeEventListener('abort', stop)
       resolve(buildHere(request, onProgress))
     }
     worker.postMessage(request)

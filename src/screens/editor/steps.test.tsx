@@ -231,6 +231,89 @@ describe('editor steps', () => {
       expect(cachedRender()?.data).toEqual(rendered().data)
     })
 
+    it('says so when the painting cannot be drawn, and tools give way instead of failing', async () => {
+      await open(flatPainting(), 'pixels')
+      const before = cachedRender()
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const broken = vi.spyOn(windowModule, 'paintWindow').mockImplementation(() => {
+        throw new Error('broken window')
+      })
+      const glass = (glassOpacity: number) =>
+        act(() =>
+          useEditor.getState().change((p) => ({
+            ...p,
+            recipe: { ...p.recipe, window: { shape: 'full', glassOpacity } },
+          })),
+        )
+      glass(0.5)
+      expect(
+        screen.getByText('This painting could not be drawn. Change a setting to try again.'),
+      ).toBeInTheDocument()
+      expect(cachedRender()).toBe(before)
+      expect(logged).toHaveBeenCalled()
+      act(() => useEditor.getState().setTool('eyedropper'))
+      mockRect(8, 12)
+      expect(() => click(1, 1)).not.toThrow()
+      expect(
+        await screen.findByText('The painting could not be drawn, so this tool can’t be used now.'),
+      ).toBeInTheDocument()
+      broken.mockRestore()
+      glass(0.6)
+      expect(
+        screen.queryByText('This painting could not be drawn. Change a setting to try again.'),
+      ).toBeNull()
+      expect(cachedRender()?.data).toEqual(rendered().data)
+    })
+
+    describe('history that changes in the middle of a stroke', () => {
+      /** A stroke along row 1 whose moves are painted when the test runs the frames. */
+      async function strokeWithFrames() {
+        await open(flatPainting(), 'pixels')
+        act(() => useEditor.getState().setTool('pencil'))
+        mockRect(8, 12)
+        const frames: FrameRequestCallback[] = []
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => frames.push(cb))
+        const el = surface()
+        const flush = () => act(() => frames.splice(0).forEach((cb) => cb(0)))
+        const move = (x: number) => {
+          fireEvent.pointerMove(el, { pointerId: 1, clientX: x, clientY: 1 })
+          flush()
+        }
+        fireEvent.pointerDown(el, { button: 0, pointerId: 1, clientX: 0, clientY: 1 })
+        move(3)
+        return { el, move }
+      }
+      const row1 = () => Array.from(useEditor.getState().edits?.mask.slice(8, 16) ?? [])
+
+      it('saving mid-stroke keeps the saved pixels as they were saved', async () => {
+        const { el, move } = await strokeWithFrames()
+        await userEvent.keyboard('{Control>}s{/Control}')
+        const saved = useEditor.getState().edits
+        expect(useEditor.getState().dirty).toBe(false)
+        move(6)
+        fireEvent.pointerUp(el, { pointerId: 1, clientX: 6, clientY: 1 })
+        expect(row1()).toEqual([1, 1, 1, 1, 1, 1, 1, 0])
+        expect(useEditor.getState().dirty).toBe(true)
+        act(() => useEditor.getState().undo())
+        expect(useEditor.getState().edits).toBe(saved)
+        expect(row1()).toEqual([1, 1, 1, 1, 0, 0, 0, 0])
+        expect(useEditor.getState().dirty).toBe(false)
+      })
+
+      it('undo then redo mid-stroke keeps the redone pixels as they were', async () => {
+        const { el, move } = await strokeWithFrames()
+        act(() => useEditor.getState().undo())
+        act(() => useEditor.getState().redo())
+        const redone = useEditor.getState().edits
+        move(6)
+        fireEvent.pointerUp(el, { pointerId: 1, clientX: 6, clientY: 1 })
+        expect(row1()).toEqual([1, 1, 1, 1, 1, 1, 1, 0])
+        act(() => useEditor.getState().undo())
+        expect(useEditor.getState().edits).toBe(redone)
+        expect(row1()).toEqual([1, 1, 1, 1, 0, 0, 0, 0])
+      })
+    })
+
     it('a stroke leaving the painting does not paint along its edge', async () => {
       await open(flatPainting(), 'pixels')
       act(() => useEditor.getState().setTool('pencil'))

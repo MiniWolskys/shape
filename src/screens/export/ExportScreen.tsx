@@ -76,8 +76,9 @@ function buildPack(
   ids: string[],
   assets: Assets,
   onProgress: (done: number, total: number) => void,
+  signal: AbortSignal,
 ): Promise<LibraryPackResult> {
-  return buildLibraryPack(lib, ids, assets, new Date(), onProgress)
+  return buildLibraryPack(lib, ids, assets, new Date(), onProgress, signal)
 }
 
 const kilobytes = (bytes: number) => Math.max(1, Math.round(bytes / 1024))
@@ -175,6 +176,9 @@ function ExportView({ library }: { library: Library }) {
   const [showAllPublished, setShowAllPublished] = useState(false)
   const sha1Ref = useRef<HTMLElement>(null)
   const propertiesRef = useRef<HTMLPreElement>(null)
+  /** The build in progress; leaving the screen stops it. */
+  const building = useRef<AbortController | null>(null)
+  useEffect(() => () => building.current?.abort(), [])
 
   const newPaintings = library.paintings.filter(isNew)
   const published = library.paintings.filter((p) => !isNew(p))
@@ -205,15 +209,26 @@ function ExportView({ library }: { library: Library }) {
   async function runExport() {
     const state = useWorkspace.getState()
     if (!state.library) return
+    const build = new AbortController()
+    building.current = build
     setPhase({ kind: 'busy', done: 0, total: 0 })
     try {
-      const result = await buildPack(state.library, selectedIds, state.assets, (done, total) =>
-        setPhase({ kind: 'busy', done, total }),
+      const result = await buildPack(
+        state.library,
+        selectedIds,
+        state.assets,
+        (done, total) => {
+          if (!build.signal.aborted) setPhase({ kind: 'busy', done, total })
+        },
+        build.signal,
       )
+      // Left the screen meanwhile: no late download, and the library stays as it is.
+      if (build.signal.aborted) return
       downloadBytes(result.bytes, result.fileName, 'application/zip')
       useWorkspace.getState().applyExport(result.library)
       setPhase({ kind: 'done', result })
     } catch (error) {
+      if (build.signal.aborted) return
       if (error instanceof ShapeError && error.code === 'export-failed') {
         // The message is developer text in English; players get a translated reason.
         console.error('Export failed', error)
@@ -252,9 +267,15 @@ function ExportView({ library }: { library: Library }) {
     <div className={styles.page}>
       <TopBar
         onHome={() => go({ name: 'home' })}
+        homeDisabled={busy}
         left={
           <div className={styles.topLeft}>
-            <Button variant="ghost" icon="arrow-left" onClick={() => go({ name: 'library' })}>
+            <Button
+              variant="ghost"
+              icon="arrow-left"
+              disabled={busy}
+              onClick={() => go({ name: 'library' })}
+            >
               {t.export.back}
             </Button>
             <h1 className={styles.heading}>{format(t.export.heading, { name: library.name })}</h1>

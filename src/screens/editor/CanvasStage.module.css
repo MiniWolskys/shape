@@ -152,6 +152,12 @@
   color: var(--text);
 }
 
+.failed {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-weight: 600;
+}
+
 @media (max-width: 860px) {
   .stage {
     padding: 12px;

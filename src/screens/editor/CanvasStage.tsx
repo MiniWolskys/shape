@@ -316,6 +316,11 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
       </div>
 
       <p className={styles.foot}>
+        {rendered.failed && (
+          <span className={styles.failed} role="alert">
+            {t.editor.renderFailed}
+          </span>
+        )}
         <span>
           {t.editor.transparentPixels}{' '}
           <b>{format(t.editor.percent, { value: Math.round(rendered.transparent * 100) })}</b>

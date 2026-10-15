@@ -159,6 +159,7 @@ export const fr: Dictionary = {
     zoomLevel: 'Zoom {percent} %',
     pixelGrid: 'Grille de pixels',
     transparentPixels: 'Pixels transparents :',
+    renderFailed: 'Impossible de dessiner ce tableau. Modifiez un réglage pour réessayer.',
     percent: '{value} %',
     image: {
       heading: 'Image',
@@ -216,6 +217,7 @@ export const fr: Dictionary = {
       px: 'px',
     },
     pixels: {
+      toolFailed: 'Le tableau n’a pas pu être dessiné : cet outil est indisponible pour l’instant.',
       tools: 'Outils',
       toolHint: '{tool} ({key})',
       tolerance: 'Tolérance',

@@ -403,6 +403,44 @@ describe('library data safety (R15)', () => {
     }
   })
 
+  it('applyExport merges what the export changed into the library as it is now', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const a = s.getState().createPainting()
+    const b = s.getState().createPainting()
+    const exported = { ...publish(s.getState().library!, [a], now), exportedAt: now.toISOString() }
+    // Meanwhile: a new painting, a retitled one and an edit after the export started.
+    const c = s.getState().createPainting()
+    const bNow = s.getState().retitlePainting(b, 'Renamed')
+    const later = '2099-01-01T00:00:00.000Z'
+    s.getState().savePainting({ ...s.getState().findPainting(a)!, updatedAt: later })
+    s.getState().applyExport(exported)
+    const lib = s.getState().library!
+    expect(lib.version).toBe(exported.version)
+    expect(lib.exportedAt).toBe(now.toISOString())
+    expect(lib.paintings.map((p) => p.id)).toEqual([a, bNow, c])
+    expect(s.getState().findPainting(bNow)?.title).toBe('Renamed')
+    const pa = s.getState().findPainting(a)
+    expect(pa).toMatchObject({ status: 'published', publishedIn: exported.version })
+    // Edited after the export began: still counts as changed since that export.
+    expect(pa?.updatedAt).toBe(later)
+  })
+
+  it('applyExport ignores an export of a library that is no longer open', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const a = s.getState().createPainting()
+    const exported = publish(s.getState().library!, [a], now)
+    s.getState().createLibrary('Other', 'other')
+    s.getState().applyExport(exported)
+    expect(s.getState().library).toMatchObject({ namespace: 'other', version: 0 })
+    s.getState().closeLibrary()
+    s.getState().applyExport(exported)
+    expect(s.getState().library).toBeNull()
+  })
+
   it('counts the open library paintings that closing would lose', async () => {
     const s = createWorkspaceStore(memoryStorage())
     await s.getState().init()

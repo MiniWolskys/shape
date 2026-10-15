@@ -18,8 +18,14 @@ const tick = new MessageChannel()
 tick.port1.onmessage = () => {
   ticking = false
   const end = performance.now() + SLICE_MS
-  while (task && performance.now() < end) {
-    if (task.next().done) task = null
+  try {
+    while (task && performance.now() < end) {
+      if (task.next().done) task = null
+    }
+  } catch (error) {
+    // Background work is optional: drop it and keep the worker rendering.
+    console.error('Could not prepare the other window shapes', error)
+    task = null
   }
   schedule()
 }
