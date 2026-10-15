@@ -1,7 +1,7 @@
 import type { Dictionary } from '../i18n/en.ts'
 import { currentDictionary, plural } from '../i18n/i18n.ts'
 import { readLibraryPack } from '../packs/libraryPack.ts'
-import { useWorkspace, type ImportResult } from '../state/workspace.ts'
+import { useWorkspace, type ImportResult, type ReadPack } from '../state/workspace.ts'
 import { errorMessage } from '../ui/errors.ts'
 import { toast } from '../ui/toastStore.ts'
 import { askImport } from './importConfirm.ts'
@@ -21,16 +21,15 @@ export function importMessage(result: ImportResult, t: Dictionary): string {
 }
 
 /**
- * Asks what an import of `bytes` needs asking (R21, R25); false when the player said no.
+ * Asks what importing `pack` needs asking (R21, R25); false when the player said no.
  * Another library's paintings join the open one as copies, and a demo the player changed would
  * be replaced. Same-library merges and opening with no library ask nothing.
  */
-async function confirmImport(bytes: Uint8Array): Promise<boolean> {
+async function confirmImport(pack: ReadPack): Promise<boolean> {
   const workspace = useWorkspace.getState()
   const { library, demo } = workspace
   if (!library) return true
   if (demo) return workspace.unexportedCount() === 0 || askImport({ kind: 'replaceDemo' })
-  const pack = readLibraryPack(bytes)
   if (pack.library.namespace === library.namespace) return true
   return askImport({
     kind: 'copy',
@@ -46,9 +45,10 @@ async function confirmImport(bytes: Uint8Array): Promise<boolean> {
  */
 export async function importPackFile(file: File): Promise<boolean> {
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    if (!(await confirmImport(bytes))) return false
-    const result = useWorkspace.getState().importPack(bytes)
+    // Read once: the question and the import share it.
+    const pack = readLibraryPack(new Uint8Array(await file.arrayBuffer()))
+    if (!(await confirmImport(pack))) return false
+    const result = useWorkspace.getState().importPack(pack)
     toast(importMessage(result, currentDictionary()))
     return true
   } catch (error) {

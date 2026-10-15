@@ -60,7 +60,7 @@ export const fr: Dictionary = {
     lede: 'Découpez une image en fenêtre et accrochez-la sur votre serveur.',
     createPainting: 'Créer un tableau',
     createPaintingHint: 'Pas besoin de bibliothèque pour commencer.',
-    createInLibrary: 'Il rejoindra {name}.',
+    createInLibrary: 'Ira dans {name}.',
     startPainting: 'Commencer',
     openPack: 'Ouvrir un pack de bibliothèque',
     openPackHint: 'Déposez {file} ici ou parcourez vos fichiers',
@@ -97,7 +97,7 @@ export const fr: Dictionary = {
       },
       export: {
         title: 'Exportez un seul fichier pour le serveur',
-        text: 'Un pack de bibliothèque contient tout ce qu’il faut au serveur, et sauvegarde votre travail.',
+        text: 'Un pack de bibliothèque contient tout ce qu’il faut au serveur et sauvegarde votre travail.',
       },
       pack: 'Le pack de bibliothèque est le .zip que Shape exporte : tous vos tableaux et les fichiers du serveur. Ouvrez-le ici pour reprendre votre travail.',
       mod: 'Pour voir à travers les fenêtres, les joueurs ont besoin du mod Transparent Paintings. Sans lui, ils voient la couleur du cadre.',
@@ -172,7 +172,7 @@ export const fr: Dictionary = {
     filterPublished: 'Publiés',
     search: 'Chercher un titre ou un auteur',
     grid: 'Tableaux',
-    importPack: 'Importer un pack d’ami',
+    importPack: 'Importer le pack d’un ami',
     exportReady: { one: 'Exporter · {count} prêt', other: 'Exporter · {count} prêts' },
     exportChanged: { one: '{count} modifié', other: '{count} modifiés' },
     demoBanner: 'Ceci est une bibliothèque de démo — créez la vôtre pour exporter.',
@@ -550,7 +550,7 @@ export const fr: Dictionary = {
       datapack:
         'Décompressez le pack de bibliothèque. Envoyez {datapack} dans {folder} sur votre serveur.',
       resources:
-        'Mettez {resources} chez un hébergeur qui donne un lien direct, qui télécharge le fichier lui-même et non une page ({host} le fait).',
+        'Mettez {resources} chez un hébergeur qui donne un lien direct vers le fichier (pas vers une page), comme {host}.',
       properties: 'Collez les lignes ci-dessus dans server.properties, avec votre lien direct.',
       restart: 'Redémarrez le serveur. /reload ne suffit pas.',
     },

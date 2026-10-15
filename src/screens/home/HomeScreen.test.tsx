@@ -5,6 +5,7 @@ import { createLibrary, createPainting, upsertPainting } from '../../domain/libr
 import type { Workspace } from '../../domain/types.ts'
 import { useLanguage } from '../../i18n/i18n.ts'
 import { createRaster } from '../../imaging/raster.ts'
+import * as libraryPack from '../../packs/libraryPack.ts'
 import { writeLibraryPack } from '../../packs/libraryPack.ts'
 import { encodePng } from '../../packs/png.ts'
 import { useNavigation } from '../../state/navigation.ts'
@@ -175,6 +176,20 @@ describe('HomeScreen', () => {
     expect(await screen.findByText('Added 1 painting from Pack')).toBeInTheDocument()
     expect(useWorkspace.getState().library?.namespace).toBe('mine')
     expect(useWorkspace.getState().library?.paintings.map((p) => p.title)).toEqual(['Sunset'])
+  })
+
+  it('reads a pack once for both the question and the import', async () => {
+    useWorkspace.getState().createLibrary('Mine', 'mine')
+    const bytes = await packBytes('theirs', ['Sunset'])
+    const read = vi.spyOn(libraryPack, 'readLibraryPack')
+    renderHome()
+    dropFile(new File([bytes as Uint8Array<ArrayBuffer>], 'theirs-v1.zip'))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Add 1 painting from “Pack” to Mine?',
+    })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add 1 painting' }))
+    expect(await screen.findByText('Added 1 painting from Pack')).toBeInTheDocument()
+    expect(read).toHaveBeenCalledTimes(1)
   })
 
   it('adds nothing when the player cancels the import', async () => {

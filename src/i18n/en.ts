@@ -544,7 +544,7 @@ export const en = {
       mod: 'Every player needs the Transparent Paintings mod to see through the windows. Without it, they see the frame color.',
       datapack: 'Unzip the library pack. Upload {datapack} to {folder} on your server.',
       resources:
-        'Upload {resources} to a host that gives a direct link, one that downloads the file itself rather than a page about it ({host} does).',
+        'Upload {resources} to a host that gives a direct link to the file (not to a page), such as {host}.',
       properties: 'Paste the lines above into server.properties, with your direct link.',
       restart: 'Restart the server. /reload is not enough.',
     },

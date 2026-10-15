@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import styles from './App.module.css'
 import { useT } from './i18n/i18n.ts'
 import { EditorScreen } from './screens/editor/EditorScreen.tsx'
@@ -11,6 +11,7 @@ import { startHashRouting, useNavigation, type Screen } from './state/navigation
 import { useWorkspace } from './state/workspace.ts'
 import { Button } from './ui/Button.tsx'
 import { documentTitle } from './ui/documentTitle.ts'
+import { createScrollMemory } from './ui/scrollMemory.ts'
 import { Toasts } from './ui/Toasts.tsx'
 import { TopBar } from './ui/TopBar.tsx'
 
@@ -68,6 +69,42 @@ function useDocumentTitle(screen: Screen) {
   }, [title])
 }
 
+/**
+ * Each screen opens at its top, except through browser Back and Forward, which return to where
+ * the player left it (e.g. deep in the Library).
+ */
+/** How soon after a Back or Forward a screen change still counts as caused by it. */
+const HISTORY_MOVE_MS = 1000
+
+function useScrollPerScreen(screen: Screen) {
+  const key = screen.name === 'editor' ? `editor:${screen.paintingId ?? ''}` : screen.name
+  const memory = useRef(createScrollMemory())
+  const current = useRef(key)
+  /** When the browser last moved through its history; a screen change soon after came from it. */
+  const historyAt = useRef(-Infinity)
+
+  useEffect(() => {
+    const onHistory = () => {
+      historyAt.current = performance.now()
+    }
+    const onScroll = () => memory.current.save(current.current, document.documentElement.scrollTop)
+    window.addEventListener('popstate', onHistory)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('popstate', onHistory)
+      window.removeEventListener('scroll', onScroll)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (current.current === key) return
+    current.current = key
+    const fromHistory = performance.now() - historyAt.current < HISTORY_MOVE_MS
+    document.documentElement.scrollTop = memory.current.target(key, fromHistory)
+    historyAt.current = -Infinity
+  }, [key])
+}
+
 export function App() {
   const ready = useWorkspace((s) => s.ready)
   const screen = useNavigation((s) => s.screen)
@@ -76,11 +113,7 @@ export function App() {
 
   // The screen lives in the URL: Back, Forward and reloads follow it (I10).
   useEffect(() => startHashRouting(), [])
-
-  // A new screen starts at its top, not where the last one was scrolled to.
-  useEffect(() => {
-    document.documentElement.scrollTop = 0
-  }, [screen.name])
+  useScrollPerScreen(screen)
 
   useEffect(() => {
     // init returns the same promise while it runs, so StrictMode's second call is harmless.

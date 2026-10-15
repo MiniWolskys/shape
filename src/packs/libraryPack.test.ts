@@ -206,6 +206,8 @@ describe('library pack', () => {
     expect(readme).toContain(serverPropertiesLines(out.sha1))
     expect(readme).toContain(serverPropertiesLines(out.sha1, '<votre lien direct>'))
     expect(readme).toMatch(/\/reload/)
+    expect(readme).toMatch(/0\. Every player needs the Transparent Paintings mod/)
+    expect(readme).toMatch(/0\. Chaque joueur a besoin du mod Transparent Paintings/)
     expect(readme).toMatch(/never delete or rename a published painting/i)
     expect(readme).toMatch(/ne supprimez ni ne renommez jamais un tableau publié/i)
     expect(readme.indexOf('English')).toBeLessThan(readme.indexOf('Français'))

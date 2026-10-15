@@ -20,6 +20,9 @@ import type { WorkspaceStorage } from '../storage/persistence.ts'
 
 const AUTOSAVE_MS = 600
 
+/** A library pack as readLibraryPack returns it. */
+export type ReadPack = ReturnType<typeof readLibraryPack>
+
 /**
  * What `importPack` did: `opened` the pack as the library (none was open), `merged` it into the
  * open library of the same namespace, or `copied` its paintings into the open library of another
@@ -48,10 +51,11 @@ export interface WorkspaceState extends Workspace {
    */
   createLibrary(name: string, namespace: string): void
   /**
-   * Opens, merges or copies a library pack (R21). With the demo open, the pack replaces it (R25):
-   * ask first (see unexportedCount). Throws a ShapeError and changes nothing on bad bytes.
+   * Opens, merges or copies a library pack (R21), given as its bytes or as readLibraryPack read
+   * it. With the demo open, the pack replaces it (R25): ask first (see unexportedCount). Throws a
+   * ShapeError and changes nothing on bad bytes.
    */
-  importPack(bytes: Uint8Array): ImportResult
+  importPack(input: Uint8Array | ReadPack): ImportResult
   /** Moves the given loose paintings (all of them by default) into the open library; returns how many. */
   addLooseToLibrary(ids?: string[]): number
   /** A new painting in the open library, or loose without one or with the demo open (R23). */
@@ -269,8 +273,8 @@ export function createWorkspaceStore(
         })
       },
 
-      importPack(bytes) {
-        const pack = readLibraryPack(bytes)
+      importPack(input) {
+        const pack = input instanceof Uint8Array ? readLibraryPack(input) : input
         const { library, loose, assets, demo } = get()
         const source = { sourceName: pack.library.name, sourceNamespace: pack.library.namespace }
         const count = pack.library.paintings.length
