@@ -375,6 +375,27 @@ describe('library pack checks', () => {
     }
   })
 
+  it('round-trips a frame thicker than 16 px that a resize to 64 px per block makes (R4)', async () => {
+    const { lib, p, assets } = sample()
+    const big = {
+      ...p,
+      pixelsPerBlock: 64,
+      recipe: { ...p.recipe, frame: { material: 'oak' as const, thickness: 24 } },
+    }
+    const pack = await writeLibraryPack(upsertPainting(lib, big), [p.id], assets, now)
+    expect(readLibraryPack(pack.bytes).library.paintings[0]?.recipe.frame.thickness).toBe(24)
+    // At most half the painting's shorter side (1 block of 64 px here).
+    const tooThick = await packWith((l) => {
+      const painting = firstPainting(l)
+      painting.pixelsPerBlock = 64
+      painting.recipe = {
+        ...(painting.recipe as object),
+        frame: { material: 'oak', thickness: 33 },
+      }
+    })
+    expect(failure(() => readLibraryPack(tooThick))).toMatch(/painting 0 .*thickness/)
+  })
+
   it('refuses malformed painting dates and publication', async () => {
     const cases: Array<[string, (p: Record<string, unknown>) => void]> = [
       ['createdAt', (p) => (p.createdAt = 'yesterday')],

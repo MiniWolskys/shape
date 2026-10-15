@@ -12,7 +12,6 @@ import {
 import type { EditLayer } from '../imaging/edits.ts'
 import { renderPainting } from '../imaging/pipeline.ts'
 import type { Raster } from '../imaging/raster.ts'
-import { FRAME_BOUND } from '../imaging/window.ts'
 import { buildDatapackFiles } from './datapack.ts'
 import { jsonBytes } from './formats.ts'
 import { decodeEditLayer, decodePng, encodePng } from './png.ts'
@@ -211,7 +210,7 @@ const MAX = Number.MAX_SAFE_INTEGER
  * Returns the first problem with a recipe, or null when the pipeline can render it: every field
  * is checked against the range the editor can produce.
  */
-function recipeProblem(r: unknown): string | null {
+function recipeProblem(r: unknown, maxThickness: number): string | null {
   if (!isObject(r)) return 'has no recipe'
   const { source, crop, adjust, mcLook, window, frame } = r
   if (
@@ -249,7 +248,7 @@ function recipeProblem(r: unknown): string | null {
   if (!isObject(frame) || !isOneOf(frame.material, FRAME_MATERIAL_IDS)) {
     return 'has an invalid frame'
   }
-  if (!isIntIn(frame.thickness, 0, FRAME_BOUND)) return 'has an invalid frame thickness'
+  if (!isIntIn(frame.thickness, 0, maxThickness)) return 'has an invalid frame thickness'
   if (r.editsId !== null && !isAssetId(r.editsId)) return 'has an invalid editsId'
   return null
 }
@@ -281,7 +280,9 @@ function paintingProblem(p: unknown, version: number): string | null {
   }
   if (!isIsoTime(p.createdAt)) return 'has an invalid createdAt'
   if (!isIsoTime(p.updatedAt)) return 'has an invalid updatedAt'
-  return recipeProblem(p.recipe)
+  // A resize scales the thickness with the pixels per block (R4): up to half the shorter side.
+  const shorter = Math.min(p.width as number, p.height as number) * (p.pixelsPerBlock as number)
+  return recipeProblem(p.recipe, Math.floor(shorter / 2))
 }
 
 function parseLibrary(bytes: Uint8Array): Library {
