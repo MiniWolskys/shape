@@ -3,6 +3,7 @@ import { canResize, updatePainting } from '../domain/library.ts'
 import type { Painting } from '../domain/types.ts'
 import { resampleEdits, type EditLayer } from '../imaging/edits.ts'
 import type { Raster, RGBA } from '../imaging/raster.ts'
+import { BRUSH_SIZES } from '../imaging/tools.ts'
 import { centeredCrop } from '../imaging/transform.ts'
 
 export type EditorStep = 'image' | 'size' | 'window' | 'pixels' | 'details'
@@ -17,6 +18,8 @@ export interface Snapshot {
 }
 
 export const HISTORY_LIMIT = 60
+/** The magic wand, fill and replace tolerance a session starts with, in percent. */
+export const DEFAULT_TOLERANCE = 12
 /** Undo memory budget over the distinct edit layers it holds (5 bytes per pixel). */
 export const HISTORY_BYTES = 64 * 1024 * 1024
 /** Zoom 0 means "fit the stage"; otherwise CSS pixels per painting pixel. */
@@ -46,6 +49,8 @@ export interface EditorState {
   zoom: number
   showGrid: boolean
   tool: Tool
+  /** Side of the square pencil and eraser brush, in painting pixels (one of BRUSH_SIZES). */
+  brush: number
   color: RGBA
   tolerance: number
   contiguous: boolean
@@ -99,6 +104,9 @@ export interface EditorState {
   setZoom(zoom: number): void
   toggleGrid(): void
   setTool(tool: Tool): void
+  setBrush(size: number): void
+  /** Moves to the next bigger (1) or smaller (-1) brush size, staying at the ends. */
+  stepBrush(direction: 1 | -1): void
   setColor(color: RGBA): void
   setTolerance(tolerance: number): void
   setContiguous(contiguous: boolean): void
@@ -273,8 +281,9 @@ export const useEditor = create<EditorState>()((set, get) => {
     zoom: 0,
     showGrid: false,
     tool: 'pencil',
+    brush: 1,
     color: [254, 216, 61, 255],
-    tolerance: 12,
+    tolerance: DEFAULT_TOLERANCE,
     contiguous: true,
     selection: null,
     past: [],
@@ -458,6 +467,14 @@ export const useEditor = create<EditorState>()((set, get) => {
     setZoom: (zoom) => set({ zoom: clamp(zoom, 0, MAX_ZOOM) }),
     toggleGrid: () => set({ showGrid: !get().showGrid }),
     setTool: (tool) => set({ tool }),
+    setBrush: (size) => {
+      if ((BRUSH_SIZES as readonly number[]).includes(size)) set({ brush: size })
+    },
+    stepBrush(direction) {
+      const index = BRUSH_SIZES.findIndex((size) => size === get().brush)
+      const next = BRUSH_SIZES[Math.min(BRUSH_SIZES.length - 1, Math.max(0, index + direction))]
+      if (next !== undefined) set({ brush: next })
+    },
     setColor: (color) => set({ color }),
     setTolerance: (tolerance) => set({ tolerance: clamp(Math.round(tolerance), 0, 100) }),
     setContiguous: (contiguous) => set({ contiguous }),

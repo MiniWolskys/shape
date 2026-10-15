@@ -314,6 +314,14 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
         event.preventDefault()
         return
       }
+      // Brackets take AltGr on some layouts (French): any modifier but Ctrl alone is fine.
+      if (key === '[' || key === ']') {
+        // The brush belongs to Colors & pixels, like the tools.
+        editor.stepBrush(key === ']' ? 1 : -1)
+        if (editor.step !== 'pixels') editor.setStep('pixels')
+        event.preventDefault()
+        return
+      }
       if (event.altKey || event.shiftKey) return
       const tool = TOOL_KEYS[key]
       if (!tool) return

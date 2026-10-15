@@ -98,24 +98,26 @@ export function paintMask(layer: EditLayer, mask: Uint8Array, color: RGBA): Edit
   return out
 }
 
-/** Liang-Barsky clip to the pixel grid, rounded back to pixels so work is bounded by size. */
+/**
+ * Liang-Barsky clip to the box [lo, hiX] × [lo, hiY], rounded back to pixels so work is bounded
+ * by size.
+ */
 function clipSegment(
   x0: number,
   y0: number,
   x1: number,
   y1: number,
-  w: number,
-  h: number,
+  box: { lo: number; hiX: number; hiY: number },
 ): [number, number, number, number] | null {
   const dx = x1 - x0
   const dy = y1 - y0
   let t0 = 0
   let t1 = 1
   const edges: Array<[number, number]> = [
-    [-dx, x0],
-    [dx, w - 1 - x0],
-    [-dy, y0],
-    [dy, h - 1 - y0],
+    [-dx, x0 - box.lo],
+    [dx, box.hiX - x0],
+    [-dy, y0 - box.lo],
+    [dy, box.hiY - y0],
   ]
   for (const [p, q] of edges) {
     if (p === 0) {
@@ -166,22 +168,54 @@ function drawLine(
   }
 }
 
+/** Brush sizes, in painting pixels (square brushes). */
+export const BRUSH_SIZES = [1, 2, 4, 8] as const
+
+/**
+ * The pixels a square brush of `size` covers when it is over pixel (x, y), inclusive: the pixel
+ * and `floor(size / 2)` pixels before it on each axis (so 1 px is the pixel itself).
+ */
+export function brushFootprint(
+  x: number,
+  y: number,
+  size: number,
+): { x0: number; y0: number; x1: number; y1: number } {
+  const before = Math.floor(size / 2)
+  return { x0: x - before, y0: y - before, x1: x - before + size - 1, y1: y - before + size - 1 }
+}
+
 /** Draws Bresenham lines through consecutive points; out-of-bounds pixels are ignored. */
 export function pencil(layer: EditLayer, points: Array<[number, number]>, color: RGBA): EditLayer {
   return pencilInto(copyLayer(layer), points, color)
 }
 
-/** `pencil`, drawing into `out` itself (a stroke's own working layer); returns `out`. */
+/**
+ * `pencil` with a square brush of `size` pixels (see `brushFootprint`), drawing into `out`
+ * itself (a stroke's own working layer); returns `out`. The parts of the brush off the painting
+ * are ignored, and so are lines whose brush never reaches it.
+ */
 export function pencilInto(
   out: EditLayer,
   points: Array<[number, number]>,
   color: RGBA,
+  size = 1,
 ): EditLayer {
   const w = out.values.width
   const h = out.values.height
+  const side = Math.max(1, Math.round(size))
+  const before = Math.floor(side / 2)
+  const after = side - 1 - before
   const plot = (x: number, y: number): void => {
-    if (x >= 0 && y >= 0 && x < w && y < h) paintAt(out, y * w + x, color)
+    const x0 = Math.max(0, x - before)
+    const x1 = Math.min(w - 1, x + after)
+    const y0 = Math.max(0, y - before)
+    const y1 = Math.min(h - 1, y + after)
+    for (let py = y0; py <= y1; py++) {
+      for (let px = x0; px <= x1; px++) paintAt(out, py * w + px, color)
+    }
   }
+  // Centres whose brush still touches the painting.
+  const reach = { lo: -after, hiX: w - 1 + before, hiY: h - 1 + before }
   let prev: [number, number] | undefined
   for (const [px, py] of points) {
     if (!Number.isFinite(px) || !Number.isFinite(py)) continue
@@ -190,7 +224,7 @@ export function pencilInto(
     if (!prev) {
       plot(x1, y1)
     } else {
-      const seg = clipSegment(prev[0], prev[1], x1, y1, w, h)
+      const seg = clipSegment(prev[0], prev[1], x1, y1, reach)
       if (seg) drawLine(seg[0], seg[1], seg[2], seg[3], plot)
     }
     prev = [x1, y1]

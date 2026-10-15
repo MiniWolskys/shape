@@ -1,6 +1,13 @@
 import { createEditLayer, resampleEdits, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster, RGBA } from '../../imaging/raster.ts'
-import { copyLayer, eyedropper, paintMask, pencilInto, selectSimilar } from '../../imaging/tools.ts'
+import {
+  brushFootprint,
+  copyLayer,
+  eyedropper,
+  paintMask,
+  pencilInto,
+  selectSimilar,
+} from '../../imaging/tools.ts'
 import { useEditor, type Snapshot, type Tool } from '../../state/editor.ts'
 import {
   beginStroke,
@@ -81,7 +88,7 @@ function paintStroke(stroke: Stroke, points: Point[]): void {
     if (!base) return
     stroke.layer = copyLayer(base)
   }
-  pencilInto(stroke.layer, points, stroke.color)
+  pencilInto(stroke.layer, points, stroke.color, stroke.size)
   const layer: EditLayer = { values: stroke.layer.values, mask: stroke.layer.mask }
   useEditor.getState().setEdits(layer, STROKE)
   stroke.committed = layer
@@ -90,12 +97,10 @@ function paintStroke(stroke: Stroke, points: Point[]): void {
   if (finite.length === 0) return
   const xs = finite.map((p) => Math.round(p[0]))
   const ys = finite.map((p) => Math.round(p[1]))
-  previewStroke(layer, {
-    x0: Math.min(...xs),
-    y0: Math.min(...ys),
-    x1: Math.max(...xs),
-    y1: Math.max(...ys),
-  })
+  // Every pixel the brush covered, from the first centre's square to the last one's.
+  const low = brushFootprint(Math.min(...xs), Math.min(...ys), stroke.size)
+  const high = brushFootprint(Math.max(...xs), Math.max(...ys), stroke.size)
+  previewStroke(layer, { x0: low.x0, y0: low.y0, x1: high.x1, y1: high.y1 })
 }
 
 /** A pencil or eraser stroke in progress. */
@@ -105,6 +110,8 @@ export interface Stroke {
   /** Pixels reached since, painted on the next animation frame. */
   pending: Point[]
   color: RGBA
+  /** Brush side in painting pixels, fixed for the whole stroke. */
+  size: number
   cancelFrame: (() => void) | null
   /** The stroke's own working copy of the edits, the layer it last committed, and the history then. */
   layer: EditLayer | null
@@ -116,6 +123,7 @@ export const newStroke = (): Stroke => ({
   last: null,
   pending: [],
   color: TRANSPARENT,
+  size: 1,
   cancelFrame: null,
   layer: null,
   committed: null,
@@ -167,6 +175,7 @@ export function applyToolAt(x: number, y: number, phase: PixelPhase, ctx: ToolCo
       Object.assign(stroke, newStroke(), {
         last: [x, y],
         color: tool === 'eraser' ? TRANSPARENT : editor.color,
+        size: editor.brush,
       })
       beginStroke()
       paintStroke(stroke, [[x, y]])

@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { createEditLayer } from './edits.ts'
 import { createRaster, getPixel, setPixel } from './raster.ts'
-import { colorDistance, eyedropper, maskSize, paintMask, pencil, selectSimilar } from './tools.ts'
+import {
+  brushFootprint,
+  colorDistance,
+  eyedropper,
+  maskSize,
+  paintMask,
+  pencil,
+  pencilInto,
+  selectSimilar,
+} from './tools.ts'
 
 function wallImage() {
   // 3x3: columns 0 and 2 white, column 1 black
@@ -112,5 +121,106 @@ describe('editing tools', () => {
   })
   it('eyedropper reads a pixel', () => {
     expect(eyedropper(wallImage(), 1, 1)).toEqual([0, 0, 0, 255])
+  })
+})
+
+describe('square brush', () => {
+  const painted = (layer: ReturnType<typeof createEditLayer>) => {
+    const out: string[] = []
+    const w = layer.values.width
+    layer.mask.forEach((m, p) => {
+      if (m === 1) out.push(`${p % w},${Math.floor(p / w)}`)
+    })
+    return out
+  }
+
+  it.each([
+    [1, { x0: 5, y0: 5, x1: 5, y1: 5 }],
+    [2, { x0: 4, y0: 4, x1: 5, y1: 5 }],
+    [4, { x0: 3, y0: 3, x1: 6, y1: 6 }],
+    [8, { x0: 1, y0: 1, x1: 8, y1: 8 }],
+  ])('a %i px brush covers a square around the pixel', (size, box) => {
+    expect(brushFootprint(5, 5, size)).toEqual(box)
+  })
+
+  it('size 1 paints exactly what the 1 px pencil paints', () => {
+    const a = pencil(
+      createEditLayer(8, 8),
+      [
+        [0, 0],
+        [7, 3],
+      ],
+      [1, 2, 3, 255],
+    )
+    const b = pencilInto(
+      createEditLayer(8, 8),
+      [
+        [0, 0],
+        [7, 3],
+      ],
+      [1, 2, 3, 255],
+      1,
+    )
+    expect(Array.from(b.mask)).toEqual(Array.from(a.mask))
+  })
+
+  it('stamps a 4 px square at a single point', () => {
+    const layer = pencilInto(createEditLayer(8, 8), [[4, 4]], [9, 9, 9, 255], 4)
+    expect(maskSize(layer.mask)).toBe(16)
+    expect(painted(layer)).toContain('2,2')
+    expect(painted(layer)).toContain('5,5')
+    expect(painted(layer)).not.toContain('6,6')
+    expect(Array.from(layer.values.data.slice((2 * 8 + 2) * 4, (2 * 8 + 2) * 4 + 4))).toEqual([
+      9, 9, 9, 255,
+    ])
+  })
+
+  it('drags the square along a line, leaving a band as wide as the brush', () => {
+    const layer = pencilInto(
+      createEditLayer(16, 16),
+      [
+        [2, 8],
+        [13, 8],
+      ],
+      [9, 9, 9, 255],
+      2,
+    )
+    // Rows 7 and 8, columns 1..13.
+    expect(maskSize(layer.mask)).toBe(2 * 13)
+  })
+
+  it('paints the part of the brush still on the painting when its centre is just off it', () => {
+    // An 8 px brush centred one pixel left of the painting still reaches columns 0..2.
+    const layer = pencilInto(createEditLayer(8, 8), [[-1, 4]], [9, 9, 9, 255], 8)
+    expect(maskSize(layer.mask)).toBe(3 * 8)
+    // A line running just outside the left edge paints along it.
+    const line = pencilInto(
+      createEditLayer(8, 8),
+      [
+        [-2, 0],
+        [-2, 7],
+      ],
+      [9, 9, 9, 255],
+      8,
+    )
+    expect(painted(line)).toContain('0,7')
+    expect(painted(line)).toContain('1,0')
+    expect(painted(line)).not.toContain('2,0')
+  })
+
+  it('stays fast and bounded on huge coordinates with a big brush', () => {
+    const layer = createEditLayer(64, 64)
+    const start = performance.now()
+    pencilInto(
+      layer,
+      [
+        [-1e9, -1e9],
+        [1e9, 1e9],
+      ],
+      [9, 9, 9, 255],
+      8,
+    )
+    expect(performance.now() - start).toBeLessThan(200)
+    expect(maskSize(layer.mask)).toBeGreaterThan(0)
   })
 })
