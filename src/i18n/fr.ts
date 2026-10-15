@@ -163,7 +163,8 @@ export const fr: Dictionary = {
     zoom: 'Zoom',
     zoomLevel: '{percent} %',
     zoomHint:
-      'Ctrl + molette zoome sous le pointeur. Maintenez Espace et glissez, ou glissez avec le bouton du milieu, pour vous déplacer.',
+      'Ctrl + molette zoome sous le pointeur. Pour vous déplacer : Espace + glisser, bouton du milieu ou flèches du clavier.',
+    stageLabel: 'Toile. Flèches, Espace + glisser ou bouton du milieu pour déplacer la vue.',
     pixelGrid: 'Grille de pixels',
     transparentPixels: 'Pixels transparents :',
     renderFailed: 'Impossible de dessiner ce tableau. Modifiez un réglage pour réessayer.',

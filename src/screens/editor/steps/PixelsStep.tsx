@@ -11,6 +11,7 @@ import { DYE_IDS } from '../../../domain/types.ts'
 import { format, plural, useT } from '../../../i18n/i18n.ts'
 import type { RGBA } from '../../../imaging/raster.ts'
 import { BRUSH_SIZES, maskSize } from '../../../imaging/tools.ts'
+import { outlinePath } from '../../../imaging/outline.ts'
 import { renderWallPreview } from '../../../imaging/wall.ts'
 import { DEFAULT_TOLERANCE, useEditor, type Tool } from '../../../state/editor.ts'
 import { endStroke, useRenderedPainting } from '../../../state/useRenderedPainting.ts'
@@ -30,13 +31,7 @@ import {
   TRANSPARENT,
 } from '../color.ts'
 import { ColorPicker } from '../ColorPicker.tsx'
-import {
-  applyToolAt,
-  newStroke,
-  outlinePath,
-  paintSelection,
-  type ToolContext,
-} from '../pixelTools.ts'
+import { applyToolAt, newStroke, paintSelection, type ToolContext } from '../pixelTools.ts'
 import styles from './steps.module.css'
 import own from './PixelsStep.module.css'
 
@@ -135,22 +130,40 @@ export function PixelsStage() {
 function SelectionBar({ selection, count }: { selection: Uint8Array; count: number }) {
   const t = useT()
   const color = useEditor((s) => s.color)
+  const { makeTransparent, fillWithColor, clear } = t.editor.pixels
+  // Where the canvas is narrow the buttons show only their icons, keeping their names: one row.
   return (
     <div className={own.selectionBar} role="toolbar" aria-label={t.editor.pixels.selection}>
       <span className={own.selectionCount}>{plural(t, t.editor.pixels.selected, count)}</span>
-      <Button variant="primary" onClick={() => paintSelection(selection, TRANSPARENT)}>
-        {t.editor.pixels.makeTransparent}
+      <Button
+        variant="primary"
+        icon="transparent"
+        aria-label={makeTransparent}
+        title={makeTransparent}
+        onClick={() => paintSelection(selection, TRANSPARENT)}
+      >
+        <span className={own.barLabelMain}>{makeTransparent}</span>
       </Button>
-      <Button onClick={() => paintSelection(selection, color)}>
+      <Button
+        aria-label={fillWithColor}
+        title={fillWithColor}
+        onClick={() => paintSelection(selection, color)}
+      >
         <i
           className={own.chip}
           style={{ '--swatch': cssColor(color) } as CSSProperties}
           aria-hidden="true"
         />
-        {t.editor.pixels.fillWithColor}
+        <span className={own.barLabel}>{fillWithColor}</span>
       </Button>
-      <Button variant="ghost" onClick={() => useEditor.getState().setSelection(null)}>
-        {t.editor.pixels.clear}
+      <Button
+        variant="ghost"
+        icon="close"
+        aria-label={clear}
+        title={clear}
+        onClick={() => useEditor.getState().setSelection(null)}
+      >
+        <span className={own.barLabel}>{clear}</span>
       </Button>
     </div>
   )

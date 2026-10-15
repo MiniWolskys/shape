@@ -1,6 +1,6 @@
 import type { EditLayer } from './edits.ts'
 import { createEditLayer } from './edits.ts'
-import { getPixel, type Raster, type RGBA } from './raster.ts'
+import { getPixel, type PixelBox, type Raster, type RGBA } from './raster.ts'
 
 /** Largest per-channel difference, alpha included. 0..255. */
 export function colorDistance(a: RGBA, b: RGBA): number {
@@ -175,13 +175,19 @@ export const BRUSH_SIZES = [1, 2, 4, 8] as const
  * The pixels a square brush of `size` covers when it is over pixel (x, y), inclusive: the pixel
  * and `floor(size / 2)` pixels before it on each axis (so 1 px is the pixel itself).
  */
-export function brushFootprint(
-  x: number,
-  y: number,
-  size: number,
-): { x0: number; y0: number; x1: number; y1: number } {
+export function brushFootprint(x: number, y: number, size: number): PixelBox {
   const before = Math.floor(size / 2)
   return { x0: x - before, y0: y - before, x1: x - before + size - 1, y1: y - before + size - 1 }
+}
+
+/**
+ * The pixel a square brush of `size` is centred on for a pointer at `exact` (painting pixels,
+ * fractional, along one axis): its square (see `brushFootprint`) starts at the pixel boundary
+ * nearest `exact - size / 2`, so even brushes centre on the pixel corner nearest the pointer.
+ * A 1 px brush is the pixel under the pointer.
+ */
+export function brushCentre(exact: number, size: number): number {
+  return Math.round(exact - size / 2) + Math.floor(size / 2)
 }
 
 /** Draws Bresenham lines through consecutive points; out-of-bounds pixels are ignored. */

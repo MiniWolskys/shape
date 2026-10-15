@@ -6,12 +6,13 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 import { format, useT } from '../../i18n/i18n.ts'
 import type { Raster } from '../../imaging/raster.ts'
-import { brushFootprint } from '../../imaging/tools.ts'
+import { brushCentre, brushFootprint } from '../../imaging/tools.ts'
 import { renderWallPreview } from '../../imaging/wall.ts'
 import { withoutMod } from '../../imaging/window.ts'
 import { useEditor, type BackdropChoice, type CanvasView } from '../../state/editor.ts'
@@ -20,6 +21,7 @@ import { autoBackdrop, type BackdropKind } from '../../ui/backdrop.ts'
 import { Backdrop } from '../../ui/Backdrop.tsx'
 import { Button } from '../../ui/Button.tsx'
 import { FileDrop } from '../../ui/FileDrop.tsx'
+import { isTextEntry } from '../../ui/keyboard.ts'
 import { Icon } from '../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
 import { Segmented } from '../../ui/Segmented.tsx'
@@ -73,30 +75,38 @@ function fitScale(raster: Raster, box: { width: number; height: number }): numbe
   return contain >= 1 ? Math.floor(contain) : contain
 }
 
-/** Painting pixel under the pointer; clamped to the painting only when asked. */
+/** Where the pointer is over the painting, in fractional painting pixels. */
+function exactAt(event: ReactPointerEvent<HTMLElement>, width: number, height: number) {
+  const rect = event.currentTarget.getBoundingClientRect()
+  return {
+    x: rect.width > 0 ? ((event.clientX - rect.left) / rect.width) * width : 0,
+    y: rect.height > 0 ? ((event.clientY - rect.top) / rect.height) * height : 0,
+  }
+}
+
+/**
+ * The painting pixel the pointer works on: the one under it, or with a brush the one the brush
+ * is centred on (see `brushCentre`). Clamped to the painting only when asked.
+ */
 function pixelAt(
   event: ReactPointerEvent<HTMLElement>,
   width: number,
   height: number,
   clamp: boolean,
+  brush?: number,
 ) {
-  const rect = event.currentTarget.getBoundingClientRect()
-  const fx = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0
-  const fy = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0
-  const x = Math.floor(fx * width)
-  const y = Math.floor(fy * height)
+  const exact = exactAt(event, width, height)
+  const x = brush === undefined ? Math.floor(exact.x) : brushCentre(exact.x, brush)
+  const y = brush === undefined ? Math.floor(exact.y) : brushCentre(exact.y, brush)
   if (!clamp) return { x, y }
   return { x: Math.min(width - 1, Math.max(0, x)), y: Math.min(height - 1, Math.max(0, y)) }
 }
 
-/** Focus is somewhere Space types into. */
-function typesSpace(target: EventTarget | null): boolean {
-  if (target instanceof HTMLInputElement) {
-    return !['button', 'checkbox', 'radio', 'range'].includes(target.type)
-  }
-  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true
-  return target instanceof HTMLElement && target.isContentEditable
-}
+/** CSS pixels an arrow key moves the view (Shift: a screenful-ish). */
+const ARROW_STEP = 48
+const ARROW_STEP_BIG = 240
+/** Room kept under the painting for the floating bar while it shows (matches the CSS). */
+const FLOATING_ROOM = 72
 
 /** Size of an element, kept up to date while it resizes. */
 function useBoxSize(ref: { current: HTMLElement | null }) {
@@ -140,7 +150,7 @@ export function CanvasStage({
   const box = useBoxSize(area)
   const drawing = useRef(false)
   const lastPixel = useRef({ x: 0, y: 0 })
-  /** The painting pixel under the pointer, for the brush outline (null off the painting). */
+  /** Where the pointer is over the painting (fractional pixels), for the brush outline. */
   const hover = useRef<{ x: number; y: number } | null>(null)
   /** A zoom waiting for its layout: the painting point to bring back under a screen point. */
   const anchor = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
@@ -151,6 +161,7 @@ export function CanvasStage({
   )
   const pointerOver = useRef(false)
   const spaceHeld = useRef(false)
+  const pannable = useRef(false)
 
   const material = painting?.recipe.frame.material ?? 'dark_oak'
   const kind: BackdropKind = backdrop === 'auto' ? autoBackdrop(material) : backdrop
@@ -173,10 +184,18 @@ export function CanvasStage({
   )
   const shown = view === 'nomod' ? nomod : rendered.raster
   const withTools = tools !== undefined && view === 'edit'
-  const fitBox = withTools ? { width: box.width - TOOLS_ROOM, height: box.height } : box
+  const withFloating = Boolean(floating) && view === 'edit'
+  // The tools column and the floating bar keep their room: the fitted painting is never under them.
+  const fitBox = {
+    width: box.width - (withTools ? TOOLS_ROOM : 0),
+    height: box.height - (withFloating ? FLOATING_ROOM : 0),
+  }
   const fit = shown ? fitScale(shown, fitBox) : 1
   const scale = zoom > 0 ? zoom : fit
   const zoomable = view !== 'wall'
+  useEffect(() => {
+    pannable.current = zoomable
+  })
   const showsBrush = brush !== undefined && onPixel !== undefined && view === 'edit'
 
   /**
@@ -243,11 +262,22 @@ export function CanvasStage({
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // Space held with the pointer over the canvas makes a hand: dragging moves the view.
+  /**
+   * Space makes the canvas a hand (dragging moves the view) while the canvas has the focus, or
+   * nothing does and the pointer is over it: a focused button or field keeps its Space.
+   */
   useEffect(() => {
+    function armsSpace(event: KeyboardEvent): boolean {
+      if (event.key !== ' ' || !pannable.current || isTextEntry(event.target)) return false
+      const focused = document.activeElement
+      const stage = area.current
+      if (!stage) return false
+      if (focused === stage || surface.current?.contains(focused)) return true
+      return (focused === null || focused === document.body) && pointerOver.current
+    }
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== ' ' || !pointerOver.current || typesSpace(event.target)) return
-      // Neither scroll the page nor press the focused button.
+      if (!armsSpace(event)) return
+      // The page must not scroll.
       event.preventDefault()
       if (spaceHeld.current) return
       spaceHeld.current = true
@@ -282,7 +312,8 @@ export function CanvasStage({
       el.style.display = 'none'
       return
     }
-    const footprint = brushFootprint(at.x, at.y, brush)
+    // The same pixels the brush paints: centred from the exact pointer position.
+    const footprint = brushFootprint(brushCentre(at.x, brush), brushCentre(at.y, brush), brush)
     el.style.display = 'block'
     el.style.transform = `translate(${footprint.x0 * scale}px, ${footprint.y0 * scale}px)`
     el.style.width = `${brush * scale}px`
@@ -315,6 +346,7 @@ export function CanvasStage({
     // The painting under the pointer must not take this press.
     event.preventDefault()
     event.stopPropagation()
+    area.current?.focus({ preventScroll: true })
     panning.current = {
       id: event.pointerId,
       x: event.clientX,
@@ -340,10 +372,29 @@ export function CanvasStage({
     setPan(spaceHeld.current ? 'ready' : null)
   }
 
+  /** Arrow keys move the view while the canvas itself has the focus (Shift: farther). */
+  function moveWithKeys(event: ReactKeyboardEvent<HTMLElement>) {
+    const el = surface.current
+    if (!zoomable || !el || event.target !== event.currentTarget) return
+    if (event.altKey || event.ctrlKey || event.metaKey) return
+    const step = event.shiftKey ? ARROW_STEP_BIG : ARROW_STEP
+    const moves: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    }
+    const move = moves[event.key]
+    if (!move) return
+    event.preventDefault()
+    el.scrollLeft += move[0]
+    el.scrollTop += move[1]
+  }
+
   /** Remembers the painting pixel under the pointer for the brush outline. */
   function trackHover(event: ReactPointerEvent<HTMLElement>) {
     if (!showsBrush || !shown) return
-    hover.current = pixelAt(event, shown.width, shown.height, false)
+    hover.current = exactAt(event, shown.width, shown.height)
     placeBrush()
   }
 
@@ -362,10 +413,12 @@ export function CanvasStage({
       drawing.current = true
       useEditor.getState().endGesture()
       event.currentTarget.setPointerCapture?.(event.pointerId)
+      // The canvas takes the focus: Space and the arrow keys now move the view.
+      area.current?.focus({ preventScroll: true })
     } else if (!drawing.current) return
     const { x, y } = atLastPixel
       ? lastPixel.current
-      : pixelAt(event, shown.width, shown.height, phase === 'down')
+      : pixelAt(event, shown.width, shown.height, phase === 'down', showsBrush ? brush : undefined)
     lastPixel.current = { x, y }
     if (phase === 'up') drawing.current = false
     onPixel(x, y, phase, event)
@@ -508,9 +561,15 @@ export function CanvasStage({
       <div
         ref={area}
         className={styles.area}
+        role="group"
+        aria-label={zoomable ? t.editor.stageLabel : undefined}
+        // Focusable, so keyboard players can move the view with the arrow keys.
+        tabIndex={zoomable ? 0 : undefined}
         data-view={view}
         data-tools={withTools || undefined}
-        data-pan={pan ?? undefined}
+        data-floating={withFloating || undefined}
+        data-pan={(zoomable && pan) || undefined}
+        onKeyDown={moveWithKeys}
         onPointerEnter={() => {
           pointerOver.current = true
         }}

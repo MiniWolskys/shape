@@ -160,7 +160,8 @@ export const en = {
     zoom: 'Zoom',
     zoomLevel: '{percent} %',
     zoomHint:
-      'Ctrl + wheel zooms at the pointer. Hold Space and drag, or drag with the middle button, to move around.',
+      'Ctrl + wheel zooms at the pointer. Hold Space and drag, drag with the middle button, or use the arrow keys to move around.',
+    stageLabel: 'Canvas. Arrow keys, Space + drag or the middle button move the view.',
     pixelGrid: 'Pixel grid',
     transparentPixels: 'Transparent pixels:',
     renderFailed: 'This painting could not be drawn. Change a setting to try again.',

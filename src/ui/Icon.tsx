@@ -108,6 +108,14 @@ const PATHS = {
       <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />
     </>
   ),
+  /* A square, half checkerboard: see-through. */
+  transparent: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="1" />
+      <path d="M4 12h8V4M12 12h8v8h-8z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  close: <path d="M6 6l12 12M18 6 6 18" />,
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS

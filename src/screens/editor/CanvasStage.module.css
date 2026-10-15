@@ -97,6 +97,20 @@
   border-radius: var(--radius);
 }
 
+.area:focus {
+  outline: none;
+}
+
+.area:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Room under the painting for the floating selection bar (FLOATING_ROOM in the code). */
+.area[data-floating] .center {
+  padding-bottom: 88px;
+}
+
 .surface {
   display: flex;
   width: 100%;
@@ -200,6 +214,8 @@
   display: flex;
   justify-content: center;
   pointer-events: none;
+  /* The selection bar adapts to the room the canvas has, not to the window. */
+  container-type: inline-size;
 }
 
 .floating > * {

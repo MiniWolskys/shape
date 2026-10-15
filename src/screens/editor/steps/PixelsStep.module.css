@@ -175,6 +175,41 @@
   box-shadow: var(--shadow);
 }
 
+/*
+ * One row whatever room the canvas has: where the full names don't fit, the buttons show their
+ * icons (their names stay in aria-label and title); the main action keeps its name longest.
+ */
+.selectionBar {
+  flex-wrap: nowrap;
+}
+
+@container (max-width: 760px) {
+  .barLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+@container (max-width: 440px) {
+  .selectionBar {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .barLabelMain {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 .selectionCount {
   padding: 0 4px;
   color: var(--text);

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createEditLayer } from './edits.ts'
 import { createRaster, getPixel, setPixel } from './raster.ts'
 import {
+  brushCentre,
   brushFootprint,
+  copyLayer,
   colorDistance,
   eyedropper,
   maskSize,
@@ -17,6 +19,18 @@ function wallImage() {
   const r = createRaster(3, 3, [255, 255, 255, 255])
   for (let y = 0; y < 3; y++) setPixel(r, 1, y, [0, 0, 0, 255])
   return r
+}
+
+/** Counts the pixels written into a layer from now on. */
+function countWrites(layer: { values: { data: Uint8ClampedArray } }): () => number {
+  let count = 0
+  const data = layer.values.data
+  const set = data.set.bind(data)
+  data.set = (array: ArrayLike<number>, offset?: number) => {
+    count++
+    set(array, offset)
+  }
+  return () => count
 }
 
 describe('selectSimilar', () => {
@@ -92,16 +106,19 @@ describe('editing tools', () => {
       [1, 1, 1, 255],
     )
     expect(maskSize(nan.mask)).toBe(0)
-    const start = Date.now()
-    const far = pencil(
-      layer,
+    const far = copyLayer(layer)
+    const writes = countWrites(far)
+    pencilInto(
+      far,
       [
         [0, 0],
         [1e9, 1e9],
       ],
       [1, 1, 1, 255],
     )
-    expect(Date.now() - start).toBeLessThan(500)
+    // Work is bounded by the painting, not by the line: the clipped diagonal is 4 pixels
+    // (the start pixel is written twice: once as the dot, once as the line's start).
+    expect(writes()).toBeLessThanOrEqual(5)
     expect(maskSize(far.mask)).toBe(4)
     const across = pencil(
       layer,
@@ -208,9 +225,9 @@ describe('square brush', () => {
     expect(painted(line)).not.toContain('2,0')
   })
 
-  it('stays fast and bounded on huge coordinates with a big brush', () => {
+  it('does work bounded by the painting on huge coordinates with a big brush', () => {
     const layer = createEditLayer(64, 64)
-    const start = performance.now()
+    const writes = countWrites(layer)
     pencilInto(
       layer,
       [
@@ -220,7 +237,20 @@ describe('square brush', () => {
       [9, 9, 9, 255],
       8,
     )
-    expect(performance.now() - start).toBeLessThan(200)
+    // At most one 8×8 stamp per step of the clipped diagonal (64 + 8 steps).
+    expect(writes()).toBeLessThanOrEqual(72 * 64)
     expect(maskSize(layer.mask)).toBeGreaterThan(0)
+  })
+
+  it('centres even brushes on the pointer, from where it is inside the pixel', () => {
+    // A 2 px brush over the right half of pixel 5 covers 5..6, over its left half 4..5.
+    expect(brushFootprint(brushCentre(5.7, 2), 0, 2).x0).toBe(5)
+    expect(brushFootprint(brushCentre(5.3, 2), 0, 2).x0).toBe(4)
+    // 4 px: the square's middle is the pixel corner nearest the pointer.
+    expect(brushFootprint(brushCentre(5.6, 4), 0, 4)).toMatchObject({ x0: 4, x1: 7 })
+    expect(brushFootprint(brushCentre(5.4, 4), 0, 4)).toMatchObject({ x0: 3, x1: 6 })
+    // 1 px is the pixel under the pointer.
+    expect(brushCentre(5.99, 1)).toBe(5)
+    expect(brushCentre(5, 1)).toBe(5)
   })
 })

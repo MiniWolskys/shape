@@ -201,6 +201,71 @@ describe('editor steps', () => {
       expect(screen.getByRole('radio', { name: 'Sky' })).toBeDisabled()
     })
 
+    describe('moving the view', () => {
+      const stage = () => screen.getByRole('group', { name: /^Canvas\./ })
+      const space = (target: Element) => fireEvent.keyDown(target, { key: ' ' })
+
+      it('Space keeps working on a focused button, even with the pointer over the canvas', async () => {
+        await open(flatPainting(), 'pixels')
+        fireEvent.pointerEnter(stage())
+        const fill = screen.getByRole('button', { name: 'Fill' })
+        fill.focus()
+        expect(space(fill)).toBe(true) // not prevented: the button gets its Space
+        expect(stage()).not.toHaveAttribute('data-pan')
+      })
+
+      it('Space with the canvas focused makes a hand; the drag moves the view, not paint', async () => {
+        await open(flatPainting(), 'pixels')
+        act(() => useEditor.getState().setTool('pencil'))
+        mockRect(8, 12)
+        act(() => stage().focus())
+        expect(space(stage())).toBe(false) // prevented: the page does not scroll
+        expect(stage()).toHaveAttribute('data-pan', 'ready')
+        fireEvent.pointerDown(surface(), { button: 0, pointerId: 1, clientX: 2, clientY: 2 })
+        expect(stage()).toHaveAttribute('data-pan', 'active')
+        fireEvent.pointerUp(stage(), { pointerId: 1, clientX: 2, clientY: 2 })
+        fireEvent.keyUp(stage(), { key: ' ' })
+        expect(useEditor.getState().edits).toBeNull()
+        expect(stage()).not.toHaveAttribute('data-pan')
+      })
+
+      it('painting focuses the canvas, and the arrow keys then move the view', async () => {
+        await open(flatPainting(), 'pixels')
+        mockRect(8, 12)
+        act(() => useEditor.getState().setTool('wand'))
+        click(1, 1)
+        expect(stage()).toHaveFocus()
+        const view = stage().querySelector('[data-backdrop]') as HTMLElement
+        view.scrollLeft = 100
+        view.scrollTop = 300
+        fireEvent.keyDown(stage(), { key: 'ArrowRight' })
+        fireEvent.keyDown(stage(), { key: 'ArrowUp', shiftKey: true })
+        expect(view.scrollLeft).toBe(148)
+        expect(view.scrollTop).toBe(60)
+      })
+
+      it('the wall view has no hand and no keyboard panning', async () => {
+        await open(flatPainting(), 'pixels')
+        act(() => useEditor.getState().setView('wall'))
+        expect(screen.queryByRole('group', { name: /^Canvas\./ })).toBeNull()
+        const area = document.querySelector('[data-view="wall"]') as HTMLElement
+        fireEvent.pointerEnter(area)
+        expect(space(document.body)).toBe(true)
+        expect(area).not.toHaveAttribute('data-pan')
+      })
+    })
+
+    it('the fitted painting keeps clear of the selection bar while it shows', async () => {
+      await open(flatPainting(), 'pixels')
+      // The stage is 640×480 here: 8×12 px fits at 37 px per pixel, 31 with the bar's room.
+      expect(screen.getByText('3700 %')).toBeInTheDocument()
+      act(() => useEditor.getState().setTool('wand'))
+      mockRect(8, 12)
+      click(1, 1)
+      expect(screen.getByRole('toolbar', { name: 'Selection' })).toBeInTheDocument()
+      expect(screen.getByText('3100 %')).toBeInTheDocument()
+    })
+
     it('says how the current tool works under the canvas', async () => {
       await open(flatPainting(), 'pixels')
       act(() => useEditor.getState().setTool('wand'))
@@ -428,6 +493,23 @@ describe('editor steps', () => {
       fireEvent.pointerUp(el, { pointerId: 1, clientX: 4, clientY: 9 })
       expect(useEditor.getState().edits?.mask.reduce((n, v) => n + v, 0)).toBe(4 * 9)
       expect(useEditor.getState().past).toHaveLength(1)
+    })
+
+    it('centres an even brush on the pointer, between the pixels nearest it', async () => {
+      await open(flatPainting(), 'pixels')
+      act(() => {
+        useEditor.getState().setTool('pencil')
+        useEditor.getState().setBrush(2)
+      })
+      mockRect(8, 12)
+      const columns = (clientX: number) => {
+        act(() => useEditor.setState({ edits: null }))
+        click(clientX, 5.5)
+        const mask = useEditor.getState().edits?.mask
+        return [0, 1, 2, 3, 4, 5, 6, 7].filter((x) => mask?.[5 * 8 + x] === 1)
+      }
+      expect(columns(4.7)).toEqual([4, 5])
+      expect(columns(4.2)).toEqual([3, 4])
     })
 
     it('[ and ] step the brush size through 1, 2, 4 and 8 px', async () => {
