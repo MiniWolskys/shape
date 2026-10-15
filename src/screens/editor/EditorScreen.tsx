@@ -4,7 +4,7 @@ import { updatePainting } from '../../domain/library.ts'
 import type { Assets, Painting } from '../../domain/types.ts'
 import { format, useT } from '../../i18n/i18n.ts'
 import type { Dictionary } from '../../i18n/en.ts'
-import type { EditLayer } from '../../imaging/edits.ts'
+import { isEmptyLayer, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster } from '../../imaging/raster.ts'
 import { decodeEditLayer, decodePng, encodeEditLayer } from '../../packs/png.ts'
 import { useEditor, type EditorStep, type Tool } from '../../state/editor.ts'
@@ -101,8 +101,10 @@ function savePaintingNow(): Painting | null {
   const { painting, edits } = useEditor.getState()
   if (!painting) return null
   const workspace = useWorkspace.getState()
-  let editsId = painting.recipe.editsId
-  if (edits) {
+  // No edits (none made, or all undone) means no edit assets: the old ones get pruned below.
+  const hasEdits = edits !== null && !isEmptyLayer(edits)
+  let editsId = hasEdits ? painting.recipe.editsId : null
+  if (hasEdits) {
     if (editsId === null) {
       const { assets } = workspace
       do editsId = makeAssetId(Math.random)
@@ -115,7 +117,16 @@ function savePaintingNow(): Painting | null {
   const saved = updatePainting(painting, { recipe: { ...painting.recipe, editsId } }, new Date())
   workspace.savePainting(saved)
   useEditor.getState().markSaved(saved)
+  workspace.pruneUnreferencedAssets(historyPictureIds())
   return saved
+}
+
+/** Pictures Undo or Redo can still bring back, which must outlive a save. */
+function historyPictureIds(): string[] {
+  const { painting, past, future } = useEditor.getState()
+  const paintings = [...past, ...future].map((s) => s.painting)
+  if (painting) paintings.push(painting)
+  return paintings.flatMap((p) => (p.recipe.source ? [p.recipe.source.imageId] : []))
 }
 
 export function EditorScreen({ paintingId }: { paintingId: string }) {
@@ -146,7 +157,11 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
     useEditor
       .getState()
       .open(p, decodeSource(p, workspace.assets, t), decodeEdits(p, workspace.assets, t))
-    return () => useEditor.getState().close()
+    return () => {
+      useEditor.getState().close()
+      // Pictures chosen but never saved are not needed once the editor is gone.
+      useWorkspace.getState().pruneUnreferencedAssets()
+    }
   }, [paintingId, go])
 
   function save(): boolean {
@@ -168,15 +183,17 @@ export function EditorScreen({ paintingId }: { paintingId: string }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing) return
-      if (document.querySelector('dialog[open]')) return
       const key = event.key.toLowerCase()
       const mod = event.ctrlKey || event.metaKey
-      const editor = useEditor.getState()
+      const dialogOpen = document.querySelector('dialog[open]') !== null
       if (mod && !event.altKey && key === 's') {
+        // Never let the browser's own Save dialog open, even while ours is showing.
         event.preventDefault()
-        saveRef.current()
+        if (!dialogOpen) saveRef.current()
         return
       }
+      if (dialogOpen) return
+      const editor = useEditor.getState()
       if (isTextEntry(event.target)) return
       if (mod && !event.altKey) {
         if (key === 'z' && !event.shiftKey) editor.undo()

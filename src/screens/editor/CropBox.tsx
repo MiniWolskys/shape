@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { format, useT } from '../../i18n/i18n.ts'
 import { centeredCrop, fitWithin, flip, rotate } from '../../imaging/transform.ts'
 import { NO_CROP, turnedSize, useEditor } from '../../state/editor.ts'
@@ -39,6 +39,7 @@ export function CropBox() {
   const painting = useEditor((s) => s.painting)
   const container = useRef<HTMLDivElement>(null)
   const drag = useRef<{ px: number; py: number; start: Rect } | null>(null)
+  const hintId = useId()
 
   const rotation = painting?.recipe.rotation ?? 0
   const flipX = painting?.recipe.flipX ?? false
@@ -125,6 +126,12 @@ export function CropBox() {
     drag.current = { px: event.clientX, py: event.clientY, start: rect }
   }
 
+  /** One drag is one undo step. */
+  function endDrag() {
+    drag.current = null
+    useEditor.getState().endGesture()
+  }
+
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     const d = drag.current
     if (!d) return
@@ -168,7 +175,7 @@ export function CropBox() {
           role="group"
           tabIndex={0}
           aria-label={format(t.editor.size.cropArea, rect)}
-          aria-describedby="crop-hint"
+          aria-describedby={hintId}
           className={styles.rect}
           style={{
             left: rect.x * scale,
@@ -178,8 +185,9 @@ export function CropBox() {
           }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={() => (drag.current = null)}
-          onPointerCancel={() => (drag.current = null)}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onLostPointerCapture={endDrag}
           onKeyDown={onKeyDown}
         />
       </div>
@@ -206,7 +214,7 @@ export function CropBox() {
           {t.editor.size.cropCenter}
         </button>
       </div>
-      <p id="crop-hint" className={styles.hint}>
+      <p id={hintId} className={styles.hint}>
         {t.editor.size.cropHint}
       </p>
     </div>

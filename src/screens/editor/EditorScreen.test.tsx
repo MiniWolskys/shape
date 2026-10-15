@@ -13,6 +13,8 @@ import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
 import { useToasts } from '../../ui/toastStore.ts'
+import * as decode from '../../imaging/decode.ts'
+import { CanvasStage } from './CanvasStage.tsx'
 import { EditorScreen } from './EditorScreen.tsx'
 
 const now = new Date('2026-10-15T12:00:00Z')
@@ -245,5 +247,142 @@ describe('EditorScreen', () => {
     renderEditor('missing_abc')
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
     expect(screen.getByText("This painting doesn't exist anymore.")).toBeInTheDocument()
+  })
+  it('saves no edits after undoing them, so reopening shows none', async () => {
+    const p = painting()
+    await startWith(p)
+    const view = renderEditor(p.id)
+    const layer = createEditLayer(8, 12)
+    layer.mask[0] = 1
+    act(() => useEditor.getState().setEdits(layer))
+    await userEvent.keyboard('{Control>}s{/Control}')
+    const firstId = useWorkspace.getState().findPainting(p.id)?.recipe.editsId
+    expect(firstId).toBeTruthy()
+    await userEvent.keyboard('{Control>}z{/Control}')
+    await userEvent.keyboard('{Control>}s{/Control}')
+    expect(useWorkspace.getState().findPainting(p.id)?.recipe.editsId).toBeNull()
+    expect(firstId && useWorkspace.getState().assets[firstId]).toBeFalsy()
+
+    view.unmount()
+    renderEditor(p.id)
+    expect(useEditor.getState().edits).toBeNull()
+  })
+
+  it('saving prunes unused assets but keeps pictures the undo history needs', async () => {
+    const p = painting()
+    await startWith(p, { assets: { orphan: new Uint8Array([1]) } })
+    renderEditor(p.id)
+    act(() => {
+      const ws = useWorkspace.getState()
+      const first = ws.putAsset(encodePng(createRaster(4, 4)))
+      useEditor.getState().setSource(createRaster(4, 4), first)
+      const second = ws.putAsset(encodePng(createRaster(4, 4)))
+      useEditor.getState().setSource(createRaster(4, 4), second)
+    })
+    const ids = () => Object.keys(useWorkspace.getState().assets)
+    expect(ids()).toHaveLength(3)
+    await userEvent.keyboard('{Control>}s{/Control}')
+    // The orphan goes; the first picture stays because Undo can bring it back.
+    expect(ids()).toHaveLength(2)
+    expect(ids()).not.toContain('orphan')
+  })
+
+  it('leaving the editor drops pictures that were never saved', async () => {
+    const p = painting()
+    await startWith(p)
+    const view = renderEditor(p.id)
+    act(() => {
+      const id = useWorkspace.getState().putAsset(encodePng(createRaster(4, 4)))
+      useEditor.getState().setSource(createRaster(4, 4), id)
+    })
+    expect(Object.keys(useWorkspace.getState().assets)).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Library' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    view.unmount()
+    expect(useWorkspace.getState().assets).toEqual({})
+  })
+
+  it('shows the picked size after clicking a cell of the block grid', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    await userEvent.click(within(rail()).getByRole('button', { name: /Size & crop/ }))
+    const grid = screen.getByRole('grid', { name: 'Painting size in blocks' })
+    await userEvent.click(within(grid).getByRole('gridcell', { name: '5 × 4 blocks' }))
+    await userEvent.unhover(grid)
+    expect(useEditor.getState().painting).toMatchObject({ width: 5, height: 4 })
+    expect(screen.getByText('5 × 4 blocks', { selector: 'p' })).toBeInTheDocument()
+  })
+
+  it('keeps Ctrl+S from reaching the browser while a dialog is open', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    act(() => useEditor.getState().change((q) => ({ ...q, title: 'Changed' })))
+    await userEvent.click(screen.getByRole('button', { name: 'Library' }))
+    const event = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(useWorkspace.getState().findPainting(p.id)?.title).toBe('Sunset Chapel')
+  })
+
+  it('drops a picture that finishes loading after another painting was opened', async () => {
+    const p = painting()
+    const other = painting({ id: 'other_abc', title: 'Other' })
+    await startWith(p)
+    useWorkspace.getState().savePainting(other)
+    let finish: (r: ReturnType<typeof createRaster>) => void = () => {}
+    vi.spyOn(decode, 'fileToRaster').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    renderEditor(p.id)
+    const input = screen.getByLabelText('Choose a picture')
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'a.png')] })
+    fireEvent.change(input)
+    act(() => useEditor.getState().open(other, null, null))
+    await act(async () => finish(createRaster(4, 4)))
+    expect(useWorkspace.getState().assets).toEqual({})
+    expect(useEditor.getState().painting?.recipe.source).toBeNull()
+  })
+})
+
+describe('CanvasStage', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    useLanguage.setState({ language: 'en' })
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('ends a stroke with up when the pointer capture is lost', () => {
+    useEditor.getState().open(painting(), null, null)
+    const onPixel = vi.fn()
+    render(<CanvasStage onPixel={onPixel} />)
+    const surface = screen.getByRole('img', { name: 'The painting' }).parentElement as HTMLElement
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1 })
+    fireEvent.lostPointerCapture(surface, { pointerId: 1 })
+    fireEvent.pointerMove(surface, { pointerId: 1 })
+    expect(onPixel.mock.calls.map((c) => c[2])).toEqual(['down', 'up'])
+  })
+
+  it('makes separate drags separate undo steps', () => {
+    useEditor.getState().open(painting(), null, null)
+    render(<CanvasStage onPixel={() => {}} />)
+    const surface = screen.getByRole('img', { name: 'The painting' }).parentElement as HTMLElement
+    const brighten = (brightness: number) =>
+      useEditor
+        .getState()
+        .change(
+          (q) => ({ ...q, recipe: { ...q.recipe, adjust: { ...q.recipe.adjust, brightness } } }),
+          { merge: 'stroke' },
+        )
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1 })
+    act(() => brighten(10))
+    fireEvent.pointerUp(surface, { pointerId: 1 })
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1 })
+    act(() => brighten(20))
+    fireEvent.pointerUp(surface, { pointerId: 1 })
+    expect(useEditor.getState().past).toHaveLength(2)
   })
 })

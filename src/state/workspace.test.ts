@@ -332,4 +332,46 @@ describe('workspace store', () => {
     expect(s.getState().library).toBeNull()
     expect(s.getState().findPainting(loose)).toBeDefined()
   })
+  it('pruneUnreferencedAssets drops assets no painting uses, except the kept ones', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const a = s.getState().createPainting()
+    s.getState().createLibrary('Ours', 'ours')
+    const b = s.getState().createPainting()
+    const looseImage = s.getState().putAsset(new Uint8Array([1]))
+    const libImage = s.getState().putAsset(new Uint8Array([2]))
+    s.getState().setAsset('edits1', new Uint8Array([3]))
+    s.getState().setAsset('edits1.mask', new Uint8Array([4]))
+    const orphan = s.getState().putAsset(new Uint8Array([5]))
+    const kept = s.getState().putAsset(new Uint8Array([6]))
+    const pa = s.getState().findPainting(a)!
+    const pb = s.getState().findPainting(b)!
+    s.getState().savePainting({
+      ...pa,
+      recipe: { ...pa.recipe, source: { imageId: looseImage, width: 1, height: 1 } },
+    })
+    s.getState().savePainting({
+      ...pb,
+      recipe: {
+        ...pb.recipe,
+        source: { imageId: libImage, width: 1, height: 1 },
+        editsId: 'edits1',
+      },
+    })
+    s.getState().pruneUnreferencedAssets([kept])
+    expect(Object.keys(s.getState().assets).sort()).toEqual(
+      [looseImage, libImage, 'edits1', 'edits1.mask', kept].sort(),
+    )
+    expect(s.getState().assets[orphan]).toBeUndefined()
+    s.getState().pruneUnreferencedAssets()
+    expect(s.getState().assets[kept]).toBeUndefined()
+  })
+
+  it('pruneUnreferencedAssets leaves the assets object alone when nothing is unused', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const before = s.getState().assets
+    s.getState().pruneUnreferencedAssets()
+    expect(s.getState().assets).toBe(before)
+  })
 })

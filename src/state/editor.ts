@@ -17,6 +17,8 @@ export interface Snapshot {
 }
 
 export const HISTORY_LIMIT = 60
+/** Undo memory budget over the distinct edit layers it holds (5 bytes per pixel). */
+export const HISTORY_BYTES = 64 * 1024 * 1024
 /** Zoom 0 means "fit the stage"; otherwise CSS pixels per painting pixel. */
 export const MAX_ZOOM = 64
 /** Changes with the same merge key this close together form one undo step (slider drags). */
@@ -53,7 +55,10 @@ export interface EditorState {
   change(patch: (p: Painting) => Painting, options?: ChangeOptions): void
   /** Uses a new picture and resets the crop to the centred crop; undoable. */
   setSource(r: Raster, imageId: string): void
-  /** Pushes history. */
+  /**
+   * Pushes history. Tools must pass a fresh layer and never mutate `edits` in place: the
+   * history keeps references to earlier layers, and the save and render memos compare by identity.
+   */
   setEdits(layer: EditLayer): void
   /** Resamples edits; throws ShapeError('published-locked') via updatePainting. */
   resize(width: number, height: number, ppb: number): void
@@ -61,6 +66,8 @@ export interface EditorState {
   redo(): void
   /** After a save: the given painting becomes the current, clean state. */
   markSaved(p: Painting): void
+  /** Ends a pointer gesture: the next merged change starts a new undo step. */
+  endGesture(): void
   setStep(step: EditorStep): void
   setView(view: CanvasView): void
   setBackdrop(backdrop: BackdropChoice): void
@@ -91,9 +98,35 @@ function scaleThickness(thickness: number, fromPpb: number, toPpb: number): numb
   return Math.max(1, Math.round((thickness * toPpb) / fromPpb))
 }
 
+const layerBytes = (layer: EditLayer) => layer.mask.length * 5
+
+/**
+ * Drops the oldest past entries until the distinct edit layers of the history (and the current
+ * one) fit the memory budget.
+ */
+function trimToBudget(past: Snapshot[], future: Snapshot[], current: EditLayer | null): Snapshot[] {
+  const total = (entries: Snapshot[]) => {
+    const layers = new Set<EditLayer>()
+    for (const s of entries) if (s.edits) layers.add(s.edits)
+    if (current) layers.add(current)
+    let bytes = 0
+    for (const layer of layers) bytes += layerBytes(layer)
+    return bytes
+  }
+  let start = 0
+  while (start < past.length && total([...past.slice(start), ...future]) > HISTORY_BYTES) start++
+  return start === 0 ? past : past.slice(start)
+}
+
+/** Pictures by asset id, so undoing a new picture brings the old raster back. */
+let rasters = new Map<string, Raster>()
+
+/** Asset ids of the pictures the editor keeps in memory (for tests). */
+export function cachedPictureIds(): string[] {
+  return [...rasters.keys()]
+}
+
 export const useEditor = create<EditorState>()((set, get) => {
-  /** Pictures by asset id, so undoing a new picture brings the old raster back. */
-  let rasters = new Map<string, Raster>()
   let saved: Snapshot | null = null
   let lastMerge: { key: string; at: number } | null = null
 
@@ -101,7 +134,13 @@ export const useEditor = create<EditorState>()((set, get) => {
     saved !== null && saved.painting === painting && saved.edits === edits
 
   /** Records the current state in the history and moves to `next`. */
-  const commit = (next: Snapshot, options?: ChangeOptions) => {
+  /** Keeps only the pictures the current state or the history still refers to. */
+  const pruneRasters = (entries: Snapshot[]) => {
+    const used = new Set(entries.map((s) => s.painting.recipe.source?.imageId))
+    for (const id of [...rasters.keys()]) if (!used.has(id)) rasters.delete(id)
+  }
+
+  const commit = (next: Snapshot, options?: ChangeOptions, extra: Partial<EditorState> = {}) => {
     const { painting, edits, past } = get()
     if (!painting) return
     const now = Date.now()
@@ -111,8 +150,11 @@ export const useEditor = create<EditorState>()((set, get) => {
       now - lastMerge.at < MERGE_WINDOW_MS &&
       past.length > 0
     lastMerge = options?.merge !== undefined ? { key: options.merge, at: now } : null
-    const nextPast = merging ? past : [...past, { painting, edits }].slice(-HISTORY_LIMIT)
+    const pushed = merging ? past : [...past, { painting, edits }].slice(-HISTORY_LIMIT)
+    const nextPast = trimToBudget(pushed, [], next.edits)
+    pruneRasters([...nextPast, next])
     set({
+      ...extra,
       painting: next.painting,
       edits: next.edits,
       past: nextPast,
@@ -121,11 +163,16 @@ export const useEditor = create<EditorState>()((set, get) => {
     })
   }
 
-  /** Moves to a snapshot from the history, keeping a saved edits id and the right picture. */
+  /**
+   * Moves to a snapshot from the history with the right picture. A snapshot with edits keeps the
+   * edits id saved since; one without edits has none, so saving it drops the stale edit assets.
+   */
   const restore = (snap: Snapshot): Pick<EditorState, 'painting' | 'edits' | 'source'> => {
-    const editsId = get().painting?.recipe.editsId ?? null
+    const editsId = snap.edits
+      ? (get().painting?.recipe.editsId ?? snap.painting.recipe.editsId)
+      : null
     const painting =
-      editsId !== null && snap.painting.recipe.editsId !== editsId
+      snap.painting.recipe.editsId !== editsId
         ? { ...snap.painting, recipe: { ...snap.painting.recipe, editsId } }
         : snap.painting
     const imageId = painting.recipe.source?.imageId
@@ -210,8 +257,7 @@ export const useEditor = create<EditorState>()((set, get) => {
           crop: centeredCrop(turned.width, turned.height, painting.width, painting.height),
         },
       }
-      commit({ painting: next, edits })
-      set({ source: r })
+      commit({ painting: next, edits }, undefined, { source: r })
     },
 
     setEdits(layer) {
@@ -244,8 +290,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         new Date(),
       )
       const nextEdits = edits && resampleEdits(edits, width * ppb, height * ppb)
-      commit({ painting: next, edits: nextEdits })
-      set({ selection: null })
+      commit({ painting: next, edits: nextEdits }, undefined, { selection: null })
     },
 
     undo() {
@@ -269,9 +314,15 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (!painting || !next) return
       lastMerge = null
       const restored = restore(next)
+      const nextPast = trimToBudget(
+        [...past, { painting, edits }].slice(-HISTORY_LIMIT),
+        rest,
+        next.edits,
+      )
+      pruneRasters([...nextPast, next, ...rest])
       set({
         ...restored,
-        past: [...past, { painting, edits }].slice(-HISTORY_LIMIT),
+        past: nextPast,
         future: rest,
         selection: null,
         dirty: !isSaved(next.painting, next.edits),
@@ -286,6 +337,10 @@ export const useEditor = create<EditorState>()((set, get) => {
       saved = { painting: p, edits }
       lastMerge = null
       set({ painting: p, past: past.map(swap), future: future.map(swap), dirty: false })
+    },
+
+    endGesture() {
+      lastMerge = null
     },
 
     setStep: (step) => set({ step }),

@@ -30,6 +30,8 @@ export interface WorkspaceState extends Workspace {
   duplicatePainting(id: string): string
   putAsset(bytes: Uint8Array): string
   setAsset(id: string, bytes: Uint8Array): void
+  /** Deletes assets no library or loose painting refers to, except the ids in `keep`. */
+  pruneUnreferencedAssets(keep?: string[]): void
   applyExport(library: Library): void
   closeLibrary(): void
   findPainting(id: string): Painting | undefined
@@ -310,6 +312,13 @@ export function createWorkspaceStore(
 
       setAsset(id, bytes) {
         set({ assets: { ...get().assets, [id]: bytes } })
+      },
+
+      pruneUnreferencedAssets(keep = []) {
+        const { assets } = get()
+        const used = new Set([...allPaintings(get()).flatMap(assetIdsOf), ...keep])
+        const unused = Object.keys(assets).filter((id) => !used.has(id))
+        if (unused.length > 0) set({ assets: pruneAssets(assets, unused, allPaintings(get())) })
       },
 
       applyExport(library) {

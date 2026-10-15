@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useId, useRef } from 'react'
 import type { Recipe } from '../../../domain/types.ts'
 import { format, useT } from '../../../i18n/i18n.ts'
 import { fileToRaster } from '../../../imaging/decode.ts'
@@ -26,6 +26,9 @@ function patchRecipe(patch: (r: Recipe) => Partial<Recipe>, merge?: string) {
     .change((p) => ({ ...p, recipe: { ...p.recipe, ...patch(p.recipe) } }), { merge })
 }
 
+/** A slider drag ends on pointer up: the next drag is its own undo step. */
+const endGesture = () => useEditor.getState().endGesture()
+
 /** A new rotation or flip leaves the crop meaningless: it goes back to the centred crop. */
 function turn(patch: (r: Recipe) => Partial<Recipe>) {
   patchRecipe((r) => ({ ...patch(r), crop: { ...NO_CROP } }))
@@ -35,12 +38,16 @@ export function ImageStep() {
   const t = useT()
   const recipe = useEditor((s) => s.painting?.recipe)
   const fileInput = useRef<HTMLInputElement>(null)
+  const id = useId()
   if (!recipe) return null
   const { source, adjust, mcLook } = recipe
 
   async function loadPicture(file: File) {
+    // Decoding takes a while: the result only belongs to the painting that asked for it.
+    const forPainting = useEditor.getState().painting?.id
     try {
       const raster = await fileToRaster(file)
+      if (useEditor.getState().painting?.id !== forPainting) return
       const imageId = useWorkspace.getState().putAsset(encodePng(raster))
       useEditor.getState().setSource(raster, imageId)
     } catch (error) {
@@ -105,8 +112,8 @@ export function ImageStep() {
 
       <hr className={styles.separator} />
 
-      <section className={styles.section} aria-labelledby="image-turn">
-        <h3 id="image-turn" className={styles.subheading}>
+      <section className={styles.section} aria-labelledby={`${id}-turn`}>
+        <h3 id={`${id}-turn`} className={styles.subheading}>
           {t.editor.image.turn}
         </h3>
         <div className={styles.row}>
@@ -127,12 +134,12 @@ export function ImageStep() {
 
       <hr className={styles.separator} />
 
-      <section className={styles.section} aria-labelledby="image-adjust">
-        <h3 id="image-adjust" className={styles.subheading}>
+      <section className={styles.section} aria-labelledby={`${id}-adjust`} onPointerUp={endGesture}>
+        <h3 id={`${id}-adjust`} className={styles.subheading}>
           {t.editor.image.adjustments}
         </h3>
         <Slider
-          id="adjust-brightness"
+          id={`${id}-brightness`}
           label={t.editor.image.brightness}
           min={-100}
           max={100}
@@ -140,7 +147,7 @@ export function ImageStep() {
           onChange={setAdjust('brightness')}
         />
         <Slider
-          id="adjust-contrast"
+          id={`${id}-contrast`}
           label={t.editor.image.contrast}
           min={-100}
           max={100}
@@ -148,7 +155,7 @@ export function ImageStep() {
           onChange={setAdjust('contrast')}
         />
         <Slider
-          id="adjust-saturation"
+          id={`${id}-saturation`}
           label={t.editor.image.saturation}
           min={-100}
           max={100}
@@ -159,13 +166,13 @@ export function ImageStep() {
 
       <hr className={styles.separator} />
 
-      <section className={styles.section} aria-labelledby="image-look">
+      <section className={styles.section} aria-labelledby={`${id}-look`} onPointerUp={endGesture}>
         <div className={styles.between}>
-          <label id="image-look" htmlFor="mc-look" className={styles.subheading}>
+          <label id={`${id}-look`} htmlFor={`${id}-switch`} className={styles.subheading}>
             {t.editor.image.mcLook}
           </label>
           <input
-            id="mc-look"
+            id={`${id}-switch`}
             type="checkbox"
             role="switch"
             className={styles.switch}
@@ -187,7 +194,7 @@ export function ImageStep() {
             />
             {mcLook.palette === 'auto' && (
               <Slider
-                id="mc-colors"
+                id={`${id}-colors`}
                 label={t.editor.image.colors}
                 min={2}
                 max={64}

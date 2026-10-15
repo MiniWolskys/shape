@@ -60,7 +60,10 @@ export function BlockGridPicker({
   const label = (c: Cell) => format(t.editor.size.blocksValue, { width: c.x, height: c.y })
 
   function pick(c: Cell) {
-    if (!disabled) onPick(c.x, c.y)
+    if (disabled) return
+    // The keyboard corner follows the pick, so the readout never falls back to the old size.
+    setCursor((current) => (current ? c : current))
+    onPick(c.x, c.y)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {

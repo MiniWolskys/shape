@@ -97,6 +97,7 @@ export function CanvasStage({ onPixel, overlay, footer }: CanvasStageProps) {
   const area = useRef<HTMLDivElement>(null)
   const box = useBoxSize(area)
   const drawing = useRef(false)
+  const lastPixel = useRef({ x: 0, y: 0 })
 
   const material = painting?.recipe.frame.material ?? 'dark_oak'
   const kind: BackdropKind = backdrop === 'auto' ? autoBackdrop(material) : backdrop
@@ -149,16 +150,27 @@ export function CanvasStage({ onPixel, overlay, footer }: CanvasStageProps) {
   const editor = useEditor.getState()
   const zoomable = view !== 'wall'
 
-  function handlePointer(event: ReactPointerEvent<HTMLElement>, phase: PixelPhase) {
+  /**
+   * Strokes always end with one 'up': on pointer up, cancel, or a lost pointer capture (which
+   * carries no useful position, so the last pixel is reported). Each stroke is one undo step.
+   */
+  function handlePointer(
+    event: ReactPointerEvent<HTMLElement>,
+    phase: PixelPhase,
+    atLastPixel = false,
+  ) {
     if (!onPixel || view !== 'edit' || !shown) return
     if (phase === 'down') {
       if (event.button !== 0) return
       drawing.current = true
+      useEditor.getState().endGesture()
       event.currentTarget.setPointerCapture?.(event.pointerId)
     } else if (!drawing.current) return
+    const { x, y } = atLastPixel ? lastPixel.current : pixelAt(event, shown.width, shown.height)
+    lastPixel.current = { x, y }
     if (phase === 'up') drawing.current = false
-    const { x, y } = pixelAt(event, shown.width, shown.height)
     onPixel(x, y, phase, event)
+    if (phase === 'up') useEditor.getState().endGesture()
   }
 
   let content: ReactNode = null
@@ -183,7 +195,8 @@ export function CanvasStage({ onPixel, overlay, footer }: CanvasStageProps) {
         onPointerDown={(e) => handlePointer(e, 'down')}
         onPointerMove={(e) => handlePointer(e, 'move')}
         onPointerUp={(e) => handlePointer(e, 'up')}
-        onPointerCancel={(e) => handlePointer(e, 'up')}
+        onPointerCancel={(e) => handlePointer(e, 'up', true)}
+        onLostPointerCapture={(e) => handlePointer(e, 'up', true)}
         data-tool={onPixel && view === 'edit' ? '' : undefined}
       >
         <PaintingCanvas

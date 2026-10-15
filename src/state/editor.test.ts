@@ -4,7 +4,7 @@ import { createPainting } from '../domain/library.ts'
 import type { Painting } from '../domain/types.ts'
 import { createEditLayer, type EditLayer } from '../imaging/edits.ts'
 import { createRaster, getPixel } from '../imaging/raster.ts'
-import { HISTORY_LIMIT, useEditor } from './editor.ts'
+import { cachedPictureIds, HISTORY_BYTES, HISTORY_LIMIT, useEditor } from './editor.ts'
 
 const now = new Date('2026-10-15T12:00:00Z')
 
@@ -188,7 +188,8 @@ describe('editor store', () => {
     expect(state().dirty).toBe(false)
   })
 
-  it('keeps a saved edits id when undoing to a snapshot taken before it existed', () => {
+  it('keeps a saved edits id when undoing to edits made before it existed', () => {
+    state().setEdits(editedLayer(32, 16))
     state().setEdits(editedLayer(32, 16))
     const p = state().painting as Painting
     state().markSaved({ ...p, recipe: { ...p.recipe, editsId: 'edits1' } })
@@ -202,6 +203,62 @@ describe('editor store', () => {
     expect(state().painting).toBeNull()
     expect(state().past).toEqual([])
     expect(state().dirty).toBe(false)
+  })
+
+  it('caps the history by the memory of its distinct edit layers', () => {
+    expect(HISTORY_BYTES).toBe(64 * 1024 * 1024)
+    // 1500 x 1500 pixels at 5 bytes each is about 10.7 MB per layer.
+    const side = 1500
+    const layers = Array.from({ length: 8 }, () => createEditLayer(side, side))
+    for (const layer of layers) state().setEdits(layer)
+    const distinct = new Set(
+      [...state().past, ...state().future].map((s) => s.edits).concat(state().edits),
+    )
+    distinct.delete(null)
+    expect(distinct.size * side * side * 5).toBeLessThanOrEqual(HISTORY_BYTES)
+    expect(state().past.length).toBeLessThan(8)
+    // The oldest entries go first: the newest layers are still reachable.
+    state().undo()
+    expect(state().edits).toBe(layers[6])
+  })
+
+  it('keeps only the pictures the history still refers to', () => {
+    state().setSource(createRaster(4, 4), 'first')
+    state().setSource(createRaster(4, 4), 'second')
+    expect(cachedPictureIds().sort()).toEqual(['first', 'second'])
+    for (let i = 0; i < HISTORY_LIMIT + 2; i++)
+      state().change((p) => ({ ...p, title: 'T' + String(i) }))
+    expect(cachedPictureIds()).toEqual(['second'])
+  })
+
+  it('setSource updates the picture and the painting in one store update', () => {
+    let updates = 0
+    const stop = useEditor.subscribe(() => updates++)
+    state().setSource(createRaster(4, 4), 'pic')
+    stop()
+    expect(updates).toBe(1)
+  })
+
+  it('endGesture starts a new undo step for the same merge key', () => {
+    const setBrightness = (brightness: number) =>
+      state().change(
+        (p) => ({ ...p, recipe: { ...p.recipe, adjust: { ...p.recipe.adjust, brightness } } }),
+        { merge: 'brightness' },
+      )
+    setBrightness(10)
+    setBrightness(20)
+    state().endGesture()
+    setBrightness(30)
+    expect(state().past).toHaveLength(2)
+  })
+
+  it('undoing back to no edits also forgets the edits id', () => {
+    state().setEdits(editedLayer(32, 16))
+    const p = state().painting as Painting
+    state().markSaved({ ...p, recipe: { ...p.recipe, editsId: 'edits1' } })
+    state().undo()
+    expect(state().edits).toBeNull()
+    expect(state().painting?.recipe.editsId).toBeNull()
   })
 
   it('clamps zoom and tolerance', () => {
