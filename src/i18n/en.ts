@@ -2,7 +2,7 @@ import type { DyeId, FrameMaterial, McColor, ShapeId } from '../domain/types.ts'
 
 export const en = {
   locale: 'en',
-  app: { name: 'Shape', tagline: 'Minecraft paintings' },
+  app: { name: 'Shape', tagline: 'Minecraft paintings', home: '{name} · Home' },
   startup: {
     loading: 'Opening your workspace…',
     storageTitle: "Your browser storage couldn't be opened",

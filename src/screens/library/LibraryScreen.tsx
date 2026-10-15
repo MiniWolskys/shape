@@ -149,6 +149,7 @@ export function LibraryScreen() {
   return (
     <div className={styles.page}>
       <TopBar
+        onHome={() => go({ name: 'home' })}
         left={chip && <span className={styles.chip}>{chip}</span>}
         right={
           library && (

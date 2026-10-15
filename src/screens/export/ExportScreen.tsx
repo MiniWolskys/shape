@@ -246,6 +246,7 @@ function ExportView({ library }: { library: Library }) {
   return (
     <div className={styles.page}>
       <TopBar
+        onHome={() => go({ name: 'home' })}
         left={
           <div className={styles.topLeft}>
             <Button variant="ghost" icon="arrow-left" onClick={() => go({ name: 'library' })}>

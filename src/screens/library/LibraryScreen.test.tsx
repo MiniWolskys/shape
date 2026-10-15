@@ -289,6 +289,15 @@ describe('LibraryScreen', () => {
     expect(screen.queryByRole('button', { name: /^Export/ })).not.toBeInTheDocument()
   })
 
+  it('goes back home from the logo without closing anything', async () => {
+    const loose = [painting('Harvest Moon', 'Sam', 'draft')]
+    await startWith({ library: null, loose, assets: {} })
+    renderLibrary()
+    await userEvent.click(screen.getByRole('button', { name: 'Shape · Home' }))
+    expect(useNavigation.getState().screen).toEqual({ name: 'home' })
+    expect(useWorkspace.getState().loose).toHaveLength(1)
+  })
+
   it('sends the player home when there is nothing to show', async () => {
     await startWith({ library: null, loose: [], assets: {} })
     renderLibrary()

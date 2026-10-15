@@ -2,7 +2,7 @@ import type { Dictionary } from './en.ts'
 
 export const fr: Dictionary = {
   locale: 'fr',
-  app: { name: 'Shape', tagline: 'tableaux Minecraft' },
+  app: { name: 'Shape', tagline: 'tableaux Minecraft', home: '{name} · Accueil' },
   startup: {
     loading: 'Ouverture de votre espace de travail…',
     storageTitle: "Le stockage de votre navigateur n'a pas pu être ouvert",

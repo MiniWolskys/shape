@@ -15,6 +15,15 @@
   gap: 10px;
 }
 
+.homeButton {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
 .mark {
   width: 22px;
   height: 33px;
