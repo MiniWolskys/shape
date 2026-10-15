@@ -1,6 +1,9 @@
 import { cloneRaster, type Raster, type RGB } from './raster.ts'
 
-/** Representative average colours of common Minecraft blocks. */
+/**
+ * Representative average colours of common Minecraft blocks. Skies need the pale blues, cyans
+ * and light greys (M17). The order only matters for exact ties, which go to the first entry.
+ */
 export const BLOCK_PALETTE: RGB[] = [
   // concrete
   [207, 213, 214],
@@ -19,9 +22,27 @@ export const BLOCK_PALETTE: RGB[] = [
   [73, 91, 36],
   [142, 33, 33],
   [8, 10, 15],
-  // terracotta
+  // wool: white, light blue, cyan, light grey
+  [233, 236, 236],
+  [58, 175, 217],
+  [21, 137, 145],
+  [142, 142, 134],
+  // concrete powder: light blue, cyan, white
+  [74, 180, 213],
+  [36, 147, 157],
+  [225, 227, 227],
+  // terracotta: plain, white, light blue, cyan, light grey
   [152, 94, 68],
   [210, 178, 161],
+  [113, 108, 137],
+  [86, 91, 91],
+  [135, 107, 98],
+  // ice, packed ice, blue ice, diamond block, prismarine
+  [145, 183, 253],
+  [141, 180, 250],
+  [116, 167, 253],
+  [98, 237, 228],
+  [99, 156, 151],
   // planks
   [162, 131, 79],
   [115, 85, 49],
@@ -42,19 +63,103 @@ export const BLOCK_PALETTE: RGB[] = [
 
 /**
  * Reduces the colours of every non-transparent pixel. `auto` builds a palette of `colors`
- * (2..64) by median cut; `blocks` uses BLOCK_PALETTE. Optional Floyd–Steinberg dithering.
- * Alpha is kept, and fully transparent pixels are left untouched.
+ * (2..64) by median cut; `blocks` uses BLOCK_PALETTE, matched by how alike colours look (OKLab).
+ * Optional Floyd–Steinberg dithering. Alpha is kept, and fully transparent pixels are left
+ * untouched.
  */
 export function quantize(
   r: Raster,
   o: { colors: number; palette: 'auto' | 'blocks'; dither: boolean },
 ): Raster {
-  const palette =
-    o.palette === 'blocks'
-      ? BLOCK_PALETTE
-      : medianCut(r, Math.min(64, Math.max(2, Math.round(o.colors))))
+  if (o.palette === 'blocks') {
+    return mapToPalette(r, BLOCK_PALETTE, { dither: o.dither, metric: 'oklab' })
+  }
+  const palette = medianCut(r, Math.min(64, Math.max(2, Math.round(o.colors))))
+  return mapToPalette(r, palette, { dither: o.dither, metric: 'rgb' })
+}
+
+/**
+ * Maps every non-transparent pixel to its nearest palette colour: by RGB distance, or by
+ * perceptual distance (OKLab, for the hand-picked block colours, whose RGB distances say a pale
+ * sky is closer to grey than to light blue). Ties go to the first palette entry.
+ */
+export function mapToPalette(
+  r: Raster,
+  palette: readonly RGB[],
+  o: { dither: boolean; metric: 'rgb' | 'oklab' },
+): Raster {
   if (palette.length === 0) return cloneRaster(r)
-  return o.dither ? mapDithered(r, palette) : mapNearest(r, palette)
+  const flat = flatten(palette)
+  const nearest = o.metric === 'oklab' ? oklabFinder(palette) : nearestFinder(flat)
+  return o.dither ? mapDithered(r, flat, nearest) : mapNearest(r, flat, nearest)
+}
+
+/** sRGB channel (0..255) to linear light, for every integer value. */
+const LINEAR = Float64Array.from({ length: 256 }, (_, v) => {
+  const c = v / 255
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+})
+
+/** OKLab coordinates (L, a, b) of an sRGB colour with integer channels 0..255. */
+export function oklab(r: number, g: number, b: number): [number, number, number] {
+  const lr = LINEAR[r] ?? 0
+  const lg = LINEAR[g] ?? 0
+  const lb = LINEAR[b] ?? 0
+  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb)
+  const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb)
+  const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb)
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ]
+}
+
+/**
+ * Answers of the perceptual search by palette, for every 24-bit colour asked so far (entry + 1,
+ * 0 = not asked yet). The answer for a colour never changes, so the table is kept between
+ * renders: 16 MB, made the first time a palette is matched this way.
+ */
+const oklabAnswers = new WeakMap<readonly RGB[], Uint8Array>()
+
+/**
+ * Finds the palette colour nearest in OKLab (channels are rounded first, so dithered values
+ * match like the colours they round to). Returns the entry's offset in `flat`.
+ */
+function oklabFinder(palette: readonly RGB[]): (r: number, g: number, b: number) => number {
+  const n = palette.length
+  if (n > 255) throw new RangeError('A perceptual palette holds at most 255 colours')
+  const lab = new Float64Array(n * 3)
+  palette.forEach((c, k) => lab.set(oklab(c[0], c[1], c[2]), k * 3))
+  let answers = oklabAnswers.get(palette)
+  if (!answers) {
+    answers = new Uint8Array(1 << 24)
+    oklabAnswers.set(palette, answers)
+  }
+  const known = answers
+  return (r, g, b) => {
+    const ri = Math.round(r)
+    const gi = Math.round(g)
+    const bi = Math.round(b)
+    const key = (ri << 16) | (gi << 8) | bi
+    const cached = known[key] ?? 0
+    if (cached !== 0) return (cached - 1) * 3
+    const [l, a, bb] = oklab(ri, gi, bi)
+    let best = 0
+    let bestD = Infinity
+    for (let k = 0; k < n; k++) {
+      const dl = (lab[k * 3] ?? 0) - l
+      const da = (lab[k * 3 + 1] ?? 0) - a
+      const db = (lab[k * 3 + 2] ?? 0) - bb
+      const d = dl * dl + da * da + db * db
+      if (d < bestD) {
+        bestD = d
+        best = k
+      }
+    }
+    known[key] = best + 1
+    return best * 3
+  }
 }
 
 /** The palette as flat r, g, b triplets, which the per-pixel searches read much faster. */
@@ -142,9 +247,9 @@ function nearestFinder(flat: Int32Array): (r: number, g: number, b: number) => n
   }
 }
 
-function mapNearest(r: Raster, palette: readonly RGB[]): Raster {
-  const flat = flatten(palette)
-  const nearest = nearestFinder(flat)
+type Finder = (r: number, g: number, b: number) => number
+
+function mapNearest(r: Raster, flat: Int32Array, nearest: Finder): Raster {
   const out = cloneRaster(r)
   const d = out.data
   // Neighbouring pixels often share a colour: the last answer is reused for them.
@@ -168,10 +273,8 @@ function mapNearest(r: Raster, palette: readonly RGB[]): Raster {
 }
 
 /** Floyd–Steinberg; error only flows between non-transparent pixels. */
-function mapDithered(r: Raster, palette: readonly RGB[]): Raster {
+function mapDithered(r: Raster, flat: Int32Array, nearest: Finder): Raster {
   const { width: w, height: h } = r
-  const flat = flatten(palette)
-  const nearest = nearestFinder(flat)
   const out = cloneRaster(r)
   const d = out.data
   const err = new Float32Array(w * h * 3)

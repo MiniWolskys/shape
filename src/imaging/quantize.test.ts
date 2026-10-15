@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRaster, getPixel, setPixel, type Raster, type RGBA } from './raster.ts'
-import { BLOCK_PALETTE, quantize } from './quantize.ts'
+import { BLOCK_PALETTE, mapToPalette, oklab, quantize } from './quantize.ts'
 
 const FOUR: RGBA[] = [
   [250, 20, 20, 255],
@@ -52,12 +52,28 @@ describe('quantize', () => {
   })
 })
 
-/** The plain search the fast one must agree with: first palette colour at the least distance. */
+/** The plain RGB search the fast one must agree with: first colour at the least distance. */
 function bruteNearest(r: number, g: number, b: number): readonly [number, number, number] {
   let best = BLOCK_PALETTE[0] ?? [0, 0, 0]
   let bestD = Infinity
   for (const c of BLOCK_PALETTE) {
     const d = (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b) ** 2
+    if (d < bestD) {
+      bestD = d
+      best = c
+    }
+  }
+  return best
+}
+
+/** The plain perceptual search: first block colour nearest in OKLab, for rounded channels. */
+function bruteOklab(r: number, g: number, b: number): readonly [number, number, number] {
+  const [l, a, bb] = oklab(Math.round(r), Math.round(g), Math.round(b))
+  let best = BLOCK_PALETTE[0] ?? [0, 0, 0]
+  let bestD = Infinity
+  for (const c of BLOCK_PALETTE) {
+    const [cl, ca, cb] = oklab(c[0], c[1], c[2])
+    const d = (cl - l) ** 2 + (ca - a) ** 2 + (cb - bb) ** 2
     if (d < bestD) {
       bestD = d
       best = c
@@ -76,52 +92,108 @@ function noise(width: number, height: number): Raster {
   return r
 }
 
-describe('fast nearest-colour search', () => {
-  it('picks exactly what a full palette search picks', () => {
-    const src = noise(160, 120)
-    const out = quantize(src, { colors: 16, palette: 'blocks', dither: false })
-    for (let i = 0; i < src.data.length; i += 4) {
-      const expected =
-        src.data[i + 3] === 0
-          ? [src.data[i], src.data[i + 1], src.data[i + 2]]
-          : bruteNearest(src.data[i] ?? 0, src.data[i + 1] ?? 0, src.data[i + 2] ?? 0)
-      const got = [...out.data.subarray(i, i + 3)]
-      if (got.some((v, c) => v !== expected[c])) {
-        expect(got, `pixel ${i / 4}`).toEqual(expected)
+type Nearest = (r: number, g: number, b: number) => readonly [number, number, number]
+
+/** Floyd–Steinberg over a full palette search, the reference the fast mapping must match. */
+function referenceDither(src: Raster, nearest: Nearest): Uint8ClampedArray {
+  const { width: w, height: h } = src
+  const ref = new Uint8ClampedArray(src.data)
+  const err = new Float32Array(w * h * 3)
+  const clamp = (v: number) => Math.min(255, Math.max(0, v))
+  for (let p = 0; p < w * h; p++) {
+    if (ref[p * 4 + 3] === 0) continue
+    const v = [0, 1, 2].map((c) => clamp((ref[p * 4 + c] ?? 0) + (err[p * 3 + c] ?? 0)))
+    const [vr = 0, vg = 0, vb = 0] = v
+    const c = nearest(vr, vg, vb)
+    ref.set(c, p * 4)
+    const x = p % w
+    const y = (p - x) / w
+    for (const [dx, dy, k] of [
+      [1, 0, 7 / 16],
+      [-1, 1, 3 / 16],
+      [0, 1, 5 / 16],
+      [1, 1, 1 / 16],
+    ] as const) {
+      const nx = x + dx
+      const ny = y + dy
+      if (nx < 0 || nx >= w || ny >= h || ref[(ny * w + nx) * 4 + 3] === 0) continue
+      for (let ch = 0; ch < 3; ch++) {
+        const e = (ny * w + nx) * 3 + ch
+        err[e] = (err[e] ?? 0) + ((v[ch] ?? 0) - (c[ch] ?? 0)) * k
       }
     }
+  }
+  return ref
+}
+
+function expectNearest(src: Raster, out: Raster, nearest: Nearest) {
+  for (let i = 0; i < src.data.length; i += 4) {
+    const expected =
+      src.data[i + 3] === 0
+        ? [src.data[i], src.data[i + 1], src.data[i + 2]]
+        : nearest(src.data[i] ?? 0, src.data[i + 1] ?? 0, src.data[i + 2] ?? 0)
+    const got = [...out.data.subarray(i, i + 3)]
+    if (got.some((v, c) => v !== expected[c])) {
+      expect(got, `pixel ${i / 4}`).toEqual(expected)
+    }
+  }
+}
+
+describe('fast nearest-colour search (RGB, the auto palette)', () => {
+  it('picks exactly what a full palette search picks', () => {
+    const src = noise(160, 120)
+    const out = mapToPalette(src, BLOCK_PALETTE, { dither: false, metric: 'rgb' })
+    expectNearest(src, out, bruteNearest)
   })
 
   it('dithers exactly like Floyd–Steinberg over a full palette search', () => {
     const src = noise(64, 48)
-    const { width: w, height: h } = src
-    const ref = new Uint8ClampedArray(src.data)
-    const err = new Float32Array(w * h * 3)
-    const clamp = (v: number) => Math.min(255, Math.max(0, v))
-    for (let p = 0; p < w * h; p++) {
-      if (ref[p * 4 + 3] === 0) continue
-      const v = [0, 1, 2].map((c) => clamp((ref[p * 4 + c] ?? 0) + (err[p * 3 + c] ?? 0)))
-      const [vr = 0, vg = 0, vb = 0] = v
-      const c = bruteNearest(vr, vg, vb)
-      ref.set(c, p * 4)
-      const x = p % w
-      const y = (p - x) / w
-      for (const [dx, dy, k] of [
-        [1, 0, 7 / 16],
-        [-1, 1, 3 / 16],
-        [0, 1, 5 / 16],
-        [1, 1, 1 / 16],
-      ] as const) {
-        const nx = x + dx
-        const ny = y + dy
-        if (nx < 0 || nx >= w || ny >= h || ref[(ny * w + nx) * 4 + 3] === 0) continue
-        for (let ch = 0; ch < 3; ch++) {
-          const e = (ny * w + nx) * 3 + ch
-          err[e] = (err[e] ?? 0) + ((v[ch] ?? 0) - (c[ch] ?? 0)) * k
-        }
-      }
-    }
-    const out = quantize(src, { colors: 16, palette: 'blocks', dither: true })
+    const out = mapToPalette(src, BLOCK_PALETTE, { dither: true, metric: 'rgb' })
+    const ref = referenceDither(src, bruteNearest)
     expect(out.data.every((value, i) => value === ref[i])).toBe(true)
+  })
+})
+
+describe('Minecraft blocks palette (M17)', () => {
+  it('has light blue, cyan and light grey blocks for skies', () => {
+    const has = (c: readonly number[]) => BLOCK_PALETTE.some((p) => p.join() === c.join())
+    expect(has([58, 175, 217])).toBe(true) // light blue wool
+    expect(has([21, 137, 145])).toBe(true) // cyan wool
+    expect(has([142, 142, 134])).toBe(true) // light grey wool
+  })
+
+  it('matches colours perceptually (OKLab), exactly as a full search would', () => {
+    const src = noise(160, 120)
+    expectNearest(src, quantize(src, { colors: 16, palette: 'blocks', dither: false }), bruteOklab)
+  })
+
+  it('dithers with the perceptual match too', () => {
+    const src = noise(64, 48)
+    const out = quantize(src, { colors: 16, palette: 'blocks', dither: true })
+    const ref = referenceDither(src, bruteOklab)
+    expect(out.data.every((value, i) => value === ref[i])).toBe(true)
+  })
+
+  it('keeps a light blue sky blue instead of turning it grey', () => {
+    for (const sky of [
+      [135, 190, 235],
+      [160, 200, 240],
+      [110, 170, 225],
+    ] as const) {
+      const src = createRaster(1, 1, [sky[0], sky[1], sky[2], 255])
+      const [r, , b] = getPixel(
+        quantize(src, { colors: 16, palette: 'blocks', dither: false }),
+        0,
+        0,
+      )
+      expect(b - r, `sky ${sky.join()}`).toBeGreaterThan(40)
+    }
+  })
+
+  it('gives the same output every time', () => {
+    const src = noise(48, 32)
+    const a = quantize(src, { colors: 16, palette: 'blocks', dither: true })
+    const b = quantize(src, { colors: 16, palette: 'blocks', dither: true })
+    expect(a.data).toEqual(b.data)
   })
 })
