@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { updatePainting } from '../domain/library.ts'
+import { canResize, updatePainting } from '../domain/library.ts'
 import type { Painting } from '../domain/types.ts'
 import { resampleEdits, type EditLayer } from '../imaging/edits.ts'
 import type { Raster, RGBA } from '../imaging/raster.ts'
@@ -58,8 +58,12 @@ export interface EditorState {
   close(): void
   /** Pushes history (max 60 snapshots); a patch returning the same painting is ignored. */
   change(patch: (p: Painting) => Painting, options?: ChangeOptions): void
-  /** Uses a new picture and resets the crop to the centred crop; undoable. */
-  setSource(r: Raster, imageId: string): void
+  /**
+   * Uses a new picture and resets the crop to the centred crop; undoable. A painting's first
+   * picture also sizes it to fit (R20, see `autoSize`) when it is still 1×1 without pixel edits
+   * and was not resized in this session: one undo step, and the new size is returned.
+   */
+  setSource(r: Raster, imageId: string): { autoSized: { width: number; height: number } | null }
   /**
    * Pushes history. Tools must pass a fresh layer and never mutate `edits` in place: the
    * history keeps references to earlier layers, and the save and render memos compare by identity.
@@ -71,7 +75,10 @@ export interface EditorState {
   resize(width: number, height: number, ppb: number): void
   undo(): void
   redo(): void
-  /** After a save: the given painting becomes the current, clean state. */
+  /**
+   * After a save: the given painting becomes the current, clean state. A save may give the
+   * painting a new id (its title changed, R17): the whole history follows it.
+   */
   markSaved(p: Painting): void
   /** Ends a pointer gesture: the next merged change starts a new undo step. */
   endGesture(): void
@@ -125,6 +132,58 @@ function trimToBudget(past: Snapshot[], future: Snapshot[], current: EditLayer |
   return start === 0 ? past : past.slice(start)
 }
 
+/** Largest painting side, in blocks, a first picture is sized to. */
+const AUTO_SIZE_MAX = 4
+
+/**
+ * The size in 1..4 blocks per side whose ratio is closest to the picture's (compared as
+ * log ratios, so 2:1 and 1:2 are as far from 1:1); on a tie the larger area wins.
+ */
+export function autoSize(
+  pictureWidth: number,
+  pictureHeight: number,
+): { width: number; height: number } {
+  const target = Math.log(pictureWidth / pictureHeight)
+  let best = { width: 1, height: 1 }
+  let bestError = Infinity
+  for (let width = 1; width <= AUTO_SIZE_MAX; width++) {
+    for (let height = 1; height <= AUTO_SIZE_MAX; height++) {
+      const error = Math.abs(Math.log(width / height) - target)
+      const tie = Math.abs(error - bestError) < 1e-9
+      if (tie ? width * height > best.width * best.height : error < bestError) {
+        best = { width, height }
+        bestError = Math.min(error, bestError)
+      }
+    }
+  }
+  return best
+}
+
+/**
+ * The crop was moved or zoomed by the player: it is not empty (centred by the renderer) nor the
+ * centred crop a new picture gets. Resetting it then loses work worth mentioning (M13).
+ */
+export function isCustomCrop(p: Painting): boolean {
+  const { crop, source, rotation } = p.recipe
+  if (!source || crop.width === 0 || crop.height === 0) return false
+  const turned = turnedSize(source, rotation)
+  const centred = centeredCrop(turned.width, turned.height, p.width, p.height)
+  return (
+    crop.x !== centred.x ||
+    crop.y !== centred.y ||
+    crop.width !== centred.width ||
+    crop.height !== centred.height
+  )
+}
+
+/** The step each painting was last shown on, in this session (by painting id). */
+const lastSteps = new Map<string, EditorStep>()
+
+/** Forgets the remembered steps (for tests). */
+export function forgetLastSteps(): void {
+  lastSteps.clear()
+}
+
 /** Pictures by asset id, so undoing a new picture brings the old raster back. */
 let rasters = new Map<string, Raster>()
 
@@ -136,6 +195,8 @@ export function cachedPictureIds(): string[] {
 export const useEditor = create<EditorState>()((set, get) => {
   let saved: Snapshot | null = null
   let lastMerge: { key: string; at: number } | null = null
+  /** The player changed the size of the open painting: a first picture keeps it (R20). */
+  let resized = false
 
   const isSaved = (painting: Painting, edits: EditLayer | null) =>
     saved !== null && saved.painting === painting && saved.edits === edits
@@ -214,11 +275,12 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (source && imageId) rasters.set(imageId, source)
       saved = { painting: p, edits }
       lastMerge = null
+      resized = false
       set({
         painting: p,
         source,
         edits,
-        step: 'image',
+        step: lastSteps.get(p.id) ?? 'image',
         view: 'edit',
         zoom: 0,
         selection: null,
@@ -253,18 +315,29 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     setSource(r, imageId) {
       const { painting, edits } = get()
-      if (!painting) return
+      if (!painting) return { autoSized: null }
       rasters.set(imageId, r)
       const turned = turnedSize(r, painting.recipe.rotation)
+      const fits =
+        painting.recipe.source === null &&
+        painting.width === 1 &&
+        painting.height === 1 &&
+        edits === null &&
+        !resized &&
+        canResize(painting)
+      const autoSized = fits ? autoSize(turned.width, turned.height) : null
+      const size = autoSized ?? { width: painting.width, height: painting.height }
       const next: Painting = {
         ...painting,
+        ...size,
         recipe: {
           ...painting.recipe,
           source: { imageId, width: r.width, height: r.height },
-          crop: centeredCrop(turned.width, turned.height, painting.width, painting.height),
+          crop: centeredCrop(turned.width, turned.height, size.width, size.height),
         },
       }
       commit({ painting: next, edits }, undefined, { source: r })
+      return { autoSized }
     },
 
     setEdits(layer, options) {
@@ -278,6 +351,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (!painting) return
       const sizeChanged = width !== painting.width || height !== painting.height
       if (!sizeChanged && ppb === painting.pixelsPerBlock) return
+      if (sizeChanged && canResize(painting)) resized = true
       const { recipe } = painting
       const next = updatePainting(
         painting,
@@ -337,10 +411,16 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     markSaved(p) {
-      const { painting, edits, past, future } = get()
+      const { painting, edits, past, future, step } = get()
       if (!painting) return
-      // Snapshots that are the current state point at the saved painting from now on.
-      const swap = (s: Snapshot) => (s.painting === painting ? { ...s, painting: p } : s)
+      const renamed = p.id !== painting.id
+      if (renamed) lastSteps.set(p.id, step)
+      // Snapshots that are the current state point at the saved painting from now on; after a
+      // new id, every other one takes it too.
+      const swap = (s: Snapshot) => {
+        if (s.painting === painting) return { ...s, painting: p }
+        return renamed ? { ...s, painting: { ...s.painting, id: p.id } } : s
+      }
       saved = { painting: p, edits }
       lastMerge = null
       set({ painting: p, past: past.map(swap), future: future.map(swap), dirty: false })
@@ -350,7 +430,11 @@ export const useEditor = create<EditorState>()((set, get) => {
       lastMerge = null
     },
 
-    setStep: (step) => set({ step }),
+    setStep(step) {
+      const id = get().painting?.id
+      if (id !== undefined) lastSteps.set(id, step)
+      set({ step })
+    },
     setView: (view) => set({ view }),
     setBackdrop: (backdrop) => set({ backdrop }),
     setZoom: (zoom) => set({ zoom: clamp(zoom, 0, MAX_ZOOM) }),

@@ -4,7 +4,15 @@ import { createPainting } from '../domain/library.ts'
 import type { Painting } from '../domain/types.ts'
 import { createEditLayer, type EditLayer } from '../imaging/edits.ts'
 import { createRaster, getPixel } from '../imaging/raster.ts'
-import { cachedPictureIds, HISTORY_BYTES, HISTORY_LIMIT, useEditor } from './editor.ts'
+import {
+  autoSize,
+  cachedPictureIds,
+  forgetLastSteps,
+  HISTORY_BYTES,
+  HISTORY_LIMIT,
+  isCustomCrop,
+  useEditor,
+} from './editor.ts'
 
 const now = new Date('2026-10-15T12:00:00Z')
 
@@ -284,5 +292,110 @@ describe('editor store', () => {
     expect(state().zoom).toBe(0)
     state().setTolerance(140)
     expect(state().tolerance).toBe(100)
+  })
+
+  it('markSaved under a new id renames the painting in the whole history', () => {
+    state().change((p) => ({ ...p, title: 'Night Rose' }))
+    state().change((p) => ({ ...p, title: 'Night Rose!' }))
+    state().undo()
+    const p = state().painting as Painting
+    state().markSaved({ ...p, id: 'night_rose_abc' })
+    expect(state().painting?.id).toBe('night_rose_abc')
+    expect(state().past.map((s) => s.painting.id)).toEqual(['night_rose_abc'])
+    expect(state().future.map((s) => s.painting.id)).toEqual(['night_rose_abc'])
+    state().undo()
+    expect(state().painting).toMatchObject({ id: 'night_rose_abc', title: 'Test' })
+    expect(state().dirty).toBe(true)
+  })
+
+  describe('last step per painting', () => {
+    beforeEach(() => forgetLastSteps())
+
+    it('reopens a painting on the step last used for it in this session', () => {
+      const a = painting({ id: 'a_aaa' })
+      const b = painting({ id: 'b_bbb' })
+      state().open(a, null, null)
+      state().setStep('window')
+      state().open(b, null, null)
+      expect(state().step).toBe('image')
+      state().open(a, null, null)
+      expect(state().step).toBe('window')
+    })
+
+    it('follows a painting whose id changed when it was saved', () => {
+      state().open(painting({ id: 'a_aaa' }), null, null)
+      state().setStep('details')
+      state().markSaved({ ...(state().painting as Painting), id: 'renamed_aaa' })
+      state().open(painting({ id: 'renamed_aaa' }), null, null)
+      expect(state().step).toBe('details')
+    })
+  })
+
+  describe('auto-size on the first picture (R20)', () => {
+    const square = () => painting({ width: 1, height: 1, pixelsPerBlock: 16 })
+
+    it('picks the closest ratio within 4×4 blocks, the larger on a tie', () => {
+      expect(autoSize(1600, 1200)).toEqual({ width: 4, height: 3 })
+      expect(autoSize(1920, 1080)).toEqual({ width: 4, height: 2 })
+      expect(autoSize(500, 500)).toEqual({ width: 4, height: 4 })
+      expect(autoSize(300, 1000)).toEqual({ width: 1, height: 3 })
+      expect(autoSize(10000, 10)).toEqual({ width: 4, height: 1 })
+    })
+
+    it('sizes a new 1×1 painting to its first picture, in one undo step', () => {
+      state().open(square(), null, null)
+      const result = state().setSource(createRaster(400, 300), 'pic')
+      expect(result).toEqual({ autoSized: { width: 4, height: 3 } })
+      expect(state().painting).toMatchObject({ width: 4, height: 3, pixelsPerBlock: 16 })
+      expect(state().painting?.recipe.crop).toEqual({ x: 0, y: 0, width: 400, height: 300 })
+      expect(state().past).toHaveLength(1)
+      state().undo()
+      expect(state().painting).toMatchObject({ width: 1, height: 1 })
+    })
+
+    it('follows the rotation of the picture', () => {
+      state().open(square(), null, null)
+      state().change((p) => ({ ...p, recipe: { ...p.recipe, rotation: 90 } }))
+      state().setSource(createRaster(400, 300), 'pic')
+      expect(state().painting).toMatchObject({ width: 3, height: 4 })
+    })
+
+    it('keeps the size of a painting that already had a picture, was resized or is not 1×1', () => {
+      state().open(square(), null, null)
+      state().setSource(createRaster(10, 10), 'first')
+      state().undo()
+      state().resize(1, 2, 16)
+      state().resize(1, 1, 16)
+      expect(state().setSource(createRaster(400, 300), 'pic')).toEqual({ autoSized: null })
+      expect(state().painting).toMatchObject({ width: 1, height: 1 })
+
+      state().open(painting(), null, null)
+      expect(state().setSource(createRaster(400, 300), 'pic')).toEqual({ autoSized: null })
+
+      const withPicture = square()
+      withPicture.recipe = { ...withPicture.recipe, source: { imageId: 'x', width: 9, height: 9 } }
+      state().open(withPicture, null, null)
+      expect(state().setSource(createRaster(400, 300), 'pic')).toEqual({ autoSized: null })
+    })
+
+    it('keeps the size when there are pixel edits or the painting is published', () => {
+      state().open(square(), null, editedLayer(16, 16))
+      expect(state().setSource(createRaster(400, 300), 'pic').autoSized).toBeNull()
+      state().open({ ...square(), status: 'published', publishedIn: 1 }, null, null)
+      expect(state().setSource(createRaster(400, 300), 'pic').autoSized).toBeNull()
+    })
+  })
+
+  it('isCustomCrop tells a moved or zoomed crop from the centred one', () => {
+    const p = painting()
+    expect(isCustomCrop(p)).toBe(false)
+    state().setSource(createRaster(100, 80), 'abc')
+    const centred = state().painting as Painting
+    expect(isCustomCrop(centred)).toBe(false)
+    const moved = {
+      ...centred,
+      recipe: { ...centred.recipe, crop: { x: 0, y: 0, width: 100, height: 50 } },
+    }
+    expect(isCustomCrop(moved)).toBe(true)
   })
 })
