@@ -38,7 +38,8 @@ describe('workspace store', () => {
     const s = createWorkspaceStore(memoryStorage())
     await s.getState().init()
     expect(s.getState().ready).toBe(true)
-    expect(s.getState().hasSavedWork).toBe(false)
+    expect(s.getState().library).toBeNull()
+    expect(s.getState().loose).toEqual([])
   })
 
   it('puts new paintings into loose until a library is open, then moves them', async () => {
@@ -219,7 +220,6 @@ describe('workspace store', () => {
     await vi.advanceTimersByTimeAsync(1)
     const b = createWorkspaceStore(storage)
     await b.getState().init()
-    expect(b.getState().hasSavedWork).toBe(true)
     expect(b.getState().loose.map((p) => p.id)).toEqual([id])
     expect(Array.from(b.getState().assets[assetId] ?? [])).toEqual([9, 9])
   })

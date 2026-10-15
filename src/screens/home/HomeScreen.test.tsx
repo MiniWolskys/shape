@@ -152,6 +152,22 @@ describe('HomeScreen', () => {
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
   })
 
+  it('hides Resume once the saved library is closed and nothing is left', async () => {
+    await startWith({ library: createLibrary('Ours', 'ours'), loose: [], assets: {} })
+    renderHome()
+    expect(screen.getByText('Resume where you left off')).toBeInTheDocument()
+    act(() => useWorkspace.getState().closeLibrary())
+    expect(screen.queryByText('Resume where you left off')).not.toBeInTheDocument()
+  })
+
+  it('offers Resume for work started in this visit', () => {
+    act(() => {
+      useWorkspace.getState().createPainting()
+    })
+    renderHome()
+    expect(screen.getByText('Resume where you left off')).toBeInTheDocument()
+  })
+
   it('resumes the single loose painting in the editor when there is no library', async () => {
     const p = createPainting({ title: 'Solo' }, now, () => 0.4)
     await startWith({ library: null, loose: [p], assets: {} })

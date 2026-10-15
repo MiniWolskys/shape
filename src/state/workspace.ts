@@ -18,7 +18,6 @@ const AUTOSAVE_MS = 600
 
 export interface WorkspaceState extends Workspace {
   ready: boolean
-  hasSavedWork: boolean
   saveError: ShapeErrorCode | null
   init(storage?: WorkspaceStorage): Promise<void>
   createLibrary(name: string, namespace: string): void
@@ -152,7 +151,6 @@ export function createWorkspaceStore(
       loose: [],
       assets: {},
       ready: false,
-      hasSavedWork: false,
       saveError: null,
 
       init(next) {
@@ -168,7 +166,6 @@ export function createWorkspaceStore(
               library: loaded?.library ?? null,
               loose: loaded?.loose ?? [],
               assets: loaded?.assets ?? {},
-              hasSavedWork: !!loaded && (loaded.library !== null || loaded.loose.length > 0),
               ready: true,
             })
             startAutosave()

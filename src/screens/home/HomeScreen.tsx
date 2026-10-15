@@ -70,7 +70,8 @@ export function HomeScreen() {
   const go = useNavigation((s) => s.go)
   const library = useWorkspace((s) => s.library)
   const loose = useWorkspace((s) => s.loose)
-  const hasSavedWork = useWorkspace((s) => s.hasSavedWork)
+  // The workspace autosaves, so whatever it holds now is the saved work to resume.
+  const hasSavedWork = library !== null || loose.length > 0
   const [libraryDialog, setLibraryDialog] = useState<{ open: boolean; key: number }>({
     open: false,
     key: 0,
