@@ -140,3 +140,27 @@ describe('pipeline', () => {
     })
   })
 })
+
+describe('frames thicker than the painting (R41)', () => {
+  it('renders all frame, whatever the shape, without throwing', () => {
+    for (const shape of ['full', 'oculus', 'stained_glass', 'four_panes'] as const) {
+      const p0 = createPainting({ width: 1, height: 1, pixelsPerBlock: 64 }, new Date(0), () => 0.5)
+      const p: Painting = {
+        ...p0,
+        recipe: {
+          ...p0.recipe,
+          window: { shape, glassOpacity: 1 },
+          frame: { material: 'oak', thickness: 1024 },
+        },
+      }
+      const out = renderPainting(createRaster(64, 64, [255, 0, 0, 255]), null, p)
+      expect([out.width, out.height]).toEqual([64, 64])
+      // No glass is left: every pixel is frame, or cut out around the shape (alpha 0).
+      for (let i = 0; i < out.data.length; i += 4) {
+        const pixel = Array.from(out.data.subarray(i, i + 4))
+        expect(pixel, shape).not.toEqual([255, 0, 0, 255])
+        if (shape === 'full') expect(pixel[3], shape).toBe(255)
+      }
+    }
+  })
+})

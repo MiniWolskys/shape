@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ShapeError } from '../domain/errors.ts'
 import { createLibrary, createPainting, upsertPainting } from '../domain/library.ts'
-import type { Recipe } from '../domain/types.ts'
+import type { Painting, Recipe } from '../domain/types.ts'
+import { useEditor } from '../state/editor.ts'
 import { createEditLayer } from '../imaging/edits.ts'
 import { createRaster, getPixel } from '../imaging/raster.ts'
 import { decodePng, encodeEditLayer, encodePng } from './png.ts'
@@ -361,7 +362,7 @@ describe('library pack checks', () => {
       ],
       ['mcLook', (r) => (r.mcLook = { enabled: true, colors: 16, palette: 'x', dither: false })],
       ['glassOpacity', (r) => (r.window = { shape: 'full', glassOpacity: 3 })],
-      ['thickness', (r) => (r.frame = { material: 'oak', thickness: 17 })],
+      ['thickness', (r) => (r.frame = { material: 'oak', thickness: 257 })],
       ['thickness', (r) => (r.frame = { material: 'oak', thickness: 1.5 })],
       ['source', (r) => (r.source = { imageId: 'img1', width: 0, height: 4 })],
       ['source', (r) => (r.source = { imageId: 'img1', width: 8 })],
@@ -375,32 +376,64 @@ describe('library pack checks', () => {
     }
   })
 
-  it('round-trips a frame thicker than 16 px that a resize to 64 px per block makes (R4)', async () => {
-    const { lib, p, assets } = sample()
-    const big = {
-      ...p,
-      pixelsPerBlock: 64,
-      recipe: { ...p.recipe, frame: { material: 'oak' as const, thickness: 24 } },
+  describe('frame thickness reachable in the editor (R41)', () => {
+    /** The painting the editor holds after these steps, from the sample at 16 px per block. */
+    function edited(steps: (editor: ReturnType<typeof useEditor.getState>) => void): Painting {
+      const { p } = sample()
+      useEditor.getState().open({ ...p, width: 1, height: 1, pixelsPerBlock: 16 }, null, null)
+      steps(useEditor.getState())
+      const painting = useEditor.getState().painting
+      useEditor.getState().close()
+      if (!painting) throw new Error('no painting open')
+      return painting
     }
-    const pack = await writeLibraryPack(upsertPainting(lib, big), [p.id], assets, now)
-    expect(readLibraryPack(pack.bytes).library.paintings[0]?.recipe.frame.thickness).toBe(24)
-    // At most half the painting's shorter side (1 block of 64 px here).
-    const tooThick = await packWith((l) => {
-      const painting = firstPainting(l)
-      painting.pixelsPerBlock = 64
-      painting.recipe = {
-        ...(painting.recipe as object),
-        frame: { material: 'oak', thickness: 33 },
+
+    async function roundTrip(painting: Painting): Promise<number | undefined> {
+      const { lib, assets } = sample()
+      const pack = await writeLibraryPack(upsertPainting(lib, painting), [painting.id], assets, now)
+      return readLibraryPack(pack.bytes).library.paintings.find((q) => q.id === painting.id)?.recipe
+        .frame.thickness
+    }
+
+    it('keeps the default frame through 1 then 64 px per block (64 px)', async () => {
+      const painting = edited((e) => {
+        e.resize(1, 1, 1)
+        useEditor.getState().resize(1, 1, 64)
+      })
+      expect(painting.recipe.frame.thickness).toBe(64)
+      expect(await roundTrip(painting)).toBe(64)
+    })
+
+    it('keeps an 8 px frame set at 2 px per block through 64 px per block (256 px)', async () => {
+      const painting = edited((e) => {
+        e.resize(1, 1, 2)
+        const now2 = useEditor.getState()
+        now2.change((q) => ({
+          ...q,
+          recipe: { ...q.recipe, frame: { ...q.recipe.frame, thickness: 8 } },
+        }))
+        useEditor.getState().resize(1, 1, 64)
+      })
+      expect(painting.recipe.frame.thickness).toBe(256)
+      expect(await roundTrip(painting)).toBe(256)
+    })
+
+    it('refuses more than 16 px per block of frame, and fractions', async () => {
+      for (const thickness of [1025, 2.5, -1]) {
+        const pack = await packWith((l) => {
+          const painting = firstPainting(l)
+          painting.pixelsPerBlock = 64
+          painting.recipe = {
+            ...(painting.recipe as object),
+            frame: { material: 'oak', thickness },
+          }
+        })
+        expect(
+          failure(() => readLibraryPack(pack)),
+          String(thickness),
+        ).toMatch(/painting 0 .*thickness/)
       }
     })
-    expect(failure(() => readLibraryPack(tooThick))).toMatch(/painting 0 .*thickness/)
-  })
-
-  it('keeps accepting the usual 0-16 px frames on tiny paintings', async () => {
-    const { lib, p, assets } = sample()
-    const tiny = { ...p, width: 1, height: 1, pixelsPerBlock: 2 }
-    const pack = await writeLibraryPack(upsertPainting(lib, tiny), [p.id], assets, now)
-    expect(readLibraryPack(pack.bytes).library.paintings[0]?.recipe.frame.thickness).toBe(2)
   })
 
   it('refuses malformed painting dates and publication', async () => {

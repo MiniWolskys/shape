@@ -12,7 +12,6 @@ import {
 import type { EditLayer } from '../imaging/edits.ts'
 import { renderPainting } from '../imaging/pipeline.ts'
 import type { Raster } from '../imaging/raster.ts'
-import { FRAME_BOUND } from '../imaging/window.ts'
 import { buildDatapackFiles } from './datapack.ts'
 import { jsonBytes } from './formats.ts'
 import { decodeEditLayer, decodePng, encodePng } from './png.ts'
@@ -206,6 +205,8 @@ const isIsoTime = (v: unknown) =>
   typeof v === 'string' && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString() === v
 const isAssetId = (v: unknown) => typeof v === 'string' && isValidAssetId(v)
 const MAX = Number.MAX_SAFE_INTEGER
+/** Frame thickness a pack may hold, per pixel per block (R41). */
+const MAX_FRAME_PER_BLOCK = 16
 
 /**
  * Returns the first problem with a recipe, or null when the pipeline can render it: every field
@@ -281,10 +282,10 @@ function paintingProblem(p: unknown, version: number): string | null {
   }
   if (!isIsoTime(p.createdAt)) return 'has an invalid createdAt'
   if (!isIsoTime(p.updatedAt)) return 'has an invalid updatedAt'
-  // A resize scales the thickness with the pixels per block (R4): up to half the shorter side,
-  // and never less than the 16 px every painting could always have (small ones included).
-  const shorter = Math.min(p.width as number, p.height as number) * (p.pixelsPerBlock as number)
-  return recipeProblem(p.recipe, Math.max(FRAME_BOUND, Math.floor(shorter / 2)))
+  // R41: every editor path stays within 16 px per block (the slider gives at most max(8, t), a
+  // resize round(t * b / a) <= 16b, its floor max(1, ...) <= 16b); the renderer draws a frame
+  // thicker than the painting as all frame.
+  return recipeProblem(p.recipe, MAX_FRAME_PER_BLOCK * (p.pixelsPerBlock as number))
 }
 
 function parseLibrary(bytes: Uint8Array): Library {
