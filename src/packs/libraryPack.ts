@@ -94,20 +94,23 @@ function assetEntries(p: Painting): [key: string, path: string][] {
 /**
  * Publishes the selection and builds `<namespace>-v<version>.zip`: the library JSON, its source
  * images and edit layers, the rendered textures, and the two server packs with the resource
- * pack's SHA1 and a README.
+ * pack's SHA1 and a README. `onProgress(done, total)` is called as each painting starts
+ * rendering (done counts from 1).
  */
 export async function writeLibraryPack(
   lib: Library,
   selectedIds: string[],
   assets: Assets,
   now: Date,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<LibraryPackResult> {
   const library = { ...publish(lib, selectedIds, now), exportedAt: now.toISOString() }
   const paintings = exportSet(library, selectedIds)
   const ns = library.namespace
 
   const textures: Record<string, Uint8Array> = {}
-  for (const p of paintings) {
+  for (const [index, p] of paintings.entries()) {
+    onProgress?.(index + 1, paintings.length)
     let source: Raster | null
     let edits: EditLayer | null
     try {

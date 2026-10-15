@@ -25,6 +25,19 @@ function sample() {
 }
 
 describe('library pack', () => {
+  it('reports each painting as it starts rendering', async () => {
+    const { lib, p, assets } = sample()
+    const second = { ...p, id: `${p.id}_b`, title: 'Dawn' }
+    const progress: Array<[number, number]> = []
+    await writeLibraryPack(upsertPainting(lib, second), [p.id, second.id], assets, now, (d, t) =>
+      progress.push([d, t]),
+    )
+    expect(progress).toEqual([
+      [1, 2],
+      [2, 2],
+    ])
+  })
+
   it('contains the library, both packs and the sha1', async () => {
     const { lib, p, assets } = sample()
     const out = await writeLibraryPack(lib, [p.id], assets, now)

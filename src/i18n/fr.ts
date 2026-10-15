@@ -383,6 +383,7 @@ export const fr: Dictionary = {
     blockedHint: 'Corrigez les problèmes ci-dessus pour télécharger.',
     downloadPack: 'Télécharger le pack de bibliothèque',
     exporting: 'Création du pack…',
+    rendering: 'Rendu {done}/{total}…',
     failedReason:
       "l'image ou les retouches d'un tableau n'ont pas pu être lues. Ouvrez-le, choisissez à nouveau son image, puis exportez.",
     done: '{file} téléchargé. Les tableaux qu’il contient sont maintenant publiés.',

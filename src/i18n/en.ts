@@ -375,6 +375,7 @@ export const en = {
     blockedHint: 'Fix the problems above to download.',
     downloadPack: 'Download library pack',
     exporting: 'Building the pack…',
+    rendering: 'Rendering {done}/{total}…',
     failedReason:
       "a painting's picture or pixel edits couldn't be read. Open it, choose its picture again, then export.",
     done: 'Downloaded {file}. The paintings in it are now published.',

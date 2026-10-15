@@ -5,11 +5,7 @@ import type { Assets, Library, Painting } from '../../domain/types.ts'
 import { validateForExport, type Issue } from '../../domain/validate.ts'
 import type { Dictionary } from '../../i18n/en.ts'
 import { format, plural, useT } from '../../i18n/i18n.ts'
-import {
-  serverPropertiesLines,
-  writeLibraryPack,
-  type LibraryPackResult,
-} from '../../packs/libraryPack.ts'
+import { serverPropertiesLines, type LibraryPackResult } from '../../packs/libraryPack.ts'
 import { useNavigation } from '../../state/navigation.ts'
 import { useThumbnail } from '../../state/thumbnails.ts'
 import { useWorkspace } from '../../state/workspace.ts'
@@ -22,13 +18,17 @@ import { Icon } from '../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
 import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
+import { buildLibraryPack } from '../../workers/packClient.ts'
 import styles from './ExportScreen.module.css'
 
 /** Published paintings shown before the "+ n more published" toggle. */
 const PUBLISHED_SHOWN = 5
 const THUMB_BOX = { width: 36, height: 36 }
 
-type Phase = { kind: 'choose' } | { kind: 'busy' } | { kind: 'done'; result: LibraryPackResult }
+type Phase =
+  | { kind: 'choose' }
+  | { kind: 'busy'; done: number; total: number }
+  | { kind: 'done'; result: LibraryPackResult }
 
 const isNew = (p: Painting) => p.status !== 'published'
 const readyIds = (lib: Library) =>
@@ -70,9 +70,14 @@ function discordText(lib: Library, version: number, t: Dictionary): string {
   return [`**${lib.name} v${version}**`, ...lines].join('\n')
 }
 
-/** Publishes the selection now and builds the library pack. */
-function buildPack(lib: Library, ids: string[], assets: Assets): Promise<LibraryPackResult> {
-  return writeLibraryPack(lib, ids, assets, new Date())
+/** Publishes the selection now and builds the library pack, off the page when possible. */
+function buildPack(
+  lib: Library,
+  ids: string[],
+  assets: Assets,
+  onProgress: (done: number, total: number) => void,
+): Promise<LibraryPackResult> {
+  return buildLibraryPack(lib, ids, assets, new Date(), onProgress)
 }
 
 const kilobytes = (bytes: number) => Math.max(1, Math.round(bytes / 1024))
@@ -200,11 +205,11 @@ function ExportView({ library }: { library: Library }) {
   async function runExport() {
     const state = useWorkspace.getState()
     if (!state.library) return
-    setPhase({ kind: 'busy' })
-    // Let the busy state paint before the synchronous rendering work starts.
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    setPhase({ kind: 'busy', done: 0, total: 0 })
     try {
-      const result = await buildPack(state.library, selectedIds, state.assets)
+      const result = await buildPack(state.library, selectedIds, state.assets, (done, total) =>
+        setPhase({ kind: 'busy', done, total }),
+      )
       downloadBytes(result.bytes, result.fileName, 'application/zip')
       useWorkspace.getState().applyExport(result.library)
       setPhase({ kind: 'done', result })
@@ -408,7 +413,11 @@ function ExportView({ library }: { library: Library }) {
                 aria-busy={busy}
                 onClick={() => void runExport()}
               >
-                {busy ? t.export.exporting : t.export.downloadPack}
+                {phase.kind === 'busy'
+                  ? phase.total > 0
+                    ? format(t.export.rendering, { done: phase.done, total: phase.total })
+                    : t.export.exporting
+                  : t.export.downloadPack}
               </Button>
               {blocking && <p className={styles.blockedHint}>{t.export.blockedHint}</p>}
             </>

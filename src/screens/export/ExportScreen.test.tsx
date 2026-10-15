@@ -233,6 +233,26 @@ describe('ExportScreen', () => {
     expect(await screen.findByText('Copied')).toBeInTheDocument()
   })
 
+  it('shows which painting is rendering while the pack builds', async () => {
+    let finish: () => void = () => {}
+    vi.spyOn(libraryPack, 'writeLibraryPack').mockImplementation(
+      (_lib, _ids, _assets, _now, onProgress) =>
+        new Promise((_resolve, reject) => {
+          onProgress?.(2, 3)
+          finish = () => reject(new Error('stopped by the test'))
+        }),
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    renderExport()
+    await userEvent.click(downloadButton())
+    const busy = await screen.findByRole('button', { name: 'Rendering 2/3…' })
+    expect(busy).toBeDisabled()
+    expect(busy).toHaveAttribute('aria-busy', 'true')
+    await act(async () => finish())
+    expect(await screen.findByRole('button', { name: 'Download library pack' })).toBeEnabled()
+  })
+
   it('explains a failed export in the active language and keeps the library unpublished', async () => {
     vi.spyOn(libraryPack, 'writeLibraryPack').mockRejectedValue(
       new ShapeError('export-failed', 'The stored picture of painting "X" (x) is damaged: bad crc'),
