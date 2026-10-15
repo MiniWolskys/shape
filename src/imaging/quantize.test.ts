@@ -51,3 +51,77 @@ describe('quantize', () => {
     expect(getPixel(out, 7, 7)[3]).toBe(100)
   })
 })
+
+/** The plain search the fast one must agree with: first palette colour at the least distance. */
+function bruteNearest(r: number, g: number, b: number): readonly [number, number, number] {
+  let best = BLOCK_PALETTE[0] ?? [0, 0, 0]
+  let bestD = Infinity
+  for (const c of BLOCK_PALETTE) {
+    const d = (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b) ** 2
+    if (d < bestD) {
+      bestD = d
+      best = c
+    }
+  }
+  return best
+}
+
+function noise(width: number, height: number): Raster {
+  const r = createRaster(width, height)
+  let s = 7
+  const random = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+  for (let i = 0; i < r.data.length; i += 4) {
+    r.data.set([random() * 256, random() * 256, random() * 256, random() < 0.1 ? 0 : 255], i)
+  }
+  return r
+}
+
+describe('fast nearest-colour search', () => {
+  it('picks exactly what a full palette search picks', () => {
+    const src = noise(160, 120)
+    const out = quantize(src, { colors: 16, palette: 'blocks', dither: false })
+    for (let i = 0; i < src.data.length; i += 4) {
+      const expected =
+        src.data[i + 3] === 0
+          ? [src.data[i], src.data[i + 1], src.data[i + 2]]
+          : bruteNearest(src.data[i] ?? 0, src.data[i + 1] ?? 0, src.data[i + 2] ?? 0)
+      const got = [...out.data.subarray(i, i + 3)]
+      if (got.some((v, c) => v !== expected[c])) {
+        expect(got, `pixel ${i / 4}`).toEqual(expected)
+      }
+    }
+  })
+
+  it('dithers exactly like Floyd–Steinberg over a full palette search', () => {
+    const src = noise(64, 48)
+    const { width: w, height: h } = src
+    const ref = new Uint8ClampedArray(src.data)
+    const err = new Float32Array(w * h * 3)
+    const clamp = (v: number) => Math.min(255, Math.max(0, v))
+    for (let p = 0; p < w * h; p++) {
+      if (ref[p * 4 + 3] === 0) continue
+      const v = [0, 1, 2].map((c) => clamp((ref[p * 4 + c] ?? 0) + (err[p * 3 + c] ?? 0)))
+      const [vr = 0, vg = 0, vb = 0] = v
+      const c = bruteNearest(vr, vg, vb)
+      ref.set(c, p * 4)
+      const x = p % w
+      const y = (p - x) / w
+      for (const [dx, dy, k] of [
+        [1, 0, 7 / 16],
+        [-1, 1, 3 / 16],
+        [0, 1, 5 / 16],
+        [1, 1, 1 / 16],
+      ] as const) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || nx >= w || ny >= h || ref[(ny * w + nx) * 4 + 3] === 0) continue
+        for (let ch = 0; ch < 3; ch++) {
+          const e = (ny * w + nx) * 3 + ch
+          err[e] = (err[e] ?? 0) + ((v[ch] ?? 0) - (c[ch] ?? 0)) * k
+        }
+      }
+    }
+    const out = quantize(src, { colors: 16, palette: 'blocks', dither: true })
+    expect(out.data.every((value, i) => value === ref[i])).toBe(true)
+  })
+})
