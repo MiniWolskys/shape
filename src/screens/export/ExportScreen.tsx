@@ -241,7 +241,7 @@ function ExportView({ library }: { library: Library }) {
   if (blocking) checks = { label: t.export.checksBlocked, tone: styles.danger }
   else if (issues.length > 0) checks = { label: t.export.checksWarnings, tone: styles.warn }
 
-  const properties = serverPropertiesLines(done ? done.sha1 : '…')
+  const properties = serverPropertiesLines(done ? done.sha1 : '…', t.export.linkPlaceholder)
 
   return (
     <div className={styles.page}>

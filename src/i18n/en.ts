@@ -375,6 +375,7 @@ export const en = {
     sha1Pending: 'Appears after download',
     copySha1: 'Copy the SHA1',
     serverProperties: 'server.properties',
+    linkPlaceholder: '<your direct link>',
     copyProperties: 'Copy the server.properties lines',
     copyFailed: "Couldn't copy. The text is selected: press Ctrl+C to copy it.",
     serverSteps: {

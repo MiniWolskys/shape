@@ -160,6 +160,7 @@ describe('library pack', () => {
     expect(readme).toContain('ourpaintings-datapack.zip')
     expect(readme).toContain('ourpaintings-resources.zip')
     expect(readme).toContain(serverPropertiesLines(out.sha1))
+    expect(readme).toContain(serverPropertiesLines(out.sha1, '<votre lien direct>'))
     expect(readme).toMatch(/\/reload/)
     expect(readme).toMatch(/never delete or rename a published painting/i)
     expect(readme).toMatch(/ne supprimez ni ne renommez jamais un tableau publié/i)
@@ -169,6 +170,12 @@ describe('library pack', () => {
   it('formats the server.properties lines', () => {
     expect(serverPropertiesLines('abc')).toBe(
       'resource-pack=<your direct link>\nresource-pack-sha1=abc\nrequire-resource-pack=true',
+    )
+  })
+
+  it('puts the given link placeholder in the server.properties lines', () => {
+    expect(serverPropertiesLines('abc', '<votre lien direct>')).toBe(
+      'resource-pack=<votre lien direct>\nresource-pack-sha1=abc\nrequire-resource-pack=true',
     )
   })
 

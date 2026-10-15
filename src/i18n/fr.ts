@@ -383,6 +383,7 @@ export const fr: Dictionary = {
     sha1Pending: 'Apparaît après le téléchargement',
     copySha1: 'Copier le SHA1',
     serverProperties: 'server.properties',
+    linkPlaceholder: '<votre lien direct>',
     copyProperties: 'Copier les lignes de server.properties',
     copyFailed: 'Copie impossible. Le texte est sélectionné : appuyez sur Ctrl+C pour le copier.',
     serverSteps: {

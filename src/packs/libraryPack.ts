@@ -29,14 +29,14 @@ export interface LibraryPackResult {
   library: Library
 }
 
-export function serverPropertiesLines(sha1: string): string {
-  return `resource-pack=<your direct link>\nresource-pack-sha1=${sha1}\nrequire-resource-pack=true`
+/** The server.properties lines; `link` stands in for the resource pack's download link. */
+export function serverPropertiesLines(sha1: string, link = '<your direct link>'): string {
+  return `resource-pack=${link}\nresource-pack-sha1=${sha1}\nrequire-resource-pack=true`
 }
 
 function readme(ns: string, sha1: string): string {
   const datapack = `${ns}-datapack.zip`
   const resources = `${ns}-resources.zip`
-  const props = serverPropertiesLines(sha1)
   return [
     'English',
     '=======',
@@ -45,7 +45,7 @@ function readme(ns: string, sha1: string): string {
     `2. Upload ${resources} to a host that gives a direct download link.`,
     '3. In server.properties, set these lines (put your direct link in resource-pack):',
     '',
-    props,
+    serverPropertiesLines(sha1),
     '',
     '4. Restart the server. /reload is not enough.',
     '',
@@ -59,7 +59,7 @@ function readme(ns: string, sha1: string): string {
     `2. Envoyez ${resources} sur un hébergeur qui donne un lien de téléchargement direct.`,
     '3. Dans server.properties, mettez ces lignes (votre lien direct dans resource-pack) :',
     '',
-    props,
+    serverPropertiesLines(sha1, '<votre lien direct>'),
     '',
     '4. Redémarrez le serveur. /reload ne suffit pas.',
     '',

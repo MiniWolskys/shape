@@ -200,6 +200,14 @@ describe('ExportScreen', () => {
     )
   })
 
+  it('shows the server.properties lines with a French link placeholder', async () => {
+    useLanguage.setState({ language: 'fr' })
+    await startWith(library([painting('Vieux', 'Sam')]))
+    renderExport()
+    expect(screen.getByText(/resource-pack=<votre lien direct>/)).toBeInTheDocument()
+    expect(screen.queryByText(/your direct link/)).not.toBeInTheDocument()
+  })
+
   it('falls back to selecting the text when the clipboard API is missing', async () => {
     vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
