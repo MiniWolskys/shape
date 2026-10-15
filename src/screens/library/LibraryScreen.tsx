@@ -25,6 +25,12 @@ const FILTERS: Record<Filter, (p: Painting) => boolean> = {
   published: isPublished,
 }
 
+/**
+ * Loose paintings the player said "Later" to, for this page session. A loose painting not in
+ * the set brings the banner back.
+ */
+let dismissedLoose = new Set<string>()
+
 /** Lower case without accents, so "zoe" finds "Zoé". */
 function normalize(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -42,7 +48,7 @@ export function LibraryScreen() {
   const loose = useWorkspace((s) => s.loose)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
-  const [looseLater, setLooseLater] = useState(false)
+  const [dismissed, setDismissed] = useState(() => dismissedLoose)
   const [deleting, setDeleting] = useState<Painting | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [libraryDialog, setLibraryDialog] = useState({ open: false, key: 0 })
@@ -55,6 +61,12 @@ export function LibraryScreen() {
   if (nothingToShow) return null
 
   const paintings = library ? library.paintings : loose
+  const showLooseBanner = loose.some((p) => !dismissed.has(p.id))
+
+  function dismissLoose() {
+    dismissedLoose = new Set(loose.map((p) => p.id))
+    setDismissed(dismissedLoose)
+  }
   const count = (f: Filter) => paintings.filter(FILTERS[f]).length
   const visible = paintings.filter((p) => FILTERS[filter](p) && matches(p, query))
   const newCount = library ? library.paintings.filter(FILTERS.new).length : 0
@@ -184,12 +196,12 @@ export function LibraryScreen() {
           </section>
         )}
 
-        {library && loose.length > 0 && !looseLater && (
+        {library && showLooseBanner && (
           <LooseBanner
             count={loose.length}
             libraryName={library.name}
             onAdd={addLoose}
-            onLater={() => setLooseLater(true)}
+            onLater={dismissLoose}
           />
         )}
 

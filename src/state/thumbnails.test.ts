@@ -2,9 +2,20 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPainting } from '../domain/library.ts'
 import type { Painting } from '../domain/types.ts'
+import { renderPainting } from '../imaging/pipeline.ts'
 import { createRaster } from '../imaging/raster.ts'
 import { encodePng } from '../packs/png.ts'
-import { renderThumbnail, useThumbnail } from './thumbnails.ts'
+import {
+  renderThumbnail,
+  THUMBNAIL_CACHE_SIZE,
+  thumbnailCacheSize,
+  useThumbnail,
+} from './thumbnails.ts'
+
+vi.mock('../imaging/pipeline.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../imaging/pipeline.ts')>()
+  return { ...actual, renderPainting: vi.fn(actual.renderPainting) }
+})
 
 const now = new Date('2026-10-15T12:00:00Z')
 
@@ -36,8 +47,68 @@ describe('renderThumbnail', () => {
 })
 
 describe('useThumbnail', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.mocked(renderPainting).mockClear()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('renders one thumbnail per idle slot', () => {
+    const a = painting({ id: 'serial_a', width: 1, height: 1, pixelsPerBlock: 16 })
+    const b = painting({ id: 'serial_b', width: 1, height: 1, pixelsPerBlock: 16 })
+    const first = renderHook(() => useThumbnail(a))
+    const second = renderHook(() => useThumbnail(b))
+    act(() => {
+      vi.advanceTimersToNextTimer()
+    })
+    expect(renderPainting).toHaveBeenCalledTimes(1)
+    expect(first.result.current).not.toBeNull()
+    expect(second.result.current).toBeNull()
+    act(() => {
+      vi.advanceTimersToNextTimer()
+    })
+    expect(renderPainting).toHaveBeenCalledTimes(2)
+    expect(second.result.current).not.toBeNull()
+  })
+
+  it('skips the render when the card unmounts before its turn', () => {
+    const p = painting({ id: 'cancel_test', width: 1, height: 1, pixelsPerBlock: 16 })
+    const { unmount } = renderHook(() => useThumbnail(p))
+    unmount()
+    act(() => {
+      vi.runAllTimers()
+    })
+    expect(renderPainting).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed render instead of waiting forever', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(renderPainting).mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    const p = painting({ id: 'failing_test', width: 1, height: 1, pixelsPerBlock: 16 })
+    const { result } = renderHook(() => useThumbnail(p))
+    act(() => {
+      vi.runAllTimers()
+    })
+    expect(result.current).toBe('failed')
+    expect(console.error).toHaveBeenCalled()
+  })
+
+  it('keeps at most a fixed number of thumbnails in memory', () => {
+    for (let i = 0; i < THUMBNAIL_CACHE_SIZE + 5; i++) {
+      const p = painting({ id: `lru_${i}`, width: 1, height: 1, pixelsPerBlock: 1 })
+      const { unmount } = renderHook(() => useThumbnail(p))
+      act(() => {
+        vi.runAllTimers()
+      })
+      unmount()
+    }
+    expect(thumbnailCacheSize()).toBe(THUMBNAIL_CACHE_SIZE)
+  })
 
   it('is null until the idle render runs, then returns the thumbnail', () => {
     const p = painting({ id: 'hook_test', width: 1, height: 1, pixelsPerBlock: 32 })
@@ -46,7 +117,7 @@ describe('useThumbnail', () => {
     act(() => {
       vi.runAllTimers()
     })
-    expect(result.current?.width).toBe(16)
+    expect(result.current).toMatchObject({ width: 16, height: 16 })
   })
 
   it('reuses the cached thumbnail while the painting is unchanged', () => {

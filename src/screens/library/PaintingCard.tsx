@@ -37,7 +37,9 @@ function Thumbnail({ painting, label }: { painting: Painting; label: string }) {
   const raster = useThumbnail(painting)
   return (
     <Backdrop kind="mid" className={styles.thumb}>
-      {raster ? (
+      {raster === 'failed' ? (
+        <Icon name="image" size={40} className={styles.failed} />
+      ) : raster ? (
         <PaintingCanvas raster={raster} fit={THUMB_BOX} label={label} />
       ) : (
         <span className={styles.skeleton} aria-hidden="true" />

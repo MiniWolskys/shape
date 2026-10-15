@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLibrary, createPainting, upsertPainting } from '../../domain/library.ts'
@@ -208,6 +208,24 @@ describe('LibraryScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Later' }))
     expect(screen.queryByText(/made in this browser/)).not.toBeInTheDocument()
     expect(useWorkspace.getState().loose).toHaveLength(1)
+  })
+
+  it('keeps the loose banner dismissed across visits until a new loose painting appears', async () => {
+    const loose = [painting('Harvest Moon', 'Sam', 'draft')]
+    await startWith({ library: library(sample()), loose, assets: {} })
+    const first = renderLibrary()
+    await userEvent.click(screen.getByRole('button', { name: 'Later' }))
+    first.unmount()
+
+    renderLibrary()
+    expect(screen.queryByText(/made in this browser/)).not.toBeInTheDocument()
+
+    act(() => {
+      useWorkspace.setState((s) => ({ loose: [...s.loose, painting('Tide', 'Sam', 'draft')] }))
+    })
+    expect(
+      screen.getByText("2 paintings made in this browser aren't in a library yet"),
+    ).toBeInTheDocument()
   })
 
   it('imports a friend’s library pack and says how many paintings it added', async () => {

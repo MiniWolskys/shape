@@ -46,30 +46,86 @@ export function renderThumbnail(p: Painting, assets: Assets): Raster {
   return resample(full, p.width * MAX_PPB, p.height * MAX_PPB, 'sharp')
 }
 
-/** Runs `task` when the browser is idle (or soon, without requestIdleCallback); returns a cancel. */
-function whenIdle(task: () => void): () => void {
+/** Runs `task` when the browser is idle, or soon without requestIdleCallback. */
+function whenIdle(task: () => void): void {
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-    const handle = window.requestIdleCallback(task, { timeout: 1000 })
-    return () => window.cancelIdleCallback(handle)
+    window.requestIdleCallback(task, { timeout: 1000 })
+  } else {
+    setTimeout(task, 0)
   }
-  const handle = setTimeout(task, 0)
-  return () => clearTimeout(handle)
+}
+
+interface Job {
+  run(): void
+  cancelled: boolean
+}
+
+/** Thumbnails render one per idle slot, in request order; cancelled jobs are skipped. */
+const queue: Job[] = []
+let pumping = false
+
+function pump() {
+  pumping = true
+  whenIdle(() => {
+    let job = queue.shift()
+    while (job?.cancelled) job = queue.shift()
+    job?.run()
+    if (queue.some((j) => !j.cancelled)) pump()
+    else {
+      queue.length = 0
+      pumping = false
+    }
+  })
+}
+
+function enqueue(run: () => void): () => void {
+  const job: Job = { run, cancelled: false }
+  queue.push(job)
+  if (!pumping) pump()
+  return () => {
+    job.cancelled = true
+  }
+}
+
+export const THUMBNAIL_CACHE_SIZE = 200
+
+/** Number of thumbnails kept in memory. */
+export function thumbnailCacheSize(): number {
+  return cache.size
+}
+
+/** Reads a thumbnail and marks it as most recently used. */
+function cached(key: string): Raster | undefined {
+  const raster = cache.get(key)
+  if (raster) {
+    cache.delete(key)
+    cache.set(key, raster)
+  }
+  return raster
 }
 
 function store(p: Painting, raster: Raster) {
   const prefix = `${p.id}:`
   for (const key of cache.keys()) if (key.startsWith(prefix)) cache.delete(key)
   cache.set(keyOf(p), raster)
+  // Maps keep insertion order, so the first key is the least recently used.
+  while (cache.size > THUMBNAIL_CACHE_SIZE) {
+    const oldest = cache.keys().next()
+    if (oldest.done) break
+    cache.delete(oldest.value)
+  }
 }
 
+export type Thumbnail = Raster | 'failed' | null
+
 /**
- * The painting's thumbnail, or null while it is being rendered off the critical path.
- * Renders again only when `updatedAt` changes.
+ * The painting's thumbnail; null while it waits for its idle render, 'failed' if rendering
+ * threw. Renders again only when `updatedAt` changes.
  */
-export function useThumbnail(p: Painting): Raster | null {
+export function useThumbnail(p: Painting): Thumbnail {
   const key = keyOf(p)
   const latest = useRef(p)
-  const [rendered, setRendered] = useState<{ key: string; raster: Raster } | null>(null)
+  const [rendered, setRendered] = useState<{ key: string; result: Raster | 'failed' } | null>(null)
 
   useEffect(() => {
     latest.current = p
@@ -77,13 +133,18 @@ export function useThumbnail(p: Painting): Raster | null {
 
   useEffect(() => {
     if (cache.has(key)) return
-    return whenIdle(() => {
+    return enqueue(() => {
       const painting = latest.current
-      const raster = renderThumbnail(painting, useWorkspace.getState().assets)
-      store(painting, raster)
-      setRendered({ key, raster })
+      try {
+        const raster = renderThumbnail(painting, useWorkspace.getState().assets)
+        store(painting, raster)
+        setRendered({ key, result: raster })
+      } catch (error) {
+        console.error(`Could not render the thumbnail of ${painting.id}`, error)
+        setRendered({ key, result: 'failed' })
+      }
     })
   }, [key])
 
-  return cache.get(key) ?? (rendered?.key === key ? rendered.raster : null)
+  return cached(key) ?? (rendered?.key === key ? rendered.result : null)
 }
