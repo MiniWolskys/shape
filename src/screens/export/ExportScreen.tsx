@@ -4,7 +4,7 @@ import { exportSet, whatsNew } from '../../domain/library.ts'
 import type { Assets, Library, Painting } from '../../domain/types.ts'
 import { validateForExport, type Issue } from '../../domain/validate.ts'
 import type { Dictionary } from '../../i18n/en.ts'
-import { format, useT } from '../../i18n/i18n.ts'
+import { format, plural, useT } from '../../i18n/i18n.ts'
 import {
   serverPropertiesLines,
   writeLibraryPack,
@@ -310,7 +310,7 @@ function ExportView({ library }: { library: Library }) {
                 >
                   {showAllPublished
                     ? t.export.showLess
-                    : format(t.export.morePublished, { count: hiddenCount })}
+                    : plural(t, t.export.morePublished, hiddenCount)}
                 </button>
               )}
             </>
@@ -327,11 +327,7 @@ function ExportView({ library }: { library: Library }) {
               {format(t.export.version, { version: toVersion })}
             </span>
             <small className={styles.counts}>
-              <span>
-                {news.length === 1
-                  ? t.export.newCountOne
-                  : format(t.export.newCount, { count: news.length })}
-              </span>
+              <span>{plural(t, t.export.newCount, news.length)}</span>
               <span>{format(t.export.totalCount, { count: total })}</span>
             </small>
           </div>
@@ -353,7 +349,7 @@ function ExportView({ library }: { library: Library }) {
           <dl className={styles.inside} aria-label={t.export.inside}>
             <div>
               <dt>{t.export.insideLibrary}</dt>
-              <dd>{format(t.export.insideLibraryDetail, { count: library.paintings.length })}</dd>
+              <dd>{plural(t, t.export.insideLibraryDetail, library.paintings.length)}</dd>
             </div>
             <div>
               <dt>{t.export.insideDatapack}</dt>

@@ -200,6 +200,16 @@ describe('ExportScreen', () => {
     )
   })
 
+  it('counts a single painting in the singular, in English and French', async () => {
+    await startWith(library([painting('Seul', 'Sam')]))
+    const { unmount } = renderExport()
+    expect(screen.getByText('1 painting, sources and settings')).toBeInTheDocument()
+    unmount()
+    useLanguage.setState({ language: 'fr' })
+    renderExport()
+    expect(screen.getByText('1 tableau, images sources et réglages')).toBeInTheDocument()
+  })
+
   it('shows the server.properties lines with a French link placeholder', async () => {
     useLanguage.setState({ language: 'fr' })
     await startWith(library([painting('Vieux', 'Sam')]))

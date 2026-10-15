@@ -75,6 +75,16 @@ describe('LibraryScreen', () => {
     expect(useNavigation.getState().screen).toEqual({ name: 'export' })
   })
 
+  it('agrees French counts with the noun, singular for 0 and 1', async () => {
+    useLanguage.setState({ language: 'fr' })
+    await startWith({ library: library([painting('Seul', 'Sam')]), loose: [], assets: {} })
+    renderLibrary()
+    expect(screen.getByRole('button', { name: 'Exporter · 1 nouveau' })).toBeInTheDocument()
+    act(() => useWorkspace.getState().createLibrary('Vide', 'vide'))
+    expect(screen.getByText('Vide · v0 · 0 tableau')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Exporter · 0 nouveau' })).toBeInTheDocument()
+  })
+
   it('keeps Export enabled when nothing is new', async () => {
     await startWith({
       library: library([painting('Old', 'Sam', 'published')]),

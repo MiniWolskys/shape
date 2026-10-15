@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { format, useT } from '../../i18n/i18n.ts'
+import { format, plural, useT } from '../../i18n/i18n.ts'
 import { renderScene } from '../../imaging/scenes.ts'
 import { hashString } from '../../imaging/shapes.ts'
 import { renderWallPreview } from '../../imaging/wall.ts'
@@ -93,7 +93,7 @@ export function HomeScreen() {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
       const { added } = useWorkspace.getState().openLibraryPack(bytes)
-      toast(added === 1 ? t.home.packAddedOne : format(t.home.packAdded, { count: added }))
+      toast(plural(t, t.home.packAdded, added))
       go({ name: 'library' })
     } catch (error) {
       const namespace = useWorkspace.getState().library?.namespace ?? ''
@@ -135,9 +135,7 @@ export function HomeScreen() {
     (library?.paintings.filter((p) => p.status !== 'published').length ?? 0) + loose.length
   const resumeDetail = [
     library && format(t.home.resumeLibrary, { name: library.name, version: library.version }),
-    inProgress === 1
-      ? t.home.inProgressOne
-      : inProgress > 1 && format(t.home.inProgress, { count: inProgress }),
+    inProgress > 0 && plural(t, t.home.inProgress, inProgress),
   ]
     .filter(Boolean)
     .join(' · ')

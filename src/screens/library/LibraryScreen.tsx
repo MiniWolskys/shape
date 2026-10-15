@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { canDelete } from '../../domain/library.ts'
 import type { Painting } from '../../domain/types.ts'
-import { format, useT } from '../../i18n/i18n.ts'
+import { format, plural, useT } from '../../i18n/i18n.ts'
 import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
@@ -80,7 +80,7 @@ export function LibraryScreen() {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
       const { added } = useWorkspace.getState().openLibraryPack(bytes)
-      toast(added === 1 ? t.home.packAddedOne : format(t.home.packAdded, { count: added }))
+      toast(plural(t, t.home.packAdded, added))
     } catch (error) {
       const namespace = useWorkspace.getState().library?.namespace ?? ''
       toast(errorMessage(error, t, { namespace }), 'error')
@@ -90,11 +90,7 @@ export function LibraryScreen() {
   function addLoose() {
     const name = library?.name ?? ''
     const added = useWorkspace.getState().addLooseToLibrary()
-    toast(
-      added === 1
-        ? format(t.library.looseAddedOne, { name })
-        : format(t.library.looseAdded, { count: added, name }),
-    )
+    toast(plural(t, t.library.looseAdded, added, { name }))
   }
 
   function duplicate(p: Painting) {
@@ -143,13 +139,10 @@ export function LibraryScreen() {
 
   const chip =
     library &&
-    (library.paintings.length === 1
-      ? format(t.library.chipOne, { name: library.name, version: library.version })
-      : format(t.library.chip, {
-          name: library.name,
-          version: library.version,
-          count: library.paintings.length,
-        }))
+    plural(t, t.library.chip, library.paintings.length, {
+      name: library.name,
+      version: library.version,
+    })
 
   const deletingTitle = deleting ? deleting.title || t.library.untitled : ''
 
@@ -167,7 +160,7 @@ export function LibraryScreen() {
                 {t.library.closeLibrary}
               </Button>
               <Button variant="primary" onClick={() => go({ name: 'export' })}>
-                {format(t.library.exportNew, { count: newCount })}
+                {plural(t, t.library.exportNew, newCount)}
               </Button>
             </div>
           )

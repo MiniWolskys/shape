@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { DYE_IDS } from '../../../domain/types.ts'
-import { format, useT } from '../../../i18n/i18n.ts'
+import { format, plural, useT } from '../../../i18n/i18n.ts'
 import type { RGBA } from '../../../imaging/raster.ts'
 import { maskSize } from '../../../imaging/tools.ts'
 import { renderWallPreview } from '../../../imaging/wall.ts'
@@ -105,7 +105,7 @@ export function PixelsStage() {
         count > 0 && (
           <>
             <span aria-hidden="true">·</span>
-            <span>{format(t.editor.pixels.selected, { count })}</span>
+            <span>{plural(t, t.editor.pixels.selected, count)}</span>
           </>
         )
       }
@@ -254,7 +254,7 @@ export function PixelsPanel() {
 
       <section className={styles.section}>
         <p className={styles.hint} aria-live="polite">
-          {count > 0 ? format(t.editor.pixels.selected, { count }) : t.editor.pixels.noSelection}
+          {count > 0 ? plural(t, t.editor.pixels.selected, count) : t.editor.pixels.noSelection}
         </p>
         <div className={styles.row}>
           <Button

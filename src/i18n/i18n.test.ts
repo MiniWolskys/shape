@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { FRAME_MATERIAL_IDS, MC_COLORS, SHAPE_IDS } from '../domain/types.ts'
 import { en } from './en.ts'
 import { fr } from './fr.ts'
-import { detectLanguage, format, useLanguage, useT } from './i18n.ts'
+import { detectLanguage, format, plural, useLanguage, useT } from './i18n.ts'
 
 function leaves(node: unknown, path = ''): [string, unknown][] {
   if (typeof node === 'object' && node !== null) {
@@ -85,5 +85,20 @@ describe('useLanguage / useT', () => {
     expect(result.current.app.tagline).toBe('tableaux Minecraft')
     expect(localStorage.getItem('shape:lang')).toBe('fr')
     expect(document.documentElement.lang).toBe('fr')
+  })
+})
+
+describe('plural', () => {
+  const forms = { one: '{count} tableau de {name}', other: '{count} tableaux de {name}' }
+  it('uses the singular for 0 and 1 in French', () => {
+    expect(plural(fr, forms, 0, { name: 'Zoé' })).toBe('0 tableau de Zoé')
+    expect(plural(fr, forms, 1, { name: 'Zoé' })).toBe('1 tableau de Zoé')
+    expect(plural(fr, forms, 2, { name: 'Zoé' })).toBe('2 tableaux de Zoé')
+  })
+  it('uses the singular only for 1 in English', () => {
+    const english = { one: '{count} painting', other: '{count} paintings' }
+    expect(plural(en, english, 0)).toBe('0 paintings')
+    expect(plural(en, english, 1)).toBe('1 painting')
+    expect(plural(en, english, 12)).toBe('12 paintings')
   })
 })

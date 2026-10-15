@@ -70,3 +70,23 @@ export function format(template: string, values: Record<string, string | number>
     Object.hasOwn(values, name) ? String(values[name]) : match,
   )
 }
+
+/** A message in the singular and the plural; `{count}` stands for the number. */
+export interface PluralForms {
+  one: string
+  other: string
+}
+
+/**
+ * The form of `forms` the dictionary's language uses for `count`, with placeholders filled in.
+ * French takes the singular for 0 and 1, English only for 1.
+ */
+export function plural(
+  t: Dictionary,
+  forms: PluralForms,
+  count: number,
+  values: Record<string, string | number> = {},
+): string {
+  const form = new Intl.PluralRules(t.locale).select(count) === 'one' ? forms.one : forms.other
+  return format(form, { ...values, count })
+}
