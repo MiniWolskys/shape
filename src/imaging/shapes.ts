@@ -238,10 +238,29 @@ const stainedGlass: ShapeFn = (x, y, ctx) => {
   return Math.sqrt(q2) - Math.sqrt(q1) < ctx.lead * 0.75 ? LEAD : tinted(id)
 }
 
-/** Whether pixel `i` is in the `t` pixels wide bar centred on `size / 2`. */
-function midBar(i: number, size: number, t: number): boolean {
-  const from = Math.round(size / 2 - t / 2)
+/**
+ * Whether pixel `i` is in the `t` pixels wide bar centred on the line at `at` (0 < at < size).
+ * A bar that cannot be centred exactly (an odd width on a line between two pixels, or an even
+ * one on a pixel's middle) puts its extra half pixel toward the middle of the painting, so a bar
+ * and its mirror image across the painting have the same pixels mirrored.
+ */
+function onBar(i: number, at: number, size: number, t: number): boolean {
+  const start = at - t / 2
+  const from =
+    2 * at < size ? Math.ceil(start) : 2 * at > size ? Math.floor(start) : Math.round(start)
   return i >= from && i < from + t
+}
+
+/** Whether pixel `i` is in the `t` pixels wide bar centred on `size / 2`. */
+const midBar = (i: number, size: number, t: number) => onBar(i, size / 2, size, t)
+
+/** Whether pixel `i` is in a `t` pixels wide bar centred on a grid line k·s inside `size`. */
+function onGrid(i: number, s: number, size: number, t: number): boolean {
+  const last = Math.floor((i + t / 2 + 1) / s)
+  for (let k = Math.max(1, Math.ceil((i - t / 2 - 1) / s)); k <= last && k * s < size; k++) {
+    if (onBar(i, k * s, size, t)) return true
+  }
+  return false
 }
 
 const fourPanes: ShapeFn = (x, y, { width: w, height: h, frame }) => {
@@ -307,9 +326,11 @@ const fanlight: ShapeFn = (x, y, { width: w, height: h, frame }) => {
 const paperScreen: ShapeFn = (x, y, { width: w, height: h, frame, pixelsPerBlock }) => {
   const c = band(rectIn(x, y, w, h), frame)
   if (c !== GLASS) return c
-  // The grid bars are as wide as the frame (none without one).
+  // The grid bars are as wide as the frame (none without one), centred on the grid lines.
   const s = gridStep(pixelsPerBlock)
-  return Math.floor(x) % s < frame || Math.floor(y) % s < frame ? LIGHT_FRAME : PAPER
+  return onGrid(Math.floor(x), s, w, frame) || onGrid(Math.floor(y), s, h, frame)
+    ? LIGHT_FRAME
+    : PAPER
 }
 
 const porthole: ShapeFn = (x, y, { width: w, height: h, frame }) => {

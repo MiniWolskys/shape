@@ -131,6 +131,34 @@ describe('wooden bars follow the frame thickness', () => {
     expect(lightRun((y) => SHAPES.paper_screen(80.5, y, ctx))).toBe(t)
   })
 
+  it.each([2, 4, 7])('paper_screen first and last panes are as wide at %i px', (t) => {
+    // 2×2 blocks at 32 px per block: grid lines every 16 px, at 16, 32 and 48.
+    const ctx = makeShapeContext(64, 64, 32, t, 1)
+    const panes = (classify: (i: number) => Classified) => {
+      const widths: number[] = []
+      let n = 0
+      for (let i = 0; i <= 64; i++) {
+        if (i < 64 && classify(i + 0.5).paper) n++
+        else if (n > 0) {
+          widths.push(n)
+          n = 0
+        }
+      }
+      return widths
+    }
+    for (const at of [8.5, 24.5, 40.5, 56.5]) {
+      const row = panes((x) => SHAPES.paper_screen(x, at, ctx))
+      const column = panes((y) => SHAPES.paper_screen(at, y, ctx))
+      for (const widths of [row, column]) {
+        if (widths.length === 0) continue
+        expect(widths, `${at}`).toHaveLength(4)
+        expect(widths[0], `${at}`).toBe(widths[3])
+        // An odd bar on the middle line cannot be centred: one inner pane gets the extra pixel.
+        expect(Math.abs((widths[1] ?? 0) - (widths[2] ?? 0)), `${at}`).toBe(t % 2)
+      }
+    }
+  })
+
   it.each([2, 6, 12])('fanlight spokes are %i px wide', (t) => {
     const ctx = makeShapeContext(256, 128, PPB, t, 1)
     // The spoke at 3π/7 from the right, 80 px from the hub's centre (128, 128).

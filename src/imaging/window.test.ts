@@ -207,4 +207,18 @@ describe('shape maps', () => {
       }
     }
   })
+
+  it.each(['fanlight', 'four_panes', 'paper_screen'] as const)(
+    'reframes %s wooden bars exactly on a painting the frame does not swallow',
+    (shape) => {
+      const o = { shape, pixelsPerBlock: 32, seed: 3 }
+      const zero = classifyShape(128, 128, { ...o, frame: 0 })
+      const edge = shapeEdge(zero, classifyShape(128, 128, { ...o, frame: FRAME_BOUND }))
+      for (let frame = 0; frame <= FRAME_BOUND; frame++) {
+        const direct = classifyShape(128, 128, { ...o, frame })
+        const reframed = reframeShape(zero, edge, { ...o, frame }).codes
+        expect(firstDifference(reframed, direct.codes), `${frame}`).toBe(-1)
+      }
+    },
+  )
 })
