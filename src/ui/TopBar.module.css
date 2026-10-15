@@ -1,0 +1,130 @@
+.bar {
+  display: flex;
+  /* In a page grid: never wider than the window, so long names shrink instead. */
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-height: 56px;
+  padding: 8px 18px;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--line);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.homeButton {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mark {
+  width: 22px;
+  height: 33px;
+  image-rendering: pixelated;
+}
+
+.name {
+  font: 22px/1 var(--font-display);
+}
+
+.tagline {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .tagline {
+    display: none;
+  }
+}
+
+/* Phones: one row; the logo keeps only its mark when the screen puts things next to it. */
+.bar[data-narrow] {
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.bar[data-narrow] .tagline,
+.bar[data-crowded] .name {
+  display: none;
+}
+
+.more {
+  position: relative;
+  flex: none;
+}
+
+.moreButton {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.moreButton:hover,
+.moreButton[aria-expanded='true'] {
+  background: var(--raised);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  display: grid;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: var(--radius);
+  background: var(--raised);
+  box-shadow: var(--shadow);
+}
+
+.item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--panel);
+}
+
+.item[aria-checked='true'] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.separator {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--line);
+}

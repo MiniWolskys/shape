@@ -1,0 +1,166 @@
+import { describe, expect, it } from 'vitest'
+import { createPainting } from '../domain/library.ts'
+import type { Painting } from '../domain/types.ts'
+import { createEditLayer } from './edits.ts'
+import { renderPainting, renderPicture } from './pipeline.ts'
+import { createRaster, getPixel, setPixel } from './raster.ts'
+import { withoutMod } from './window.ts'
+
+const painting = (patch: Partial<Painting> = {}): Painting => ({
+  ...createPainting({ title: 'Test', pixelsPerBlock: 16 }, new Date(0), () => 0.5),
+  ...patch,
+})
+
+describe('pipeline', () => {
+  it('renders a full painting with a dark oak frame', () => {
+    const out = renderPainting(createRaster(40, 20, [255, 0, 0, 255]), null, painting())
+    expect([out.width, out.height]).toEqual([16, 16])
+    expect(getPixel(out, 8, 8)).toEqual([255, 0, 0, 255])
+    const [r, g, b, a] = getPixel(out, 0, 8)
+    expect(Math.abs(r - 74)).toBeLessThanOrEqual(16)
+    expect(Math.abs(g - 47)).toBeLessThanOrEqual(16)
+    expect(Math.abs(b - 28)).toBeLessThanOrEqual(16)
+    expect(a).toBe(255)
+  })
+  it('uses a grey checker placeholder without a source', () => {
+    const out = renderPicture(null, painting({ width: 2, height: 1 }))
+    expect([out.width, out.height]).toEqual([32, 16])
+    expect(getPixel(out, 0, 0)).toEqual([110, 110, 114, 255])
+    expect(getPixel(out, 4, 0)).toEqual([92, 92, 96, 255])
+    expect(getPixel(out, 4, 4)).toEqual([110, 110, 114, 255])
+  })
+  it('honours an explicit crop after rotation', () => {
+    const src = createRaster(20, 10, [0, 0, 255, 255])
+    for (let y = 0; y < 10; y++) for (let x = 0; x < 10; x++) setPixel(src, x, y, [0, 255, 0, 255])
+    const p = painting()
+    const left = renderPicture(src, {
+      ...p,
+      recipe: { ...p.recipe, crop: { x: 0, y: 0, width: 10, height: 10 } },
+    })
+    expect(getPixel(left, 8, 8)).toEqual([0, 255, 0, 255])
+    // Rotated 90° clockwise the green half ends up on top, so the bottom square is blue.
+    const rotated = renderPicture(src, {
+      ...p,
+      recipe: { ...p.recipe, rotation: 90, crop: { x: 0, y: 10, width: 10, height: 10 } },
+    })
+    expect(getPixel(rotated, 8, 8)).toEqual([0, 0, 255, 255])
+  })
+  it('uses a crop that fits the source as-is', () => {
+    const src = createRaster(20, 10, [0, 0, 255, 255])
+    setPixel(src, 19, 9, [255, 255, 0, 255])
+    const p = painting()
+    const out = renderPicture(src, {
+      ...p,
+      recipe: { ...p.recipe, crop: { x: 18, y: 8, width: 2, height: 2 } },
+    })
+    expect(getPixel(out, 15, 15)).toEqual([255, 255, 0, 255])
+    expect(getPixel(out, 0, 0)).toEqual([0, 0, 255, 255])
+  })
+  it('falls back to the centred crop when the stored crop no longer fits', () => {
+    const src = createRaster(40, 20)
+    for (let y = 0; y < 20; y++)
+      for (let x = 0; x < 40; x++) setPixel(src, x, y, [x * 6, y * 12, 100, 255])
+    const p = painting()
+    const rotated = { ...p.recipe, rotation: 90 as const }
+    const stale = renderPicture(src, {
+      ...p,
+      recipe: { ...rotated, crop: { x: 0, y: 0, width: 40, height: 20 } },
+    })
+    const centred = renderPicture(src, {
+      ...p,
+      recipe: { ...rotated, crop: { x: 0, y: 0, width: 0, height: 0 } },
+    })
+    expect(stale.data).toEqual(centred.data)
+  })
+  it('applies the Minecraft look when enabled', () => {
+    const src = createRaster(16, 16)
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) setPixel(src, x, y, [x * 16, y * 16, 128, 255])
+    const p = painting()
+    const out = renderPicture(src, {
+      ...p,
+      recipe: { ...p.recipe, mcLook: { enabled: true, colors: 2, palette: 'auto', dither: false } },
+    })
+    const seen = new Set<string>()
+    for (let i = 0; i < out.data.length; i += 4)
+      seen.add(`${out.data[i]},${out.data[i + 1]},${out.data[i + 2]}`)
+    expect(seen.size).toBeLessThanOrEqual(2)
+  })
+  it('applies edits on top of the window, rescaling them to the painting', () => {
+    const edits = createEditLayer(8, 8)
+    setPixel(edits.values, 4, 4, [0, 0, 0, 0])
+    edits.mask[4 * 8 + 4] = 1
+    const out = renderPainting(createRaster(16, 16, [255, 0, 0, 255]), edits, painting())
+    // R12: see-through pixels carry the frame colour.
+    expect(getPixel(out, 8, 8)).toEqual([74, 47, 28, 0])
+    expect(getPixel(out, 6, 6)).toEqual([255, 0, 0, 255])
+  })
+  it('is deterministic for a given painting', () => {
+    const p = painting()
+    const src = createRaster(16, 16, [10, 200, 30, 255])
+    const shaped: Painting = {
+      ...p,
+      recipe: { ...p.recipe, window: { shape: 'stained_glass', glassOpacity: 1 } },
+    }
+    expect(renderPainting(src, null, shaped).data).toEqual(renderPainting(src, null, shaped).data)
+  })
+
+  describe('R12: see-through pixels take the frame colour', () => {
+    const gilded = (p: Painting): Painting => ({
+      ...p,
+      recipe: { ...p.recipe, frame: { material: 'gilded', thickness: 2 } },
+    })
+
+    it('a transparent pixel edit renders as frame RGB with alpha 0', () => {
+      const edits = createEditLayer(16, 16)
+      edits.mask[8 * 16 + 8] = 1 // values stay [0,0,0,0]
+      const out = renderPainting(createRaster(16, 16, [255, 0, 0, 255]), edits, gilded(painting()))
+      expect(getPixel(out, 8, 8)).toEqual([208, 164, 58, 0])
+      expect(getPixel(withoutMod(out), 8, 8)).toEqual([208, 164, 58, 255])
+    })
+
+    it('a transparent source pixel renders as frame RGB too (dark oak without frame)', () => {
+      const src = createRaster(16, 16, [255, 0, 0, 255])
+      setPixel(src, 8, 8, [10, 20, 30, 0])
+      const p = painting()
+      const none = {
+        ...p,
+        recipe: { ...p.recipe, frame: { material: 'none' as const, thickness: 0 } },
+      }
+      expect(getPixel(renderPainting(src, null, none), 8, 8)).toEqual([74, 47, 28, 0])
+      expect(getPixel(renderPainting(src, null, gilded(p)), 8, 8)).toEqual([208, 164, 58, 0])
+    })
+
+    it('leaves partly transparent pixels alone', () => {
+      const edits = createEditLayer(16, 16)
+      edits.mask[0] = 1
+      edits.values.data.set([170, 210, 255, 64], 0)
+      const out = renderPainting(createRaster(16, 16, [255, 0, 0, 255]), edits, painting())
+      expect(getPixel(out, 0, 0)).toEqual([170, 210, 255, 64])
+    })
+  })
+})
+
+describe('frames thicker than the painting (R41)', () => {
+  it('renders all frame, whatever the shape, without throwing', () => {
+    for (const shape of ['full', 'oculus', 'stained_glass', 'four_panes'] as const) {
+      const p0 = createPainting({ width: 1, height: 1, pixelsPerBlock: 64 }, new Date(0), () => 0.5)
+      const p: Painting = {
+        ...p0,
+        recipe: {
+          ...p0.recipe,
+          window: { shape, glassOpacity: 1 },
+          frame: { material: 'oak', thickness: 1024 },
+        },
+      }
+      const out = renderPainting(createRaster(64, 64, [255, 0, 0, 255]), null, p)
+      expect([out.width, out.height]).toEqual([64, 64])
+      // No glass is left: every pixel is frame, or cut out around the shape (alpha 0).
+      for (let i = 0; i < out.data.length; i += 4) {
+        const pixel = Array.from(out.data.subarray(i, i + 4))
+        expect(pixel, shape).not.toEqual([255, 0, 0, 255])
+        if (shape === 'full') expect(pixel[3], shape).toBe(255)
+      }
+    }
+  })
+})

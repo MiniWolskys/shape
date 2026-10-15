@@ -1,0 +1,29 @@
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.option {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.option:hover {
+  color: var(--text);
+}
+
+.option[aria-pressed='true'] {
+  color: var(--text);
+  font-weight: 700;
+}

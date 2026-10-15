@@ -10,17 +10,17 @@ Dusk tone; the page still uses the older working names).
 
 ## 1. Decisions
 
-| Topic               | Decision                                                                                  |
-| ------------------- | ----------------------------------------------------------------------------------------- |
-| Name                | **Shape**, tagline “Minecraft paintings” / « tableaux Minecraft »                         |
-| Hosting             | GitHub Pages, `https://miniwolskys.github.io/shape/`, deployed by GitHub Actions          |
-| Backend             | None. No login, no upload. Everything runs and stays in the browser.                      |
-| Look                | Lantern Workshop, Dusk tone only. Paintings always sit on a neutral grey, never on brown. |
-| Languages           | English and French. Browser language on first visit, switch in the top bar, remembered.   |
-| Export              | One file, the **library pack**, a plain `.zip` (`<namespace>-v<version>.zip`).            |
-| Published paintings | Locked size, ID and existence. Title, author and image can still change.                  |
-| Optional features   | Basic image editing and the Minecraft look filter are in v1.                              |
-| Desktop first       | Editing is designed for mouse and keyboard; phones can browse and export.                 |
+| Topic               | Decision                                                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Name                | **Shape**, tagline “Minecraft paintings” / « tableaux Minecraft »                                                                      |
+| Hosting             | GitHub Pages, `https://miniwolskys.github.io/shape/`, deployed by GitHub Actions                                                       |
+| Backend             | None. No login, no upload. Everything runs and stays in the browser.                                                                   |
+| Look                | Lantern Workshop, Dusk tone only. Paintings always sit on a neutral grey, never on brown.                                              |
+| Languages           | English and French. Browser language on first visit, switch in the top bar, remembered.                                                |
+| Export              | One file, the **library pack**, a plain `.zip` (`<namespace>-v<version>.zip`).                                                         |
+| Published paintings | Locked size, ID and existence. Title, author and image can still change.                                                               |
+| Optional features   | Basic image editing and the Minecraft look filter are in v1.                                                                           |
+| Desktop first       | Editing is designed for mouse and keyboard; phones can browse and export (a dismissible notice says editing works best on a computer). |
 
 ## 2. Minecraft facts (from the 26.3 test packs)
 
@@ -45,12 +45,13 @@ interface Library {
   formatVersion: 1
   name: string           // display name, e.g. "Our paintings"
   namespace: string      // [a-z0-9_.-]+, e.g. "ourpaintings"
-  version: number        // 0 before the first export, +1 on every export
+  version: number        // 0 before the first export, +1 on every export that publishes or updates
+  exportedAt?: string    // ISO time of the last export; absent = never exported
   paintings: Painting[]
 }
 
 interface Painting {
-  id: string             // [a-z0-9_]+, slug of the first title + "_" + 3 random base36 chars; never changes
+  id: string             // [a-z0-9_]+, slug of the title + "_" + 3 base36 chars; follows the title until published, then never changes
   title: string; titleColor: McColor
   author: string; authorColor: McColor
   width: number; height: number          // blocks, 1..16
@@ -81,11 +82,28 @@ keyed by ID, both in IndexedDB and in the library pack.
 
 - A painting gets `status: 'published'` when it is included in an export. Published paintings are
   in every later export and cannot be deleted; their size and ID cannot change.
-- Importing a library pack only adds paintings whose ID is not already present. Same-ID paintings
-  keep the local copy unless the incoming one is published and the local one is not.
-- Importing a pack with a different namespace is refused with an explanation.
-- A painting created without a library (“loose painting”) lives in the workspace. When a library is
-  opened or created, Shape offers to add loose paintings to it.
+- New paintings start `ready` (“Include in the next export” on); `draft` keeps one out of exports.
+  A published painting edited after `exportedAt` is **changed**: the server copy is out of date.
+- Importing a pack of the same library (same namespace) only adds paintings whose ID is not already
+  present. Same-ID paintings keep the local copy unless the incoming one is published and the local
+  one is not.
+- Importing a pack of another library adds its paintings to the open one as new, unpublished, ready
+  copies (fresh IDs), after a confirm naming the source library and the count. With no library open,
+  or with the demo open, the pack is opened instead (the demo is replaced, after the close confirm
+  when it was changed). Re-importing a pack that adds nothing says so.
+- A painting is **unexported** when no downloaded pack holds it as it is now: every painting of a
+  never-exported library, else unpublished and changed ones. Closing or replacing a library deletes
+  its paintings, so Close library, Start a new library and Try the sample library name the count of
+  unexported paintings first, offer “Export first”, and delete only through a red “Delete {n} and
+  close”. With nothing to lose they are a plain confirm.
+- A painting created without a library (“loose painting”) lives in the workspace. With a library open,
+  loose paintings are listed under it in “Not in this library”, each with “Add to {library}”.
+- The sample library is a **demo**: its titles follow the language it was opened in, a banner says so,
+  and it can't be exported. A workspace-only flag marks it (never written to packs). Paintings
+  made while it is open stay loose, never join it. Closing it names the demo paintings the player
+  made or changed, and offers to keep them outside the library (as loose paintings) or delete them.
+- Renaming an unpublished painting changes its ID: a friend's copy of the old ID becomes a second
+  painting on a later merge.
 
 ## 4. Library pack format
 
@@ -119,8 +137,11 @@ except image decoding runs in unit tests without a browser. Heavy renders run in
 2. **Window & frame:** for each pixel, the shape function returns `out | frame | lead | glass`
    (+ optional tint). `out` → alpha 0, RGB = frame color. `frame` → frame material color with a
    small deterministic wood/metal grain. `lead` → lead color. `glass` → picture color, alpha =
-   glassOpacity (tinted shapes blend 50 % with the pane tint). Frame thickness 0 or material
-   “none” draws no frame; lead lines and bars keep their own width.
+   glassOpacity (tinted shapes blend 50 % with the pane tint). The frame follows the window
+   outline; its wooden bars inside (fanlight spokes, four-pane cross, paper-screen grid) are half
+   as thick as the frame (`max(1, round(thickness / 2))`), and the fanlight hub is solid wood.
+   Frame thickness 0 or material “none” draws no frame, no wooden bars and no hub; lead lines
+   keep their own width at every thickness.
 3. **Pixel edits:** an RGBA layer plus a mask; masked pixels replace the result of steps 1–2.
    Changing shape, crop or adjustments keeps the edits. Changing size or resolution resamples the
    edit layer with nearest-neighbour after a confirmation.
@@ -133,13 +154,21 @@ Frame materials: oak, spruce, dark oak, birch, gilded, stone, iron, none.
 
 All copy exists in English and French. Visual reference: the design page, Dusk tone.
 
-1. **Home.** Headline “_Shape_ any picture into a painting you can see through.” (“Shape” in
-   orange). Actions: **Create a painting** (no library needed), **Open a library pack** (button +
-   drop anywhere), **Start a new library**, **Resume** (only if a saved workspace exists), **Try
-   the sample library**. A wall preview of a gothic window painting.
-2. **Library.** Card grid with New / Draft / Published badges, filters, search, duplicate, delete
-   (not for published). Banner for loose paintings. Import another pack (adds only). Export button
-   shows the count of new paintings.
+1. **Home.** Headline “_Shape_ any picture into a painting you can see through.” / « _Façonnez_ vos
+   images en tableaux-fenêtres. » (first word in orange). **Resume** comes first when the browser holds
+   work, with the latest painting's thumbnail and “saved {time} ago”. Actions: **Create a painting**
+   (“Goes into {library}” when one is open), **Open a library pack** (button + drop anywhere; names
+   `<ns>-v<n>.zip` only once a version was exported), **Start a new library** (a name; the pack ID
+   under Advanced, fixed after the first export), **Try the sample library**. A wall preview of a
+   gothic window painting, and “How it works”: make a painting → collect them in a library → export
+   one file for your server, what a library pack is, and that players need the Transparent Paintings
+   mod. A picture dropped on Home or Library starts a new painting with it.
+2. **Library.** Card grid with Draft · Ready · Changed · Published badges and the same filter chips
+   (All · Ready · Draft · Published), search, duplicate (a “(copy)” right after the original,
+   highlighted, with an Edit toast), delete (published cards say why they can't). Loose paintings in
+   their own foldable section. Import any library pack. The export button says “Export · {n} ready”
+   (+ “· {m} changed”) and is the primary button only when that is above zero. An empty library
+   offers a first painting or a pack.
 3. **Editor**, five steps in a rail, all clickable: Image, Size & crop, Window & frame, Colors &
    pixels, Details. Canvas views: Editor, On the wall, Without the mod. Backdrop: Auto, Light, Dark,
    Sky (Auto contrasts with the frame luminance). Zoom, pixel grid. Undo/redo for every change.
@@ -151,16 +180,27 @@ All copy exists in English and French. Visual reference: the design page, Dusk t
    - Colors & pixels: tools pencil (B), fill (G), replace color (R), magic wand (W), eyedropper
      (I), eraser to transparent (E); tolerance; color picker (hue, shade, opacity, hex); presets
      Transparent, Glass 25 %, Glass 50 %, frame color, 16 dye colors; apply to selection.
-   - Details: title, author, Minecraft text colors, in-game tooltip preview, status Draft/Ready.
-4. **Export.** Pick new paintings (published always in and locked), validation (blocking: no
-   image, duplicate ID; warnings: no title), version `vN → vN+1`, contents of the pack, one
-   download button, SHA1 with copy, `server.properties` lines with copy, server steps, What's new
-   with “Copy for Discord”.
+   - Details: title, author, Minecraft text colors, in-game tooltip preview, “Include in the next
+     export”, the ID it will have (or has, once published).
+   - The editor opens on a draft that joins the workspace on its first change, saves itself
+     (debounced, and on leave; Ctrl+S saves now), sizes a painting to its first picture (1–4 blocks
+     per side), and needs a picture before any pixel editing.
+4. **Export.** Ready paintings with a picture are ticked; changed and published ones are always in.
+   Validation (blocking: no image, duplicate ID; warnings: no title, no author), version
+   `vN → vN+1`, contents of the pack. The one button says what it does: “Publish {n} and download
+   v{v}” (with “Published paintings can't be resized or deleted later”), “Update {m} and download
+   v{v}”. With nothing new, either “Download v{v} again” when every painting is exported (the
+   server files are exactly those of v{v}), or “Download a backup” (`<ns>-v{v}-backup.zip`, keeping the unpublished paintings;
+   the server files stay those of v{v}); neither publishes anything or changes the version. Then “Your download of {file} started” and “Didn't get the file?
+   Download again”. SHA1 and `server.properties` lines with copy, server steps (the mod, the exact
+   files inside the pack, what a direct link is), What's new with “Copy for Discord”. The demo
+   can't be exported, and Back waits for a build in progress.
 
 ## 7. Persistence
 
-The whole workspace (library, loose paintings, binaries, UI language) autosaves to IndexedDB,
-debounced. Nothing leaves the browser except files the user downloads.
+The whole workspace (library, loose paintings, binaries) autosaves to IndexedDB, debounced; the UI
+language is kept in localStorage. The screen is in the URL (`#/library`, `#/edit/<id>`, `#/export`),
+so Back, Forward and reloads follow it. Nothing leaves the browser except files the user downloads.
 
 ## 8. Architecture
 
@@ -174,7 +214,7 @@ src/
   state/       Zustand stores (workspace, editor with history)
   ui/          shared components (Button, Segmented, Slider, Dialog, Toast, PaintingCanvas…)
   screens/     Home, Library, Editor (+ steps), Export
-  workers/     render worker
+  workers/     render worker (latest request wins) and library pack worker
   theme/       tokens.css, global.css
 ```
 
@@ -185,7 +225,8 @@ accessible markup (labels, roles, focus states, keyboard shortcuts that don't fi
 ## 9. Errors
 
 Every failure has a message that says what happened and what to do: unreadable image, wrong file
-type, newer library format, namespace mismatch, storage full, export failure. No silent catches.
+type, newer library format, storage full, export failure. Messages never show developer text (the
+details go to the console). No silent catches.
 
 ## 10. Testing and CI
 

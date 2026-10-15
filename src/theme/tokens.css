@@ -1,0 +1,65 @@
+/* Lantern Workshop, Dusk. Every colour in the app comes from here. */
+:root {
+  color-scheme: dark;
+  --bg: #1c130d;
+  --panel: #271a11;
+  --raised: #362519;
+  --line: #4b3525;
+  --text: #f4e4cc;
+  --muted: #b49a7c;
+  --accent: #ee8a2f;
+  --accent-ink: #2a1505;
+  --ok: #9cc777;
+  --warn: #f0c04a;
+  --danger: #e5674f;
+  --check-light-a: #e4e4e6;
+  --check-light-b: #c9c9cd;
+  --check-dark-a: #3c3c40;
+  --check-dark-b: #2c2c30;
+  --check-mid-a: #77777c;
+  --check-mid-b: #646469;
+  --sky-top: #6fa3ea;
+  --sky-bottom: #c6def8;
+  --radius: 10px;
+  --shadow: inset 0 1px 0 rgba(255, 220, 180, 0.06), 0 6px 18px rgba(0, 0, 0, 0.35);
+  --topbar: repeating-linear-gradient(
+    92deg,
+    #3a2618 0 7px,
+    #34220f 7px 9px,
+    #3d2a1c 9px 19px,
+    #362314 19px 22px
+  );
+  --font-display: 'Young Serif', Georgia, serif;
+  --font-body: 'Figtree', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Derived tokens used by the UI kit */
+  --overlay: rgba(12, 7, 3, 0.62);
+  --drop-tint: rgba(238, 138, 47, 0.1);
+  /* Editor pixel grid and crop box, drawn over paintings of any colour */
+  --grid-pixel: rgba(128, 128, 132, 0.35);
+  --grid-block: rgba(20, 20, 24, 0.55);
+  --crop-shade: rgba(12, 7, 3, 0.55);
+  /* Pixel selection outline: dashes of one over a solid line of the other */
+  --selection-dash: #ffffff;
+  --selection-line: #000000;
+  /* Colour picker: the saturation/value square fades to these; the hue bar */
+  --picker-white: #ffffff;
+  --picker-black: #000000;
+  --picker-hue: linear-gradient(
+    to right,
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+  );
+  /* "No frame" swatch hatching */
+  --hatch: repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 6px);
+  /* Minecraft item tooltip */
+  --mc-tooltip-bg: #100010;
+  --mc-tooltip-border-top: #5000ff;
+  --mc-tooltip-border-bottom: #28007f;
+}

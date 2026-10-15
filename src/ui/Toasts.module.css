@@ -1,0 +1,90 @@
+/* Bottom centre of the window. */
+.region {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  z-index: 100;
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.stack {
+  display: grid;
+  gap: 8px;
+}
+
+.stack:empty {
+  display: none;
+}
+
+/*
+ * In the editor, centred over the stage between the step rail and the inspector
+ * (EditorScreen.module.css: 200px | stage | 330px, then 170px | stage | 300px).
+ */
+@media (min-width: 861px) {
+  .region[data-area='stage'] {
+    left: calc((100vw + 170px - 300px) / 2);
+    width: min(380px, calc(100vw - 170px - 300px - 32px));
+  }
+}
+
+@media (min-width: 1081px) {
+  .region[data-area='stage'] {
+    left: calc((100vw + 200px - 330px) / 2);
+    width: min(380px, calc(100vw - 200px - 330px - 32px));
+  }
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  border-left: 3px solid var(--ok);
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.error {
+  border-left-color: var(--danger);
+}
+
+.message {
+  flex: 1;
+  padding-top: 2px;
+}
+
+.action {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--panel);
+}
+
+.dismiss {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.dismiss:hover {
+  color: var(--text);
+}

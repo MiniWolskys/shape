@@ -1,0 +1,36 @@
+.group {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.option {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font: 600 12.5px/1 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.option:hover {
+  color: var(--text);
+}
+
+.option[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.option:disabled:hover {
+  color: var(--muted);
+}

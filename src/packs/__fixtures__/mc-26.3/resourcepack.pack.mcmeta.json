@@ -1,0 +1,7 @@
+{
+  "pack": {
+    "description": "Transparent Paintings test paintings (textures)",
+    "min_format": 97,
+    "max_format": [97, 1]
+  }
+}

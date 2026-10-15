@@ -1,0 +1,37 @@
+.backdrop {
+  background-size: 16px 16px;
+}
+
+.light {
+  background-color: var(--check-light-b);
+  background-image: conic-gradient(
+    var(--check-light-a) 25%,
+    transparent 0 50%,
+    var(--check-light-a) 0 75%,
+    transparent 0
+  );
+}
+
+.dark {
+  background-color: var(--check-dark-b);
+  background-image: conic-gradient(
+    var(--check-dark-a) 25%,
+    transparent 0 50%,
+    var(--check-dark-a) 0 75%,
+    transparent 0
+  );
+}
+
+.mid {
+  background-color: var(--check-mid-b);
+  background-image: conic-gradient(
+    var(--check-mid-a) 25%,
+    transparent 0 50%,
+    var(--check-mid-a) 0 75%,
+    transparent 0
+  );
+}
+
+.sky {
+  background: linear-gradient(var(--sky-top), var(--sky-bottom));
+}

@@ -1,0 +1,405 @@
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.topLeft {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.heading {
+  overflow: hidden;
+  margin: 0;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 28px;
+}
+
+.panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.label {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.picks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--raised);
+  cursor: pointer;
+}
+
+.pick:has(input:disabled) {
+  cursor: default;
+}
+
+.pick:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.checkbox {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.locked .checkbox {
+  opacity: 0.55;
+}
+
+/* The checkbox and, for published paintings, its lock, side by side (M8). */
+.checkCell {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  min-width: 33px;
+}
+
+.lockIcon {
+  color: var(--muted);
+}
+
+.thumb {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.thumbIcon {
+  color: var(--check-light-a);
+}
+
+.pickText {
+  display: grid;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.pickText b {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint {
+  color: var(--warn);
+}
+
+.more {
+  justify-self: start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.more:hover {
+  color: var(--text);
+}
+
+.version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 34px;
+}
+
+.counts {
+  display: grid;
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  text-align: right;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.fileText {
+  display: grid;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.fileText b {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.inside {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.inside div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inside dt {
+  flex: none;
+}
+
+.inside dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  text-align: right;
+}
+
+.issues {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.issues li {
+  padding: 8px 10px;
+  border-left: 3px solid;
+  border-radius: 4px;
+  background: var(--raised);
+}
+
+.blocking {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.warning {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.download {
+  justify-content: center;
+  width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+.note {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: var(--raised);
+  font-size: 13px;
+}
+
+.startAgain {
+  justify-self: start;
+  padding-left: 0;
+}
+
+.blockedHint {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.done {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-left: 3px solid var(--ok);
+  border-radius: 4px;
+  background: var(--raised);
+}
+
+.done p {
+  margin: 0;
+}
+
+.okIcon {
+  color: var(--ok);
+  vertical-align: -3px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.news {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.discord {
+  justify-self: start;
+}
+
+.code {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 9px 10px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* server.properties lines never wrap mid-key (I21): they scroll sideways instead. */
+.properties {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.steps code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.pending {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-style: italic;
+}
+
+.steps {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding-left: 22px;
+  font-size: 13px;
+}
+
+.never {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: var(--raised);
+  font-size: 13px;
+}
+
+@media (max-width: 1080px) {
+  .columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .heading {
+    display: none;
+  }
+}

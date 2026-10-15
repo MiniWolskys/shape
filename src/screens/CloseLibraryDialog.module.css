@@ -1,0 +1,13 @@
+.text {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.danger {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  line-height: 1.45;
+}

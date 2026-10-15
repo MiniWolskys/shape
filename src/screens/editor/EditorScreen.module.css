@@ -1,0 +1,169 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  /* The save failure banner (C1), when shown, sits above the editor. */
+  height: calc(100vh - var(--save-banner-height, 0px));
+  height: calc(100dvh - var(--save-banner-height, 0px));
+}
+
+/* "Editing works best on a computer" (I24), above the editor. */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.noticeText {
+  flex: 1 1 220px;
+}
+
+.noticeTitle {
+  margin: 0 0 2px;
+  font-size: 16px;
+}
+
+.noticeBody {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* Autosave state (R19): a green dot when saved, amber while saving, red when it failed. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.status::before {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok);
+  content: '';
+}
+
+.status[data-status='saving']::before {
+  background: var(--warn);
+}
+
+.status[data-status='notSaved']::before {
+  background: var(--line);
+}
+
+.status[data-status='failed'] {
+  color: var(--danger);
+}
+
+.status[data-status='failed']::before {
+  background: var(--danger);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.editor {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 200px minmax(0, 1fr) 330px;
+  min-height: 0;
+}
+
+.inspector {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  /* Never sideways (I22); the scrollbar keeps its room, so the fit zoom never changes (M5). */
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 18px;
+  border-left: 1px solid var(--line);
+}
+
+.warning {
+  margin: 0;
+  color: var(--muted);
+}
+
+@media (max-width: 1080px) {
+  .editor {
+    grid-template-columns: 170px minmax(0, 1fr) 300px;
+  }
+}
+
+/* Narrow screens: steps on top, then the canvas, then the inspector; the page scrolls. */
+@media (max-width: 860px) {
+  .page {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inspector {
+    overflow: visible;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .chip {
+    display: none;
+  }
+}
+
+/* Undo and Redo keep their names for assistive tech but show only icons on phones. */
+@media (max-width: 640px) {
+  .narrowHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .actions {
+    flex-wrap: nowrap;
+  }
+}

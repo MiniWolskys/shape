@@ -1,0 +1,28 @@
+/* Above every screen while saving fails (C1); full-height screens subtract its height. */
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 16px;
+  border-bottom: 3px solid var(--danger);
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.message {
+  flex: 1 1 320px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
