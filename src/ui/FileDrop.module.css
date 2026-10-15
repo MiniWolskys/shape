@@ -1,0 +1,19 @@
+.zone {
+  border-radius: var(--radius);
+  outline: 2px dashed transparent;
+  outline-offset: -2px;
+}
+
+.active {
+  outline-color: var(--accent);
+  background-color: var(--drop-tint);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  border: 3px dashed var(--accent);
+  background: var(--drop-tint);
+  pointer-events: none;
+}

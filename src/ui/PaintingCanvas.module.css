@@ -1,0 +1,9 @@
+.frame {
+  display: inline-grid;
+  place-items: center;
+}
+
+.canvas {
+  display: block;
+  image-rendering: pixelated;
+}

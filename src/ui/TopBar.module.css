@@ -1,0 +1,41 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 8px 18px;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--line);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mark {
+  width: 22px;
+  height: 33px;
+  image-rendering: pixelated;
+}
+
+.name {
+  font: 22px/1 var(--font-display);
+}
+
+.tagline {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .tagline {
+    display: none;
+  }
+}
