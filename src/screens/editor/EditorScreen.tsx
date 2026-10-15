@@ -12,6 +12,7 @@ import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
 import { errorMessage } from '../../ui/errors.ts'
+import { isTextEntry } from '../../ui/keyboard.ts'
 import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
 import { startAutosave, type Autosave } from './autosave.ts'
@@ -48,25 +49,6 @@ const TOOL_KEYS: Record<string, Tool> = {
   w: 'wand',
   i: 'eyedropper',
   e: 'eraser',
-}
-
-const NON_TEXT_INPUTS = new Set([
-  'button',
-  'checkbox',
-  'color',
-  'file',
-  'image',
-  'radio',
-  'range',
-  'reset',
-  'submit',
-])
-
-/** Focus is somewhere typing goes: shortcuts must leave the keys alone. */
-function isTextEntry(target: EventTarget | null): boolean {
-  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true
-  if (target instanceof HTMLInputElement) return !NON_TEXT_INPUTS.has(target.type)
-  return target instanceof HTMLElement && target.isContentEditable
 }
 
 function decodeSource(p: Painting, assets: Assets, t: Dictionary): Raster | null {
