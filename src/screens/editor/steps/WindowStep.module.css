@@ -1,11 +1,12 @@
 .shapes {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
 .shape {
   display: grid;
+  align-content: start;
   gap: 3px;
   min-width: 0;
   padding: 3px;
@@ -34,10 +35,9 @@
   border-radius: 6px;
 }
 
+/* Names wrap rather than cut off: French ones run long. */
 .shapeName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .value {
