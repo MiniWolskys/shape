@@ -1,18 +1,21 @@
 import { useId, type CSSProperties } from 'react'
-import { FRAME_MATERIAL_IDS, SHAPE_IDS, type Recipe } from '../../../domain/types.ts'
+import { defaultRecipe } from '../../../domain/library.ts'
+import { FRAME_MATERIAL_IDS, SHAPE_IDS, type Recipe, type ShapeId } from '../../../domain/types.ts'
 import { useT } from '../../../i18n/i18n.ts'
 import { FRAME_MATERIALS } from '../../../imaging/materials.ts'
 import { useEditor } from '../../../state/editor.ts'
 import { Backdrop } from '../../../ui/Backdrop.tsx'
 import { PaintingCanvas } from '../../../ui/PaintingCanvas.tsx'
 import { Slider } from '../../../ui/Slider.tsx'
-import { useShapeThumbnails } from '../shapeThumbnails.ts'
+import { shapeIcon, useShapeThumbnails } from '../shapeThumbnails.ts'
 import styles from './steps.module.css'
 import own from './WindowStep.module.css'
 
 /** CSS pixels of a shape thumbnail's longest side. */
 const THUMB_SIZE = 48
 const MAX_THICKNESS = 8
+/** What a double-click on a slider puts back. */
+const DEFAULTS = defaultRecipe()
 
 function patchRecipe(patch: (r: Recipe) => Partial<Recipe>, merge?: string) {
   useEditor
@@ -21,6 +24,24 @@ function patchRecipe(patch: (r: Recipe) => Partial<Recipe>, merge?: string) {
 }
 
 const endGesture = () => useEditor.getState().endGesture()
+
+/** The shape's line drawing, shown until its thumbnail is drawn (I9). */
+function ShapeOutline({ shape }: { shape: ShapeId }) {
+  const icon = shapeIcon(shape)
+  return (
+    <svg
+      className={own.icon}
+      viewBox={`0 0 ${icon.size} ${icon.size}`}
+      width={THUMB_SIZE}
+      height={THUMB_SIZE}
+      data-placeholder=""
+      aria-hidden="true"
+    >
+      <path d={icon.outline} />
+      <path d={icon.lead} />
+    </svg>
+  )
+}
 
 export function WindowStep() {
   const t = useT()
@@ -56,12 +77,14 @@ export function WindowStep() {
                 }}
               >
                 <Backdrop kind="mid" className={own.thumb}>
-                  {thumb && (
+                  {thumb ? (
                     <PaintingCanvas
                       raster={thumb}
                       scale={THUMB_SIZE / Math.max(thumb.width, thumb.height)}
                       label={name}
                     />
+                  ) : (
+                    <ShapeOutline shape={shape} />
                   )}
                 </Backdrop>
                 <span className={own.shapeName} aria-hidden="true">
@@ -78,6 +101,7 @@ export function WindowStep() {
             min={10}
             max={100}
             value={Math.round(win.glassOpacity * 100)}
+            defaultValue={Math.round(DEFAULTS.window.glassOpacity * 100)}
             unit="%"
             onChange={(percent) =>
               patchRecipe(
@@ -131,6 +155,7 @@ export function WindowStep() {
             // R4: real pixels. A resize to more pixels per block can take it past 8.
             max={Math.max(MAX_THICKNESS, frame.thickness)}
             value={frame.thickness}
+            defaultValue={DEFAULTS.frame.thickness}
             unit={t.editor.window.px}
             disabled={frame.material === 'none'}
             onChange={(thickness) =>

@@ -35,6 +35,18 @@
   border-radius: 6px;
 }
 
+/* A shape's line drawing while its thumbnail is on the way. */
+.icon {
+  max-width: 100%;
+  height: auto;
+  fill: none;
+  stroke: var(--check-light-a);
+  stroke-width: 1.5px;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.8;
+}
+
 /* Names wrap rather than cut off: French ones run long. */
 .shapeName {
   overflow-wrap: anywhere;
