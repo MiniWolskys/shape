@@ -19,6 +19,11 @@ interface PaintingCanvasProps {
   dirty?: PixelBox | null
   /** Called after each draw (the stroke preview then starts a new dirty area). */
   onDrawn?(): void
+  /**
+   * Draw without waiting for the page's compositor (a desynchronized canvas). Only the editor
+   * stage needs it, for strokes: it is the one canvas checked by eye in every browser.
+   */
+  lowLatency?: boolean
 }
 
 /** Image data can only wrap pixels in a plain (not shared) buffer. */
@@ -52,6 +57,7 @@ export function PaintingCanvas({
   backdrop,
   dirty,
   onDrawn,
+  lowLatency = false,
 }: PaintingCanvasProps) {
   const ref = useRef<HTMLCanvasElement>(null)
   /**
@@ -60,15 +66,16 @@ export function PaintingCanvas({
    * data, instead of copying and uploading megabytes per frame.
    */
   const image = useRef<{ data: ImageData; source: Uint8ClampedArray } | null>(null)
-  const latest = useRef({ dirty, onDrawn })
+  const latest = useRef({ dirty, onDrawn, lowLatency })
   useEffect(() => {
-    latest.current = { dirty, onDrawn }
+    latest.current = { dirty, onDrawn, lowLatency }
   })
 
   useEffect(() => {
     // Desynchronized: a draw reaches the screen without waiting for the page's compositor,
-    // which kept stroke frames of big paintings waiting 50-250 ms.
-    const ctx = ref.current?.getContext('2d', { desynchronized: true })
+    // which kept stroke frames of big paintings waiting 50-250 ms. A canvas keeps the options
+    // of its first getContext.
+    const ctx = ref.current?.getContext('2d', { desynchronized: latest.current.lowLatency })
     if (!ctx || raster.width === 0 || raster.height === 0) return
     const { dirty: box, onDrawn: drawn } = latest.current
     const kept = image.current

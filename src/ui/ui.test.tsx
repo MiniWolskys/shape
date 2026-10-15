@@ -294,6 +294,22 @@ describe('PaintingCanvas', () => {
     }
   })
 
+  it('asks for a low-latency (desynchronized) canvas only when told to', () => {
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(() => null)
+    try {
+      const raster = createRaster(2, 2)
+      const view = render(<PaintingCanvas raster={raster} label="P" />)
+      expect(getContext).toHaveBeenLastCalledWith('2d', { desynchronized: false })
+      view.unmount()
+      render(<PaintingCanvas raster={raster} label="P" lowLatency />)
+      expect(getContext).toHaveBeenLastCalledWith('2d', { desynchronized: true })
+    } finally {
+      getContext.mockRestore()
+    }
+  })
+
   it('fits within a box using an integer scale when it can', () => {
     const getContext = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')

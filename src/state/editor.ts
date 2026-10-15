@@ -220,13 +220,13 @@ export const useEditor = create<EditorState>()((set, get) => {
   const isSaved = (painting: Painting, edits: EditLayer | null) =>
     saved !== null && saved.painting === painting && saved.edits === edits
 
-  /** Records the current state in the history and moves to `next`. */
   /** Keeps only the pictures the current state or the history still refers to. */
   const pruneRasters = (entries: Snapshot[]) => {
     const used = new Set(entries.map((s) => s.painting.recipe.source?.imageId))
     for (const id of [...rasters.keys()]) if (!used.has(id)) rasters.delete(id)
   }
 
+  /** Records the current state in the history and moves to `next`. */
   const commit = (next: Snapshot, options?: ChangeOptions, extra: Partial<EditorState> = {}) => {
     const { painting, edits, past } = get()
     if (!painting) return

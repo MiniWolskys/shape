@@ -467,6 +467,7 @@ export function CanvasStage({
           // new raster each time, drawn whole).
           dirty={view === 'edit' ? rendered.dirty : null}
           onDrawn={strokeDrawn}
+          lowLatency
         />
         {showGrid && (
           <div
