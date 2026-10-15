@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { ShapeError } from '../../domain/errors.ts'
 import { exportSet, whatsNew } from '../../domain/library.ts'
 import type { Assets, Library, Painting } from '../../domain/types.ts'
@@ -132,19 +132,44 @@ function Pick({ painting, checked, disabled, meta, hint, locked, onToggle }: Pic
   )
 }
 
+/** How long a copy button says "Copied ✓" (M1). */
+const COPIED_MS = 2000
+
+/** A copy button that says "Copied ✓" for 2 s once `onCopy` resolves true (M1). */
 function CopyButton({
   label,
   onCopy,
   disabled,
+  className,
+  children,
 }: {
-  label: string
-  onCopy(): void
+  /** The accessible name, when the visible text alone is not enough. */
+  label?: string
+  onCopy(): Promise<boolean>
   disabled?: boolean
+  className?: string
+  children: ReactNode
 }) {
   const t = useT()
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), COPIED_MS)
+    return () => clearTimeout(timer)
+  }, [copied])
   return (
-    <Button icon="copy" aria-label={label} onClick={onCopy} disabled={disabled}>
-      {t.common.copy}
+    <Button
+      icon="copy"
+      aria-label={label}
+      className={className}
+      disabled={disabled}
+      onClick={() => {
+        void onCopy().then((ok) => {
+          if (ok) setCopied(true)
+        })
+      }}
+    >
+      {copied ? t.common.copiedCheck : children}
     </Button>
   )
 }
@@ -245,13 +270,12 @@ function ExportView({ library }: { library: Library }) {
     setPhase({ kind: 'choose' })
   }
 
-  async function copy(text: string, source: HTMLElement | null) {
-    if (await copyText(text)) {
-      toast(t.common.copied)
-    } else {
-      if (source) selectText(source)
-      toast(t.export.copyFailed, 'error')
-    }
+  /** Copies `text`; when that fails, selects `source` for a manual copy and says so. */
+  async function copy(text: string, source: HTMLElement | null): Promise<boolean> {
+    if (await copyText(text)) return true
+    if (source) selectText(source)
+    toast(t.export.copyFailed, 'error')
+    return false
   }
 
   const visiblePublished = showAllPublished ? published : published.slice(0, PUBLISHED_SHOWN)
@@ -455,13 +479,12 @@ function ExportView({ library }: { library: Library }) {
             </ul>
           )}
           {done && (
-            <Button
-              icon="copy"
+            <CopyButton
               className={styles.discord}
-              onClick={() => void copy(discordText(done.library, done.library.version, t), null)}
+              onCopy={() => copy(discordText(done.library, done.library.version, t), null)}
             >
               {t.export.copyDiscord}
-            </Button>
+            </CopyButton>
           )}
         </section>
 
@@ -481,8 +504,10 @@ function ExportView({ library }: { library: Library }) {
             <CopyButton
               label={t.export.copySha1}
               disabled={!done}
-              onCopy={() => done && void copy(done.sha1, sha1Ref.current)}
-            />
+              onCopy={() => (done ? copy(done.sha1, sha1Ref.current) : Promise.resolve(false))}
+            >
+              {t.common.copy}
+            </CopyButton>
           </div>
           <h3 className={styles.label}>{t.export.serverProperties}</h3>
           <pre ref={propertiesRef} className={styles.code} data-testid="server-properties">
@@ -492,8 +517,10 @@ function ExportView({ library }: { library: Library }) {
             <CopyButton
               label={t.export.copyProperties}
               disabled={!done}
-              onCopy={() => void copy(properties, propertiesRef.current)}
-            />
+              onCopy={() => copy(properties, propertiesRef.current)}
+            >
+              {t.common.copy}
+            </CopyButton>
           </div>
           <ol className={styles.steps}>
             <li>{t.export.serverSteps.step1}</li>

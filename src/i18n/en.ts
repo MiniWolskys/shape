@@ -19,7 +19,6 @@ export const en = {
     duplicate: 'Duplicate',
     edit: 'Edit',
     copy: 'Copy',
-    copied: 'Copied',
     copiedCheck: 'Copied ✓',
     more: 'More actions',
     download: 'Download',

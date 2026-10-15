@@ -1,8 +1,9 @@
-import { act, createEvent, fireEvent, render, screen } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { createRaster } from '../imaging/raster.ts'
 import { useLanguage } from '../i18n/i18n.ts'
+import { useNavigation } from '../state/navigation.ts'
 import { autoBackdrop } from './backdrop.ts'
 import { Button } from './Button.tsx'
 import { Dialog } from './Dialog.tsx'
@@ -324,22 +325,30 @@ describe('Toasts', () => {
     useToasts.setState({ toasts: [] })
   })
 
-  it('announces toasts politely and dismisses info after 4 s, errors after 8 s', () => {
+  it('announces info politely and errors at once (M1); info goes after 4 s, errors after 8 s', () => {
     vi.useFakeTimers()
     render(<Toasts />)
-    const region = screen.getByRole('status')
-    expect(region).toHaveAttribute('aria-live', 'polite')
+    const polite = screen.getByRole('status')
+    expect(polite).toHaveAttribute('aria-live', 'polite')
+    const urgent = screen.getByRole('alert')
     act(() => {
       toast('Saved')
       toast('Export failed', 'error')
     })
-    expect(screen.getByText('Saved')).toBeInTheDocument()
-    expect(screen.getByText('Export failed')).toBeInTheDocument()
+    expect(within(polite).getByText('Saved')).toBeInTheDocument()
+    expect(within(urgent).getByText('Export failed')).toBeInTheDocument()
     act(() => vi.advanceTimersByTime(4000))
     expect(screen.queryByText('Saved')).not.toBeInTheDocument()
     expect(screen.getByText('Export failed')).toBeInTheDocument()
     act(() => vi.advanceTimersByTime(4000))
     expect(screen.queryByText('Export failed')).not.toBeInTheDocument()
+  })
+
+  it('sits over the painting in the editor, clear of the inspector (M1)', () => {
+    useNavigation.setState({ screen: { name: 'editor', paintingId: 'rose_abc' } })
+    const { container } = render(<Toasts />)
+    expect(container.firstElementChild).toHaveAttribute('data-area', 'stage')
+    useNavigation.setState({ screen: { name: 'library' } })
   })
 
   it('offers an action button that runs once and closes the toast; it stays 8 s', async () => {

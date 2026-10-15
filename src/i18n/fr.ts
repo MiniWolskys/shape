@@ -18,7 +18,6 @@ export const fr: Dictionary = {
     duplicate: 'Dupliquer',
     edit: 'Modifier',
     copy: 'Copier',
-    copied: 'Copié',
     copiedCheck: 'Copié ✓',
     more: 'Plus d’actions',
     download: 'Télécharger',

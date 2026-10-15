@@ -168,9 +168,13 @@ describe('ExportScreen', () => {
       libraryPack.serverPropertiesLines(sha1.textContent ?? ''),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Copy the SHA1' }))
+    const copySha1 = screen.getByRole('button', { name: 'Copy the SHA1' })
+    await userEvent.click(copySha1)
     expect(writeText).toHaveBeenLastCalledWith(sha1.textContent)
-    expect(await screen.findByText('Copied')).toBeInTheDocument()
+    // The button says it worked, right where the player looks (M1); no toast.
+    expect(copySha1).toHaveTextContent('Copied ✓')
+    expect(screen.queryByText('Copied')).not.toBeInTheDocument()
+    await waitFor(() => expect(copySha1).toHaveTextContent(/^Copy$/), { timeout: 3000 })
   })
 
   it('copies the new paintings for Discord', async () => {
@@ -184,6 +188,7 @@ describe('ExportScreen', () => {
     expect(writeText).toHaveBeenLastCalledWith(
       '**Our paintings v1**\n- Sunset Chapel by Sam\n- Spring Window by Lou',
     )
+    expect(screen.getByRole('button', { name: 'Copied ✓' })).toBeInTheDocument()
   })
 
   it('writes the Discord text in French, and says when nothing is new', async () => {
@@ -230,7 +235,9 @@ describe('ExportScreen', () => {
       await screen.findByRole('button', { name: 'Copy the server.properties lines' }),
     )
     expect(execCommand).toHaveBeenCalledWith('copy')
-    expect(await screen.findByText('Copied')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Copy the server.properties lines' }),
+    ).toHaveTextContent('Copied ✓')
   })
 
   it('shows which painting is rendering while the pack builds', async () => {
