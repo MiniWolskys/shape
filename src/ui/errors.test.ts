@@ -19,15 +19,24 @@ describe('errorMessage', () => {
     expect(errorMessage(new ShapeError('namespace-mismatch'), en, { namespace: 'ours' })).toBe(
       "This pack doesn't belong to the open library (ours).",
     )
-    expect(errorMessage(new ShapeError('export-failed', 'disk on fire'), en)).toBe(
-      'The export failed: disk on fire',
-    )
+    expect(
+      errorMessage(new ShapeError('export-failed', 'disk on fire'), en, { reason: 'try again' }),
+    ).toBe('The export failed: try again')
+  })
+
+  it('never shows developer text, which is in English (logged instead)', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const failed = new ShapeError('export-failed', 'disk on fire')
+    expect(errorMessage(failed, fr)).not.toMatch(/disk/)
+    expect(errorMessage(failed, fr)).toMatch(/^L’export a échoué/)
+    expect(log).toHaveBeenCalledWith(failed)
   })
 
   it('gives unknown errors a generic message and logs them', () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     const error = new TypeError('boom')
-    expect(errorMessage(error, en)).toBe('Something went wrong: boom')
+    expect(errorMessage(error, en)).toBe(en.errors.unexpected)
+    expect(errorMessage(error, fr)).not.toMatch(/boom/)
     expect(log).toHaveBeenCalledWith(error)
   })
 })

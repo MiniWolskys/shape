@@ -109,7 +109,7 @@ describe('HomeScreen', () => {
     const bytes = await packBytes('ours', ['Sunset', 'Rose'])
     renderHome()
     dropFile(new File([bytes as Uint8Array<ArrayBuffer>], 'ours-v1.zip'))
-    expect(await screen.findByText('Added 2 paintings')).toBeInTheDocument()
+    expect(await screen.findByText('Opened Pack · 2 paintings')).toBeInTheDocument()
     expect(useWorkspace.getState().library?.namespace).toBe('ours')
     expect(useNavigation.getState().screen).toEqual({ name: 'library' })
   })
@@ -121,17 +121,49 @@ describe('HomeScreen', () => {
     expect(input).not.toBeNull()
     if (!input) return
     await userEvent.upload(input, new File([bytes as Uint8Array<ArrayBuffer>], 'ours-v1.zip'))
-    expect(await screen.findByText('Added 1 painting')).toBeInTheDocument()
+    expect(await screen.findByText('Opened Pack · 1 painting')).toBeInTheDocument()
   })
 
-  it('adds the paintings of another library to the open one as copies (R21)', async () => {
+  it('asks before adding the paintings of another library to the open one (R21)', async () => {
     useWorkspace.getState().createLibrary('Mine', 'mine')
     const bytes = await packBytes('theirs', ['Sunset'])
     renderHome()
     dropFile(new File([bytes as Uint8Array<ArrayBuffer>], 'theirs-v1.zip'))
-    expect(await screen.findByText('Added 1 painting')).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Add 1 painting from “Pack” to Mine?',
+    })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add 1 painting' }))
+    expect(await screen.findByText('Added 1 painting from Pack')).toBeInTheDocument()
     expect(useWorkspace.getState().library?.namespace).toBe('mine')
     expect(useWorkspace.getState().library?.paintings.map((p) => p.title)).toEqual(['Sunset'])
+  })
+
+  it('adds nothing when the player cancels the import', async () => {
+    useWorkspace.getState().createLibrary('Mine', 'mine')
+    const bytes = await packBytes('theirs', ['Sunset', 'Rose'])
+    renderHome()
+    dropFile(new File([bytes as Uint8Array<ArrayBuffer>], 'theirs-v1.zip'))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Add 2 paintings from “Pack” to Mine?',
+    })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await act(async () => {})
+    expect(useWorkspace.getState().library?.paintings).toEqual([])
+    expect(useNavigation.getState().screen).toEqual({ name: 'home' })
+  })
+
+  it('asks before a pack replaces a demo the player changed (R25)', async () => {
+    renderHome()
+    await userEvent.click(screen.getByRole('button', { name: 'Try the sample library' }))
+    const [first] = useWorkspace.getState().library?.paintings ?? []
+    if (first) act(() => useWorkspace.getState().retitlePainting(first.id, 'Mine now'))
+    const bytes = await packBytes('ours', ['Sunset'])
+    dropFile(new File([bytes as Uint8Array<ArrayBuffer>], 'ours-v1.zip'))
+    const dialog = await screen.findByRole('dialog', { name: 'Close Sample paintings?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete 1 and close' }))
+    expect(await screen.findByText('Opened Pack · 1 painting')).toBeInTheDocument()
+    expect(useWorkspace.getState().library?.namespace).toBe('ours')
+    expect(useWorkspace.getState().demo).toBe(false)
   })
 
   it('hides Resume when there is no saved work', () => {

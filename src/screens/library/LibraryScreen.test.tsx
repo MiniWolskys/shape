@@ -10,6 +10,7 @@ import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
 import { useToasts } from '../../ui/toastStore.ts'
+import { AppFileDrop } from '../AppFileDrop.tsx'
 import { LibraryScreen } from './LibraryScreen.tsx'
 
 // Thumbnails render on idle callbacks; their own tests cover them.
@@ -40,6 +41,7 @@ function renderLibrary() {
   return render(
     <>
       <LibraryScreen />
+      <AppFileDrop />
       <Toasts />
     </>,
   )
@@ -255,6 +257,21 @@ describe('LibraryScreen', () => {
     await userEvent.upload(input, new File([bytes as BlobPart], 'ours-v7.zip'))
     expect(await screen.findByText('Added 2 paintings')).toBeInTheDocument()
     expect(cardTitles()).toEqual(['Sunset Chapel', 'Friend One', 'Friend Two'])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('says when a re-imported pack holds nothing new (M9)', async () => {
+    const mine = library([painting('Sunset Chapel', 'Sam'), painting('Night Rose', 'Sam')])
+    await startWith({ library: mine, loose: [], assets: {} })
+    const { bytes } = await writeLibraryPack(mine, [], {}, now)
+    renderLibrary()
+    await userEvent.upload(
+      screen.getByLabelText("Import a friend's library"),
+      new File([bytes as BlobPart], 'ours-v7.zip'),
+    )
+    expect(
+      await screen.findByText('Nothing new: your library already has these 2 paintings.'),
+    ).toBeInTheDocument()
   })
 
   it('shows a translated error when the imported file is not a library pack', async () => {

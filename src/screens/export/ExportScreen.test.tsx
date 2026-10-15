@@ -328,7 +328,7 @@ describe('ExportScreen', () => {
     await userEvent.click(
       screen.getByRole('button', { name: 'Télécharger le pack de bibliothèque' }),
     )
-    const message = await screen.findByText(/L'export a échoué/)
+    const message = await screen.findByText(/L’export a échoué/)
     expect(message.textContent).not.toMatch(/damaged/)
     expect(logged).toHaveBeenCalled()
     expect(save).not.toHaveBeenCalled()

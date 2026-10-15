@@ -270,7 +270,9 @@ describe('EditorScreen', () => {
     onTestFinished(() => useWorkspace.setState({ savePainting: realSave }))
     await userEvent.click(screen.getByRole('button', { name: 'Library' }))
     expect(useNavigation.getState().screen.name).toBe('editor')
-    expect(screen.getByText('Something went wrong: disk on fire')).toBeInTheDocument()
+    expect(
+      screen.getByText('Something went wrong. Try again, or reload the page.'),
+    ).toBeInTheDocument()
     expect(saveStatus()).toHaveTextContent("Couldn't save")
     expect(useWorkspace.getState().assets[imageId]).toBeDefined()
     await userEvent.click(screen.getByRole('button', { name: 'Shape · Home' }))
@@ -368,7 +370,9 @@ describe('EditorScreen', () => {
       browserGoesTo('#/library')
       expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: p.id })
       expect(location.hash).toBe(`#/edit/${p.id}`)
-      expect(screen.getByText('Something went wrong: disk on fire')).toBeInTheDocument()
+      expect(
+        screen.getByText('Something went wrong. Try again, or reload the page.'),
+      ).toBeInTheDocument()
     })
 
     it('Back and Forward between two paintings saves the first and opens the second afresh', async () => {

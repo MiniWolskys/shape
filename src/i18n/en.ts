@@ -53,8 +53,9 @@ export const en = {
     namespaceMismatch: "This pack doesn't belong to the open library ({namespace}).",
     storageFull: "Your browser's storage is full. Export your library pack to keep your work.",
     exportFailed: 'The export failed: {reason}',
+    tryAgain: 'try again, or reload the page.',
     publishedLocked: "Published paintings can't be resized or deleted.",
-    unexpected: 'Something went wrong: {reason}',
+    unexpected: 'Something went wrong. Try again, or reload the page.',
   },
   home: {
     headlineBefore: '',
@@ -69,7 +70,6 @@ export const en = {
     openPackHint: 'Drop {file} here or browse',
     anyPackFile: 'a library pack .zip',
     browse: 'Browse files',
-    packAdded: { one: 'Added {count} painting', other: 'Added {count} paintings' },
     newLibrary: 'Start a new library',
     resume: 'Resume where you left off',
     resumeButton: 'Resume',
@@ -95,6 +95,26 @@ export const en = {
       springWindow: 'Spring Window',
       frostOculus: 'Frost Oculus',
     },
+  },
+  packImport: {
+    opened: { one: 'Opened {name} · {count} painting', other: 'Opened {name} · {count} paintings' },
+    added: { one: 'Added {count} painting', other: 'Added {count} paintings' },
+    copied: {
+      one: 'Added {count} painting from {name}',
+      other: 'Added {count} paintings from {name}',
+    },
+    nothingNew: {
+      one: 'Nothing new: your library already has this painting.',
+      other: 'Nothing new: your library already has these {count} paintings.',
+    },
+    empty: 'This pack has no paintings.',
+    confirmTitle: {
+      one: 'Add {count} painting from “{source}” to {library}?',
+      other: 'Add {count} paintings from “{source}” to {library}?',
+    },
+    confirmBody:
+      'They join {library} as new paintings, ready for its next export. “{source}” stays as it is.',
+    confirmAdd: { one: 'Add {count} painting', other: 'Add {count} paintings' },
   },
   closeLibrary: {
     title: 'Close {name}?',

@@ -52,9 +52,10 @@ export const fr: Dictionary = {
     namespaceMismatch: "Ce pack n'appartient pas à la bibliothèque ouverte ({namespace}).",
     storageFull:
       'Le stockage de votre navigateur est plein. Exportez votre pack de bibliothèque pour conserver votre travail.',
-    exportFailed: "L'export a échoué : {reason}",
+    exportFailed: 'L’export a échoué : {reason}',
+    tryAgain: 'réessayez ou rechargez la page.',
     publishedLocked: 'Les tableaux publiés ne peuvent être ni redimensionnés ni supprimés.',
-    unexpected: "Quelque chose s'est mal passé : {reason}",
+    unexpected: 'Un problème est survenu. Réessayez ou rechargez la page.',
   },
   home: {
     headlineBefore: '',
@@ -69,7 +70,6 @@ export const fr: Dictionary = {
     openPackHint: 'Déposez {file} ici ou parcourez',
     anyPackFile: 'un pack de bibliothèque .zip',
     browse: 'Parcourir les fichiers',
-    packAdded: { one: '{count} tableau ajouté', other: '{count} tableaux ajoutés' },
     newLibrary: 'Commencer une nouvelle bibliothèque',
     resume: 'Reprendre là où vous en étiez',
     resumeButton: 'Reprendre',
@@ -96,6 +96,26 @@ export const fr: Dictionary = {
       springWindow: 'Fenêtre de printemps',
       frostOculus: 'Oculus de givre',
     },
+  },
+  packImport: {
+    opened: { one: '{name} ouverte · {count} tableau', other: '{name} ouverte · {count} tableaux' },
+    added: { one: '{count} tableau ajouté', other: '{count} tableaux ajoutés' },
+    copied: {
+      one: '{count} tableau ajouté depuis {name}',
+      other: '{count} tableaux ajoutés depuis {name}',
+    },
+    nothingNew: {
+      one: 'Rien de nouveau : votre bibliothèque a déjà ce tableau.',
+      other: 'Rien de nouveau : votre bibliothèque a déjà ces {count} tableaux.',
+    },
+    empty: 'Ce pack ne contient aucun tableau.',
+    confirmTitle: {
+      one: 'Ajouter {count} tableau de « {source} » à {library} ?',
+      other: 'Ajouter {count} tableaux de « {source} » à {library} ?',
+    },
+    confirmBody:
+      'Ils rejoignent {library} comme nouveaux tableaux, prêts pour le prochain export. « {source} » ne change pas.',
+    confirmAdd: { one: 'Ajouter {count} tableau', other: 'Ajouter {count} tableaux' },
   },
   closeLibrary: {
     title: 'Fermer {name} ?',

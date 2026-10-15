@@ -6,6 +6,7 @@ import { ShapeError } from './domain/errors.ts'
 import type { Library } from './domain/types.ts'
 import { createLibrary, createPainting, upsertPainting } from './domain/library.ts'
 import * as decode from './imaging/decode.ts'
+import * as libraryPack from './packs/libraryPack.ts'
 import { createRaster } from './imaging/raster.ts'
 import { useEditor } from './state/editor.ts'
 import { useLanguage } from './i18n/i18n.ts'
@@ -124,6 +125,11 @@ describe('App', () => {
         sourceNamespace: 'ours',
       }))
       useWorkspace.setState({ importPack })
+      // The same library: merged without a question (R21).
+      vi.spyOn(libraryPack, 'readLibraryPack').mockReturnValue({
+        library: createLibrary('Ours', 'ours'),
+        assets: {},
+      })
       useNavigation.setState({ screen: { name: 'library' } })
       render(<App />)
       drop(new File(['zip'], 'ours-v3.zip', { type: '' }))
