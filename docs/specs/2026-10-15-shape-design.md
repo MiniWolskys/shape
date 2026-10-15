@@ -137,8 +137,10 @@ except image decoding runs in unit tests without a browser. Heavy renders run in
 2. **Window & frame:** for each pixel, the shape function returns `out | frame | lead | glass`
    (+ optional tint). `out` → alpha 0, RGB = frame color. `frame` → frame material color with a
    small deterministic wood/metal grain. `lead` → lead color. `glass` → picture color, alpha =
-   glassOpacity (tinted shapes blend 50 % with the pane tint). Frame thickness 0 or material
-   “none” draws no frame; lead lines and bars keep their own width.
+   glassOpacity (tinted shapes blend 50 % with the pane tint). The frame follows the window
+   outline; its wooden bars inside (fanlight spokes and hub, four-pane cross, paper-screen grid)
+   are as thick as the frame. Frame thickness 0 or material “none” draws no frame and no wooden
+   bars; lead lines keep their own width at every thickness.
 3. **Pixel edits:** an RGBA layer plus a mask; masked pixels replace the result of steps 1–2.
    Changing shape, crop or adjustments keeps the edits. Changing size or resolution resamples the
    edit layer with nearest-neighbour after a confirmation.
