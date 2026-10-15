@@ -218,7 +218,7 @@ describe('staged renderer', () => {
     },
   )
 
-  it('four_panes bars are as wide as the frame through the cache', () => {
+  it('four_panes bars are half the frame through the cache', () => {
     const src = source()
     const staged = createStagedRenderer()
     const big = recipe({ window: { shape: 'four_panes', glassOpacity: 1 } })({
@@ -246,7 +246,7 @@ describe('staged renderer', () => {
         )
           wood++
       }
-      expect(wood, `${thickness}`).toBe(thickness)
+      expect(wood, `${thickness}`).toBe(Math.max(1, Math.round(thickness / 2)))
     }
   })
 

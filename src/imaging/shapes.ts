@@ -16,8 +16,9 @@ export interface ShapeContext {
   width: number
   height: number
   /**
-   * Frame thickness in pixels (0 = no frame): the outer frame, and the wooden bars inside
-   * (fanlight spokes and hub, four-pane cross, paper-screen grid), which disappear at 0.
+   * Frame thickness in pixels (0 = no frame). The wooden bars inside (fanlight spokes, four-pane
+   * cross, paper-screen grid) are half as thick (see `barWidth`); at 0 they and the fanlight
+   * hub disappear.
    */
   frame: number
   /** Width of interior lead lines in pixels: the shape's own, whatever the frame. */
@@ -251,6 +252,12 @@ function onBar(i: number, at: number, size: number, t: number): boolean {
   return i >= from && i < from + t
 }
 
+/**
+ * Width of the inner wooden bars for a frame `frame` pixels thick: half of it, at least 1 px,
+ * none without a frame. It never shrinks as the frame grows, so the shape cache can reframe.
+ */
+const barWidth = (frame: number) => (frame > 0 ? Math.max(1, Math.round(frame / 2)) : 0)
+
 /** Whether pixel `i` is in the `t` pixels wide bar centred on `size / 2`. */
 const midBar = (i: number, size: number, t: number) => onBar(i, size / 2, size, t)
 
@@ -265,9 +272,8 @@ function onGrid(i: number, s: number, size: number, t: number): boolean {
 
 const fourPanes: ShapeFn = (x, y, { width: w, height: h, frame }) => {
   const c = band(rectIn(x, y, w, h), frame)
-  return c === GLASS && (midBar(Math.floor(x), w, frame) || midBar(Math.floor(y), h, frame))
-    ? FRAME
-    : c
+  const bar = barWidth(frame)
+  return c === GLASS && (midBar(Math.floor(x), w, bar) || midBar(Math.floor(y), h, bar)) ? FRAME : c
 }
 
 /** Spacing of the lattice and shoji grids: half a block, at least two pixels. */
@@ -319,18 +325,18 @@ const fanlight: ShapeFn = (x, y, { width: w, height: h, frame }) => {
   // The hub and spokes are wood like the frame: without a frame, it is all glass.
   if (c !== GLASS || frame <= 0) return c
   if (d < r0 * 0.28) return FRAME
-  // Distance across to the nearest spoke, so a spoke is exactly `frame` pixels wide.
-  return Math.sin(toSpoke(Math.atan2(dy, dx), Math.PI / 7)) * d < frame / 2 ? FRAME : GLASS
+  // Distance across to the nearest spoke, so a spoke is exactly `barWidth` pixels wide.
+  const across = Math.sin(toSpoke(Math.atan2(dy, dx), Math.PI / 7)) * d
+  return across < barWidth(frame) / 2 ? FRAME : GLASS
 }
 
 const paperScreen: ShapeFn = (x, y, { width: w, height: h, frame, pixelsPerBlock }) => {
   const c = band(rectIn(x, y, w, h), frame)
   if (c !== GLASS) return c
-  // The grid bars are as wide as the frame (none without one), centred on the grid lines.
+  // The grid bars are half the frame (none without one), centred on the grid lines.
+  const bar = barWidth(frame)
   const s = gridStep(pixelsPerBlock)
-  return onGrid(Math.floor(x), s, w, frame) || onGrid(Math.floor(y), s, h, frame)
-    ? LIGHT_FRAME
-    : PAPER
+  return onGrid(Math.floor(x), s, w, bar) || onGrid(Math.floor(y), s, h, bar) ? LIGHT_FRAME : PAPER
 }
 
 const porthole: ShapeFn = (x, y, { width: w, height: h, frame }) => {

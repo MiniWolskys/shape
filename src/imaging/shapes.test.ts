@@ -97,7 +97,7 @@ describe('seeded helpers', () => {
   })
 })
 
-describe('wooden bars follow the frame thickness', () => {
+describe('wooden bars are half the frame thickness', () => {
   const PPB = 64
   /** Pixels of `kind` along a run of pixel centres, from `from` to `to` (exclusive). */
   const run = (classify: (i: number) => Classified, from: number, to: number) => {
@@ -106,32 +106,39 @@ describe('wooden bars follow the frame thickness', () => {
     return n
   }
 
-  it.each([2, 6, 12])('four_panes cross bars are %i px wide', (t) => {
-    const ctx = makeShapeContext(256, 256, PPB, t, 1)
-    // Across the vertical bar, and across the horizontal one, far from the outer frame.
-    expect(run((x) => SHAPES.four_panes(x, 64.5, ctx), 64, 192)).toBe(t)
-    expect(run((y) => SHAPES.four_panes(64.5, y, ctx), 64, 192)).toBe(t)
+  /** The owner's rule: inner wooden bars are half the frame, at least 1 px (none at 0). */
+  const barOf = (t: number) => (t > 0 ? Math.max(1, Math.round(t / 2)) : 0)
+  const THICKNESSES = [1, 2, 3, 6, 8, 12]
+
+  it.each(THICKNESSES)('four_panes cross bars are half of %i px', (t) => {
+    // An even and an odd height, so a bar is centred both on a pixel edge and on a pixel.
+    for (const h of [256, 191]) {
+      const ctx = makeShapeContext(256, h, PPB, t, 1)
+      // Across the vertical bar, and across the horizontal one, far from the outer frame.
+      expect(
+        run((x) => SHAPES.four_panes(x, 40.5, ctx), 64, 192),
+        `${h}`,
+      ).toBe(barOf(t))
+      expect(
+        run((y) => SHAPES.four_panes(40.5, y, ctx), 48, 144),
+        `${h}`,
+      ).toBe(barOf(t))
+    }
   })
 
-  it.each([1, 3, 7])('four_panes bars are %i px wide at an odd thickness too', (t) => {
-    const ctx = makeShapeContext(256, 192, PPB, t, 1)
-    expect(run((x) => SHAPES.four_panes(x, 40.5, ctx), 64, 192)).toBe(t)
-    expect(run((y) => SHAPES.four_panes(40.5, y, ctx), 32, 160)).toBe(t)
-  })
-
-  it.each([2, 6, 12])('paper_screen grid bars are %i px wide', (t) => {
+  it.each(THICKNESSES)('paper_screen grid bars are half of %i px', (t) => {
     const ctx = makeShapeContext(256, 256, PPB, t, 1)
-    // One grid step (half a block, 32 px) holds one vertical bar; row 16 is between bars.
+    // Grid lines every 32 px (half a block): 48..80 crosses only the one at 64; 80 is clear.
     const lightRun = (classify: (i: number) => Classified) => {
       let n = 0
-      for (let i = 64; i < 96; i++) if (classify(i + 0.5).light) n++
+      for (let i = 48; i < 80; i++) if (classify(i + 0.5).light) n++
       return n
     }
-    expect(lightRun((x) => SHAPES.paper_screen(x, 80.5, ctx))).toBe(t)
-    expect(lightRun((y) => SHAPES.paper_screen(80.5, y, ctx))).toBe(t)
+    expect(lightRun((x) => SHAPES.paper_screen(x, 80.5, ctx))).toBe(barOf(t))
+    expect(lightRun((y) => SHAPES.paper_screen(80.5, y, ctx))).toBe(barOf(t))
   })
 
-  it.each([2, 4, 7])('paper_screen first and last panes are as wide at %i px', (t) => {
+  it.each([2, 3, 4, 7, 8])('paper_screen first and last panes are as wide at %i px', (t) => {
     // 2×2 blocks at 32 px per block: grid lines every 16 px, at 16, 32 and 48.
     const ctx = makeShapeContext(64, 64, 32, t, 1)
     const panes = (classify: (i: number) => Classified) => {
@@ -154,12 +161,12 @@ describe('wooden bars follow the frame thickness', () => {
         expect(widths, `${at}`).toHaveLength(4)
         expect(widths[0], `${at}`).toBe(widths[3])
         // An odd bar on the middle line cannot be centred: one inner pane gets the extra pixel.
-        expect(Math.abs((widths[1] ?? 0) - (widths[2] ?? 0)), `${at}`).toBe(t % 2)
+        expect(Math.abs((widths[1] ?? 0) - (widths[2] ?? 0)), `${at}`).toBe(barOf(t) % 2)
       }
     }
   })
 
-  it.each([2, 6, 12])('fanlight spokes are %i px wide', (t) => {
+  it.each(THICKNESSES)('fanlight spokes are half of %i px', (t) => {
     const ctx = makeShapeContext(256, 128, PPB, t, 1)
     // The spoke at 3π/7 from the right, 80 px from the hub's centre (128, 128).
     const a = (3 * Math.PI) / 7
@@ -171,10 +178,11 @@ describe('wooden bars follow the frame thickness', () => {
       const kind = SHAPES.fanlight(cx + s * Math.sin(a), cy + s * Math.cos(a), ctx).kind
       if (kind === 'frame') inside += step
     }
-    expect(inside).toBeCloseTo(t, 1)
-    // And in pixels, along the row through it (a near-vertical spoke: t / sin(a) wide).
+    expect(inside).toBeCloseTo(barOf(t), 1)
+    // And in pixels, along the row through it (a near-vertical spoke: a little wider).
     const row = Math.floor(cy) + 0.5
-    expect(Math.abs(run((x) => SHAPES.fanlight(x, row, ctx), 128, 180) - t)).toBeLessThanOrEqual(1)
+    const across = run((x) => SHAPES.fanlight(x, row, ctx), 128, 180)
+    expect(Math.abs(across - barOf(t))).toBeLessThanOrEqual(1)
   })
 
   it.each(['four_panes', 'paper_screen', 'fanlight'] as const)(
