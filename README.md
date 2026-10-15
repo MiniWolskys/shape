@@ -13,10 +13,10 @@ Built for Minecraft 26.3.
 
 ## Screens
 
-- **Home**: create a painting, open a library pack, start a new library, resume your work, or try the sample library.
-- **Library**: every painting with its badge (New, Draft, Published), filters, search, duplicate and delete. Import a friend's pack to add their paintings.
-- **Editor**: five steps you can visit in any order: Image, Size & crop, Window & frame, Colors & pixels, Details.
-- **Export**: choose the new paintings to publish, download the library pack, and copy the server settings.
+- **Home**: resume your work, create a painting, open a library pack, start a new library, or try the demo library. "How it works" explains the three steps.
+- **Library**: every painting with its badge (Draft, Ready, Changed, Published), filters, search, duplicate and delete. Paintings made outside the library are listed below it, each with "Add to {library}". Import any library pack: a pack of another library adds its paintings as new ones, after you confirm.
+- **Editor**: five steps you can visit in any order: Image, Size & crop, Window & frame, Colors & pixels, Details. Your work saves itself as you go.
+- **Export**: the button says what it does ("Publish 2 and download v3", or "Download v2 again" when nothing is new), then copy the server settings.
 
 ## How to use it
 
@@ -25,14 +25,14 @@ Built for Minecraft 26.3.
 1. On the home screen, choose **Create a painting**. You don't need a library yet.
 2. **Image**: drop, paste or browse for a picture. Turn, flip and adjust it, or turn on the Minecraft look for fewer colors.
 3. **Size & crop**: pick the size in blocks (1 to 16 per side) and the pixels per block (16, 32, 64 or custom). Drag or use the arrow keys to move the crop.
-4. **Details**: give it a title and an author, pick their colors, and mark it **Ready**: ready paintings are ticked for the next export.
-5. Save with **Save painting** or Ctrl+S. Your work is also saved in the browser as you go.
+4. **Details**: give it a title and an author and pick their colors. **Include in the next export** is on by default; turn it off to keep a draft.
+5. Your work saves itself in the browser as you go (Ctrl+S saves right away).
 
 ### Window and frame
 
 In **Window & frame**, pick a shape. Everything outside the shape becomes see-through in game. Set the glass opacity, then the frame material and thickness. The frame follows the window outline; lead lines and bars come with the shape.
 
-Use the canvas views to check the result: **Editor**, **On the wall** and **Without the mod** (what players without the Transparent Paintings mod see).
+Use the canvas views to check the result: **Editor**, **On the wall** and **Without the Transparent Paintings mod** (what players without the mod see: the frame color instead of see-through).
 
 ### Pixels
 
@@ -40,16 +40,19 @@ In **Colors & pixels**, paint over the result with the pencil (B), fill (G), rep
 
 ### Export
 
-1. Start a library (name and namespace), or open your last library pack. Shape offers to add the paintings you made outside a library.
-2. Choose **Export**, check which new paintings to publish, and download the library pack `<namespace>-v<version>.zip`.
+1. Start a library (just a name; its pack ID is under Advanced), or open your last library pack. Paintings you made outside a library are listed below it, ready to add.
+2. Choose **Export**. Ready paintings with a picture are ticked; the button says how many it publishes and which version it downloads (`<namespace>-v<version>.zip`). With nothing new, it downloads the same version again without publishing anything.
 3. Keep that one file: it is your backup, and you can share it with friends.
+
+Closing a library, or replacing it with a new one or the demo, deletes its paintings from the browser. Shape tells you first how many haven't been exported and offers to export them.
 
 Published paintings can't be deleted, resized or renamed (their ID), because placed copies would disappear from your world. Their title, author and picture can still change.
 
 ### On the server
 
-1. From the library pack, upload `server/<namespace>-datapack.zip` to `world/datapacks/` on your server.
-2. Upload `server/<namespace>-resources.zip` to a host that gives a direct download link.
+0. Every player needs the Transparent Paintings mod to see through the windows. Without it, they see the frame color.
+1. Unzip the library pack, and upload `server/<namespace>-datapack.zip` to `world/datapacks/` on your server.
+2. Upload `server/<namespace>-resources.zip` to a host that gives a direct download link (a link to the file itself, not to a page about it).
 3. Set these lines in `server.properties`, with your link and the SHA1 shown on the export screen (also in `server/sha1.txt`):
 
    ```properties
