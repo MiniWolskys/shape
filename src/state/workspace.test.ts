@@ -788,3 +788,69 @@ describe('demo flag (R23)', () => {
     expect(s.getState().demoIds).toEqual([])
   })
 })
+
+describe('assets shared between packs (C2)', () => {
+  const bytes = (n: number) => encodePng(createRaster(2, 2, [n, n, n, 255]))
+
+  async function ownerWithDraft() {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    s.getState().createLibrary('Ours', 'ours')
+    const p0 = createPainting({ width: 1, height: 1, pixelsPerBlock: 2 }, now, () => 0.5)
+    const draft = {
+      ...p0,
+      id: 'painting_k3x',
+      recipe: {
+        ...p0.recipe,
+        source: { imageId: 'srcimg', width: 2, height: 2 },
+        editsId: 'edits1',
+      },
+    }
+    s.getState().setAsset('srcimg', bytes(10))
+    s.getState().setAsset('edits1', bytes(20))
+    s.getState().setAsset('edits1.mask', bytes(255))
+    s.getState().savePainting(draft)
+    const { library, assets } = s.getState()
+    const v1 = await writeLibraryPack(library!, [], assets, now)
+    return { s, v1 }
+  }
+
+  it('a merge never overwrites the edits of a draft renamed since the shared pack', async () => {
+    const { s, v1 } = await ownerWithDraft()
+    // The owner titles the draft (its id follows) and keeps painting over the same asset id.
+    const rose = s.getState().retitlePainting('painting_k3x', 'Rose')
+    s.getState().setAsset('edits1', bytes(30))
+    // A friend's pack derived from v1 comes back: it still holds painting_k3x with the v1 edits.
+    s.getState().importPack(v1.bytes)
+    const { assets } = s.getState()
+    expect(assets.edits1).toEqual(bytes(30))
+    expect(s.getState().findPainting(rose)?.recipe.editsId).toBe('edits1')
+    const back = s.getState().findPainting('painting_k3x')
+    const editsId = back?.recipe.editsId ?? ''
+    expect(editsId).not.toBe('edits1')
+    expect(assets[editsId]).toEqual(bytes(20))
+    expect(assets[`${editsId}.mask`]).toEqual(bytes(255))
+    // Identical bytes stay shared: the picture was not copied.
+    expect(back?.recipe.source?.imageId).toBe('srcimg')
+  })
+
+  it('a pack replacing the demo never overwrites the assets of loose paintings', async () => {
+    const { v1 } = await ownerWithDraft()
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const p0 = createPainting({ width: 1, height: 1, pixelsPerBlock: 2 }, now, () => 0.7)
+    s.getState().setAsset('srcimg', bytes(99))
+    s.getState().savePainting({
+      ...p0,
+      recipe: { ...p0.recipe, source: { imageId: 'srcimg', width: 2, height: 2 } },
+    })
+    s.setState({ library: createLibrary('Demo', 'demo'), demo: true })
+    s.getState().importPack(v1.bytes)
+    const { assets, loose, library } = s.getState()
+    expect(loose[0]?.recipe.source?.imageId).toBe('srcimg')
+    expect(assets.srcimg).toEqual(bytes(99))
+    const incoming = library?.paintings[0]?.recipe.source?.imageId ?? ''
+    expect(incoming).not.toBe('srcimg')
+    expect(assets[incoming]).toEqual(bytes(10))
+  })
+})

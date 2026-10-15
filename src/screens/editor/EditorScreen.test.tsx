@@ -501,6 +501,33 @@ describe('EditorScreen', () => {
     expect(screen.getAllByText("This painting doesn't exist anymore.")).toHaveLength(1)
   })
 
+  it('writes changed pixel edits under a new asset id, never over the shared one (C2)', async () => {
+    const p = painting()
+    await startWith(p)
+    renderEditor(p.id)
+    const paint = (index: number) => {
+      const layer = createEditLayer(8, 12)
+      layer.mask[index] = 1
+      act(() => useEditor.getState().setEdits(layer))
+    }
+    const stored = () => useWorkspace.getState().findPainting(openId() ?? '')
+    paint(0)
+    await userEvent.keyboard('{Control>}s{/Control}')
+    const first = stored()?.recipe.editsId ?? ''
+    const firstBytes = useWorkspace.getState().assets[first]
+    expect(firstBytes).toBeDefined()
+    // A pack shared now holds `first`: the next edits must not change those bytes.
+    paint(5)
+    await userEvent.keyboard('{Control>}s{/Control}')
+    const second = stored()?.recipe.editsId ?? ''
+    expect(second).not.toBe(first)
+    expect(useWorkspace.getState().assets[first]).toBeUndefined()
+    // Saving again without new pixels keeps the id.
+    act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+    await userEvent.keyboard('{Control>}s{/Control}')
+    expect(stored()?.recipe.editsId).toBe(second)
+  })
+
   it('saves no edits after undoing them, so reopening shows none', async () => {
     const p = painting()
     await startWith(p)

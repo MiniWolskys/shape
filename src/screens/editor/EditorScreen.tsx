@@ -9,7 +9,7 @@ import type { Raster } from '../../imaging/raster.ts'
 import { decodeEditLayer, decodePng, encodeEditLayer } from '../../packs/png.ts'
 import { useEditor, type EditorStep, type Tool } from '../../state/editor.ts'
 import { noteRename, setLeaveGuard, useNavigation } from '../../state/navigation.ts'
-import { useWorkspace } from '../../state/workspace.ts'
+import { sameBytes, useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
 import { errorMessage } from '../../ui/errors.ts'
 import { isTextEntry } from '../../ui/keyboard.ts'
@@ -122,16 +122,23 @@ function savePaintingNow(): Painting | null {
   // No edits (none made, or all undone) means no edit assets: the old ones get pruned below,
   // unless they could not be read, in which case they stay untouched.
   const hasEdits = edits !== null && !isEmptyLayer(edits)
-  let editsId = hasEdits ? (painting.recipe.editsId ?? unreadableEditsId) : unreadableEditsId
+  let editsId = hasEdits ? painting.recipe.editsId : unreadableEditsId
   if (hasEdits) {
-    if (editsId === null) {
-      const { assets } = workspace
-      do editsId = makeAssetId(Math.random)
-      while (editsId in assets || `${editsId}.mask` in assets)
-    }
     const encoded = encodeEditLayer(edits)
-    workspace.setAsset(editsId, encoded.values)
-    workspace.setAsset(`${editsId}.mask`, encoded.mask)
+    const { assets } = workspace
+    const stored = (id: string) => (Object.hasOwn(assets, id) ? assets[id] : undefined)
+    // Asset ids are never written twice (C2): a pack shared earlier, or another painting, may
+    // hold this id, so changed edits always go under a new one (the old one is pruned below).
+    const unchanged =
+      editsId !== null &&
+      sameBytes(stored(editsId), encoded.values) &&
+      sameBytes(stored(`${editsId}.mask`), encoded.mask)
+    if (!unchanged) {
+      do editsId = makeAssetId(Math.random)
+      while (Object.hasOwn(assets, editsId) || Object.hasOwn(assets, `${editsId}.mask`))
+      workspace.setAsset(editsId, encoded.values)
+      workspace.setAsset(`${editsId}.mask`, encoded.mask)
+    }
     // New edits replaced the unreadable ones.
     unreadableEditsId = null
   }

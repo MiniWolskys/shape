@@ -119,6 +119,53 @@ function pruneAssets(assets: Assets, candidates: string[], remaining: Painting[]
   return next
 }
 
+/** Whether two byte arrays (either possibly absent) hold the same bytes. */
+export function sameBytes(a: Uint8Array | undefined, b: Uint8Array | undefined): boolean {
+  if (a === b) return true
+  if (!a || !b || a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+const own = (assets: Assets, id: string): Uint8Array | undefined =>
+  Object.hasOwn(assets, id) ? assets[id] : undefined
+
+/**
+ * Copies a pack painting's assets from `from` into `into` (mutated) and returns the painting.
+ * An asset id that already holds other bytes here belongs to another painting (ids follow
+ * shared history between packs): the incoming painting gets a fresh id for it instead, so an
+ * import never changes a local painting (C2). Identical bytes stay shared.
+ */
+function adoptAssets(p: Painting, from: Assets, into: Assets): Painting {
+  const taken = (id: string) => Object.hasOwn(into, id) || Object.hasOwn(from, id)
+  const fresh = (withMask: boolean) => {
+    let id = makeAssetId(Math.random)
+    while (taken(id) || (withMask && taken(`${id}.mask`))) id = makeAssetId(Math.random)
+    return id
+  }
+  const clashes = (id: string) =>
+    Object.hasOwn(into, id) && !sameBytes(own(into, id), own(from, id))
+  const copy = (fromId: string, toId: string) => {
+    const data = own(from, fromId)
+    if (data) into[toId] = data
+  }
+  let recipe = p.recipe
+  const source = recipe.source
+  if (source) {
+    const imageId = clashes(source.imageId) ? fresh(false) : source.imageId
+    copy(source.imageId, imageId)
+    if (imageId !== source.imageId) recipe = { ...recipe, source: { ...source, imageId } }
+  }
+  const edits = recipe.editsId
+  if (edits) {
+    const editsId = clashes(edits) || clashes(`${edits}.mask`) ? fresh(true) : edits
+    copy(edits, editsId)
+    copy(`${edits}.mask`, `${editsId}.mask`)
+    if (editsId !== edits) recipe = { ...recipe, editsId }
+  }
+  return recipe === p.recipe ? p : { ...p, recipe }
+}
+
 const NO_DEMO = { demo: false, demoIds: [] as string[] }
 
 const allPaintings = (s: Workspace): Painting[] => [...(s.library?.paintings ?? []), ...s.loose]
@@ -283,7 +330,12 @@ export function createWorkspaceStore(
           const kept = library
             ? pruneAssets(assets, library.paintings.flatMap(assetIdsOf), loose)
             : assets
-          set({ library: pack.library, assets: { ...kept, ...pack.assets }, ...NO_DEMO })
+          // Loose paintings keep their own assets, whatever ids the pack uses.
+          const nextAssets = { ...kept }
+          const paintings = pack.library.paintings.map((p) =>
+            adoptAssets(p, pack.assets, nextAssets),
+          )
+          set({ library: { ...pack.library, paintings }, assets: nextAssets, ...NO_DEMO })
           return { kind: 'opened', added: count, kept: 0, ...source }
         }
         if (library.namespace !== pack.library.namespace) {
@@ -316,24 +368,17 @@ export function createWorkspaceStore(
         const merged = mergeLibraries(library, pack.library)
         // Added paintings and published copies that replaced local ones come from the pack.
         const incoming = new Set([...merged.added, ...pack.library.paintings])
-        const nextAssets = { ...assets }
-        for (const p of merged.library.paintings) {
-          if (!incoming.has(p)) continue
-          for (const id of assetIdsOf(p)) {
-            const data = pack.assets[id]
-            if (data) nextAssets[id] = data
-          }
-        }
         // A local draft replaced by a published copy no longer needs its own assets.
         const kept = new Set(merged.library.paintings)
         const dropped = library.paintings.filter((p) => !kept.has(p))
-        set({
-          library: merged.library,
-          assets: pruneAssets(nextAssets, dropped.flatMap(assetIdsOf), [
-            ...merged.library.paintings,
-            ...loose,
-          ]),
-        })
+        const staying = merged.library.paintings.filter((p) => !incoming.has(p))
+        const nextAssets = {
+          ...pruneAssets(assets, dropped.flatMap(assetIdsOf), [...staying, ...loose]),
+        }
+        const paintings = merged.library.paintings.map((p) =>
+          incoming.has(p) ? adoptAssets(p, pack.assets, nextAssets) : p,
+        )
+        set({ library: { ...merged.library, paintings }, assets: nextAssets })
         return { kind: 'merged', added: merged.added.length, kept: merged.kept.length, ...source }
       },
 
