@@ -9,8 +9,11 @@ export type TabStatus = 'waiting' | 'active' | 'elsewhere'
 
 /** How a tab learns whether it is the active one. */
 export interface TabLockDriver {
-  /** Starts finding out; `onChange` reports every status from then on. */
-  start(onChange: (status: TabStatus) => void): void
+  /**
+   * Starts finding out; `onChange` reports every status from then on. With `takeOver`, this
+   * tab takes over at once (the page reloaded to do so).
+   */
+  start(onChange: (status: TabStatus) => void, options?: { takeOver?: boolean }): void
   /** Makes this tab the active one, taking over from the other. */
   takeOver(): void
   /** Lets go (the page is closing, or the app unmounted). */
@@ -83,11 +86,11 @@ export function webLockDriver(locks: LockManagerLike): TabLockDriver {
   }
 
   return {
-    start(onChange) {
+    start(onChange, options) {
       report = onChange
       stopped = false
       report('waiting')
-      request({ ifAvailable: true })
+      request(options?.takeOver ? { steal: true } : { ifAvailable: true })
     },
     takeOver() {
       request({ steal: true })
@@ -169,8 +172,12 @@ export function channelDriver(
   }
 
   return {
-    start(onChange) {
+    start(onChange, options) {
       report = onChange
+      if (options?.takeOver) {
+        becomeActive('take')
+        return
+      }
       set('waiting')
       channel.postMessage({ type: 'hello', id } satisfies TabMessage)
       wait = setTimeout(() => {
@@ -223,10 +230,14 @@ interface TabLockState {
 }
 
 let driver: TabLockDriver | null = null
+/** How "Use here" takes over in a tab whose memory may be stale (see startTabLock). */
+let takeOverStale: (() => boolean) | null = null
+let hadBeenActive = false
 
 export const useTabLock = create<TabLockState>(() => ({
   status: 'waiting',
   takeOver() {
+    if (hadBeenActive && takeOverStale?.()) return
     driver?.takeOver()
   },
 }))
@@ -234,25 +245,38 @@ export const useTabLock = create<TabLockState>(() => ({
 /**
  * Starts finding out whether this tab is the active one; returns a function that stops.
  * `onLost` runs at once when another tab takes over (stop saving). `onRegained` runs when this
- * tab becomes active again after it had been (what it holds in memory may be stale).
+ * tab becomes active again after it had been (what it holds in memory may be stale: reload).
+ * `takeOverOnStart` makes this tab active at once (it reloaded for "Use here"). In a tab that
+ * had been active, "Use here" calls `reloadToTakeOver` instead of taking over in place, so the
+ * other tab keeps the lock until this one has reloaded (no other tab can grab it in between);
+ * when that returns false (it could not), the tab takes over in place, then `onRegained` runs.
  */
 export function startTabLock(
-  handlers: { onLost?: () => void; onRegained?: () => void } = {},
+  handlers: {
+    onLost?: () => void
+    onRegained?: () => void
+    takeOverOnStart?: boolean
+    reloadToTakeOver?: () => boolean
+  } = {},
 ): () => void {
   const current = makeDriver()
   driver = current
-  let wasActive = false
+  takeOverStale = handlers.reloadToTakeOver ?? null
+  hadBeenActive = false
   useTabLock.setState({ status: 'waiting' })
-  current.start((status) => {
-    const previous = useTabLock.getState().status
-    useTabLock.setState({ status })
-    if (status === 'active') {
-      if (wasActive && previous !== 'active') handlers.onRegained?.()
-      wasActive = true
-    } else if (previous === 'active') {
-      handlers.onLost?.()
-    }
-  })
+  current.start(
+    (status) => {
+      const previous = useTabLock.getState().status
+      useTabLock.setState({ status })
+      if (status === 'active') {
+        if (hadBeenActive && previous !== 'active') handlers.onRegained?.()
+        hadBeenActive = true
+      } else if (previous === 'active') {
+        handlers.onLost?.()
+      }
+    },
+    { takeOver: handlers.takeOverOnStart ?? false },
+  )
   return () => {
     current.stop()
     if (driver === current) driver = null

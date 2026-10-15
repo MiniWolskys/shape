@@ -47,6 +47,40 @@ function StorageFailure() {
   )
 }
 
+const TAKE_OVER_KEY = 'shape:take-over'
+
+/** "Use here" in a tab whose memory may be stale: reload, and take over once reloaded. */
+function requestTakeOverAndReload(): boolean {
+  try {
+    sessionStorage.setItem(TAKE_OVER_KEY, '1')
+  } catch (error) {
+    console.warn('Could not write the session storage; taking over before reloading', error)
+    return false
+  }
+  window.location.reload()
+  return true
+}
+
+/** Read once per page: StrictMode starts the tab lock twice. */
+let reloadedToTakeOver: boolean | null = null
+
+/** Whether this page was reloaded to take over. */
+function takeTakeOverRequest(): boolean {
+  reloadedToTakeOver ??= readTakeOverRequest()
+  return reloadedToTakeOver
+}
+
+function readTakeOverRequest(): boolean {
+  try {
+    const asked = sessionStorage.getItem(TAKE_OVER_KEY) !== null
+    sessionStorage.removeItem(TAKE_OVER_KEY)
+    return asked
+  } catch (error) {
+    console.warn('Could not read the session storage', error)
+    return false
+  }
+}
+
 /** Another tab is the active one (R38): nothing here reads or writes the workspace. */
 function OtherTabNotice() {
   const t = useT()
@@ -158,6 +192,8 @@ export function App() {
         onLost: () => useWorkspace.getState().suspend(),
         // What this tab holds in memory may be older than what the other tab saved.
         onRegained: () => window.location.reload(),
+        takeOverOnStart: takeTakeOverRequest(),
+        reloadToTakeOver: requestTakeOverAndReload,
       }),
     [],
   )
