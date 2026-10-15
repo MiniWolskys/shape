@@ -1,7 +1,8 @@
 .bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
   min-height: 56px;
   padding: 8px 18px;
   background: var(--topbar);

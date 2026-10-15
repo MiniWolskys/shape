@@ -64,6 +64,19 @@ const PATHS = {
   ),
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
   'arrow-left': <path d="M19 12H5M11 6l-6 6 6 6" />,
+  more: (
+    <g fill="currentColor" stroke="none">
+      <circle cx="5" cy="12" r="1.75" />
+      <circle cx="12" cy="12" r="1.75" />
+      <circle cx="19" cy="12" r="1.75" />
+    </g>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6" />
+      <path d="M20 20l-4.5-4.5" />
+    </>
+  ),
   globe: (
     <>
       <circle cx="12" cy="12" r="9" />

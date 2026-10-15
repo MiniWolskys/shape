@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import styles from './App.module.css'
 import { useT } from './i18n/i18n.ts'
 import { HomeScreen } from './screens/home/HomeScreen.tsx'
+import { LibraryScreen } from './screens/library/LibraryScreen.tsx'
 import { useNavigation, type Screen } from './state/navigation.ts'
 import { useWorkspace } from './state/workspace.ts'
 import { Button } from './ui/Button.tsx'
@@ -63,7 +64,7 @@ function Route({ screen }: { screen: Screen }) {
     case 'home':
       return <HomeScreen />
     case 'library':
-      return <Placeholder title={t.library.title} />
+      return <LibraryScreen />
     case 'editor':
       return <Placeholder title={t.editor.title} />
     case 'export':
