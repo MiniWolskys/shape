@@ -139,6 +139,41 @@
   list-style: none;
 }
 
+.demo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.demo p {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+.emptyState {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 16px;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--muted);
+}
+
+.emptyTitle {
+  font-size: 22px;
+}
+
 .empty {
   margin: 0;
   padding: 32px 0;

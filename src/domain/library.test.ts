@@ -11,6 +11,8 @@ import {
   insertAfter,
   isChanged,
   mergeLibraries,
+  paintingState,
+  readyToExport,
   publish,
   removePainting,
   retitlePainting,
@@ -274,5 +276,43 @@ describe('copies', () => {
     expect(edits).not.toBe('ed')
     expect(out.assetIds).toEqual({ img: image, ed: edits, 'ed.mask': `${edits}.mask` })
     expect(p.recipe.source?.imageId).toBe('img')
+  })
+
+  it('paintingState: draft, ready, published, or changed since the last export (R16)', () => {
+    const base = lib('A', 'B', 'C')
+    const [a, b, c] = base.paintings
+    if (!a || !b || !c) throw new Error('missing paintings')
+    const later = '2026-10-15T13:00:00.000Z'
+    const exported: typeof base = {
+      ...base,
+      exportedAt: '2026-10-15T12:30:00.000Z',
+      paintings: [
+        { ...a, status: 'draft' },
+        { ...b, status: 'published', publishedIn: 1 },
+        { ...c, status: 'published', publishedIn: 1, updatedAt: later },
+      ],
+    }
+    expect(exported.paintings.map((p) => paintingState(p, exported))).toEqual([
+      'draft',
+      'published',
+      'changed',
+    ])
+    expect(paintingState(a, null)).toBe('ready')
+  })
+
+  it('readyToExport: ready paintings that have a picture, as Export ticks them', () => {
+    const base = lib('A', 'B', 'C')
+    const [a, b, c] = base.paintings
+    if (!a || !b || !c) throw new Error('missing paintings')
+    const source = { imageId: 'img', width: 1, height: 1 }
+    const l = {
+      ...base,
+      paintings: [
+        { ...a, recipe: { ...a.recipe, source } },
+        b,
+        { ...c, status: 'draft' as const, recipe: { ...c.recipe, source } },
+      ],
+    }
+    expect(readyToExport(l).map((p) => p.title)).toEqual(['A'])
   })
 })

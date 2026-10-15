@@ -22,7 +22,8 @@ let seed = 0
 function painting(title: string, author: string, status: PaintingStatus = 'ready'): Painting {
   seed += 1
   const p = createPainting({ title, author, width: 2, height: 3 }, now, () => 0.5)
-  return { ...p, id: `${p.id}_${seed}`, status }
+  const recipe = { ...p.recipe, source: { imageId: 'img', width: 4, height: 4 } }
+  return { ...p, id: `${p.id}_${seed}`, status, recipe }
 }
 
 function library(paintings: Painting[], name = 'Our paintings'): Library {
@@ -69,22 +70,43 @@ describe('LibraryScreen', () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it('shows the library chip and an export button with the count of new paintings', async () => {
+  it('shows the library chip and an export button counting ready paintings (R16)', async () => {
     await startWith({ library: library(sample()), loose: [], assets: {} })
     renderLibrary()
     expect(screen.getByText('Our paintings · v7 · 4 paintings')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Export · 2 new' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Export · 1 ready' }))
     expect(useNavigation.getState().screen).toEqual({ name: 'export' })
+  })
+
+  it('counts published paintings changed since the last export (I25)', async () => {
+    const changed = { ...painting('Frost Oculus', 'Zoé', 'published'), publishedIn: 7 }
+    const lib = {
+      ...library([painting('Sunset Chapel', 'Sam'), changed]),
+      exportedAt: '2026-10-15T11:00:00.000Z',
+    }
+    await startWith({ library: lib, loose: [], assets: {} })
+    renderLibrary()
+    expect(screen.getByRole('button', { name: 'Export · 1 ready · 1 changed' })).toBeEnabled()
+    const [, card] = within(grid()).getAllByRole('listitem')
+    expect(within(card as HTMLElement).getByText('Changed')).toBeInTheDocument()
+  })
+
+  it('counts only ready paintings that have a picture, as Export picks them', async () => {
+    const empty = painting('Blank', 'Sam')
+    const lib = library([{ ...empty, recipe: { ...empty.recipe, source: null } }])
+    await startWith({ library: lib, loose: [], assets: {} })
+    renderLibrary()
+    expect(screen.getByRole('button', { name: 'Export · 0 ready' })).toBeEnabled()
   })
 
   it('agrees French counts with the noun, singular for 0 and 1', async () => {
     useLanguage.setState({ language: 'fr' })
     await startWith({ library: library([painting('Seul', 'Sam')]), loose: [], assets: {} })
     renderLibrary()
-    expect(screen.getByRole('button', { name: 'Exporter · 1 nouveau' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Exporter · 1 prêt' })).toBeInTheDocument()
     act(() => useWorkspace.getState().createLibrary('Vide', 'vide'))
     expect(screen.getByText('Vide · v0 · 0 tableau')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Exporter · 0 nouveau' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Exporter · 0 prêt' })).toBeInTheDocument()
   })
 
   it('keeps Export enabled when nothing is new', async () => {
@@ -94,7 +116,35 @@ describe('LibraryScreen', () => {
       assets: {},
     })
     renderLibrary()
-    expect(screen.getByRole('button', { name: 'Export · 0 new' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Export · 0 ready' })).toBeEnabled()
+  })
+
+  it('says the demo is a demo and keeps it out of exports (R23)', async () => {
+    await startWith({
+      library: { ...library(sample()), namespace: 'sample' },
+      loose: [],
+      assets: {},
+      demo: true,
+      demoIds: [],
+    })
+    renderLibrary()
+    expect(
+      screen.getByText('This is a demo library — create your own to export.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Export/ })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Start my library' }))
+    expect(screen.getByRole('dialog', { name: 'Start a new library' })).toBeInTheDocument()
+  })
+
+  it('treats a library as a demo by its flag, not by its namespace', async () => {
+    await startWith({
+      library: { ...library(sample()), namespace: 'sample' },
+      loose: [],
+      assets: {},
+    })
+    renderLibrary()
+    expect(screen.queryByText(/demo library/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Export · 1 ready' })).toBeEnabled()
   })
 
   it('narrows the grid with the filters and with an accent-insensitive search', async () => {
@@ -102,8 +152,10 @@ describe('LibraryScreen', () => {
     renderLibrary()
     expect(cardTitles()).toHaveLength(4)
 
-    await userEvent.click(screen.getByRole('button', { name: 'New 2' }))
-    expect(cardTitles()).toEqual(['Sunset Chapel', 'Night Rose'])
+    await userEvent.click(screen.getByRole('button', { name: 'Ready 1' }))
+    expect(cardTitles()).toEqual(['Sunset Chapel'])
+    await userEvent.click(screen.getByRole('button', { name: 'Draft 1' }))
+    expect(cardTitles()).toEqual(['Night Rose'])
     await userEvent.click(screen.getByRole('button', { name: 'Published 2' }))
     expect(cardTitles()).toEqual(['Frost Oculus', 'Autumn Door'])
     expect(screen.getByRole('button', { name: 'Published 2' })).toHaveAttribute(
@@ -124,11 +176,11 @@ describe('LibraryScreen', () => {
     expect(screen.getByText('No paintings match your search.')).toBeInTheDocument()
   })
 
-  it('shows a badge in every card: New, Draft or Published with a lock', async () => {
+  it('shows a badge in every card: Ready, Draft or Published', async () => {
     await startWith({ library: library(sample()), loose: [], assets: {} })
     renderLibrary()
     const [ready, draft, published] = within(grid()).getAllByRole('listitem')
-    expect(within(ready as HTMLElement).getByText('New')).toBeInTheDocument()
+    expect(within(ready as HTMLElement).getByText('Ready')).toBeInTheDocument()
     expect(within(draft as HTMLElement).getByText('Draft')).toBeInTheDocument()
     expect(within(published as HTMLElement).getByText('Published')).toBeInTheDocument()
     expect(within(ready as HTMLElement).getByText('Sam · 2×3')).toBeInTheDocument()
@@ -145,14 +197,20 @@ describe('LibraryScreen', () => {
     })
   })
 
-  it('offers no Delete for a published painting', async () => {
+  it('says why a published painting cannot be deleted (M10)', async () => {
     await startWith({ library: library(sample()), loose: [], assets: {} })
     renderLibrary()
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Frost Oculus' }))
     const menu = screen.getByRole('menu')
     expect(within(menu).getByRole('menuitem', { name: 'Edit' })).toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: 'Duplicate' })).toBeInTheDocument()
-    expect(within(menu).queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument()
+    const locked = within(menu).getByRole('menuitem', {
+      name: 'Delete — published paintings stay on the server',
+    })
+    expect(locked).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(locked)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(cardTitles()).toContain('Frost Oculus')
   })
 
   it('closes the card menu on Escape and gives focus back to its button', async () => {
@@ -187,7 +245,9 @@ describe('LibraryScreen', () => {
     expect(useWorkspace.getState().library?.paintings).toHaveLength(3)
   })
 
-  it('duplicates a painting as a ready "(copy)" right after the original', async () => {
+  it('duplicates a painting as a ready "(copy)" right after the original (I17)', async () => {
+    const scrolled = vi.fn()
+    Element.prototype.scrollIntoView = scrolled
     await startWith({ library: library(sample()), loose: [], assets: {} })
     renderLibrary()
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Frost Oculus' }))
@@ -196,50 +256,67 @@ describe('LibraryScreen', () => {
     expect(titles.indexOf('Frost Oculus (copy)')).toBe(titles.indexOf('Frost Oculus') + 1)
     const copy = useWorkspace.getState().library?.paintings.find((p) => p.title.endsWith('(copy)'))
     expect(copy?.status).toBe('ready')
+    const card = screen.getByRole('heading', { name: 'Frost Oculus (copy)' }).closest('li')
+    expect(card).toHaveAttribute('data-highlight', 'true')
+    expect(scrolled).toHaveBeenCalled()
+    expect(await screen.findByText('Duplicated')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: copy?.id })
   })
 
-  it('moves loose paintings into the library from the banner', async () => {
+  it('lists loose paintings next to the library, each with its own Add (I16)', async () => {
     const loose = [painting('Harvest Moon', 'Sam', 'draft'), painting('Tide', 'Sam', 'draft')]
     await startWith({ library: library(sample()), loose, assets: {} })
     renderLibrary()
-    expect(
-      screen.getByText("2 paintings made in this browser aren't in a library yet"),
-    ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Add to Our paintings' }))
+    const section = screen.getByRole('region', { name: 'Not in this library' })
+    expect(section).toHaveTextContent("2 paintings made in this browser aren't in Our paintings")
+    const list = within(section).getByRole('list')
+    const [harvest] = within(list).getAllByRole('listitem')
+    await userEvent.click(
+      within(harvest as HTMLElement).getByRole('button', { name: 'Add to Our paintings' }),
+    )
+    expect(useWorkspace.getState().loose.map((p) => p.title)).toEqual(['Tide'])
+    expect(cardTitles()).toContain('Harvest Moon')
+    expect(await screen.findByText('Added 1 painting to Our paintings')).toBeInTheDocument()
+  })
+
+  it('moves every loose painting into the library at once', async () => {
+    const loose = [painting('Harvest Moon', 'Sam', 'draft'), painting('Tide', 'Sam', 'draft')]
+    await startWith({ library: library(sample()), loose, assets: {} })
+    renderLibrary()
+    await userEvent.click(screen.getByRole('button', { name: 'Add all 2 to Our paintings' }))
     expect(useWorkspace.getState().loose).toEqual([])
     expect(cardTitles()).toEqual(expect.arrayContaining(['Harvest Moon', 'Tide']))
-    expect(screen.queryByRole('button', { name: 'Add to Our paintings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Not in this library' })).toBeNull()
     expect(await screen.findByText('Added 2 paintings to Our paintings')).toBeInTheDocument()
   })
 
-  it('hides the loose banner for now with Later', async () => {
-    const loose = [painting('Harvest Moon', 'Sam', 'draft')]
-    await startWith({ library: library(sample()), loose, assets: {} })
-    renderLibrary()
-    expect(
-      screen.getByText("1 painting made in this browser isn't in a library yet"),
-    ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Later' }))
-    expect(screen.queryByText(/made in this browser/)).not.toBeInTheDocument()
-    expect(useWorkspace.getState().loose).toHaveLength(1)
-  })
-
-  it('keeps the loose banner dismissed across visits until a new loose painting appears', async () => {
+  it('folds the loose paintings away without hiding that they exist', async () => {
     const loose = [painting('Harvest Moon', 'Sam', 'draft')]
     await startWith({ library: library(sample()), loose, assets: {} })
     const first = renderLibrary()
-    await userEvent.click(screen.getByRole('button', { name: 'Later' }))
+    const section = screen.getByRole('region', { name: 'Not in this library' })
+    const toggle = within(section).getByRole('button', { name: 'Hide' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(toggle)
+    expect(within(section).queryByRole('list')).toBeNull()
+    expect(section).toHaveTextContent("1 painting made in this browser isn't in Our paintings")
     first.unmount()
 
     renderLibrary()
-    expect(screen.queryByText(/made in this browser/)).not.toBeInTheDocument()
+    const again = screen.getByRole('region', { name: 'Not in this library' })
+    expect(within(again).queryByRole('list')).toBeNull()
+    await userEvent.click(within(again).getByRole('button', { name: 'Show' }))
+    expect(within(again).getByRole('list')).toBeInTheDocument()
+  })
 
-    act(() => {
-      useWorkspace.setState((s) => ({ loose: [...s.loose, painting('Tide', 'Sam', 'draft')] }))
-    })
-    expect(
-      screen.getByText("2 paintings made in this browser aren't in a library yet"),
-    ).toBeInTheDocument()
+  it('offers a first painting or a pack in an empty library (M11)', async () => {
+    await startWith({ library: library([]), loose: [], assets: {} })
+    renderLibrary()
+    const empty = screen.getByRole('region', { name: 'No paintings yet' })
+    await userEvent.click(within(empty).getByRole('button', { name: 'New painting' }))
+    expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: null })
+    expect(within(empty).getByRole('button', { name: 'Import a pack' })).toBeInTheDocument()
   })
 
   it('imports a friend’s library pack and says how many paintings it added', async () => {

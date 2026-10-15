@@ -173,6 +173,19 @@ export function isChanged(p: Painting, lib: Library): boolean {
   )
 }
 
+/** What a painting's badge says (R16); `changed` needs its library's last export time. */
+export type PaintingState = 'draft' | 'ready' | 'changed' | 'published'
+
+export function paintingState(p: Painting, lib: Library | null): PaintingState {
+  if (p.status !== 'published') return p.status
+  return lib && isChanged(p, lib) ? 'changed' : 'published'
+}
+
+/** The paintings Export ticks by itself (R16): ready ones that have a picture. */
+export function readyToExport(lib: Library): Painting[] {
+  return lib.paintings.filter((p) => p.status === 'ready' && p.recipe.source !== null)
+}
+
 /**
  * Paintings that no downloaded library pack holds in their current state (R15): all of them
  * while the library was never exported, else the unpublished and changed ones.

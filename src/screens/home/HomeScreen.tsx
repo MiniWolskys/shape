@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { format, plural, useT } from '../../i18n/i18n.ts'
 import { renderScene } from '../../imaging/scenes.ts'
 import { hashString } from '../../imaging/shapes.ts'
@@ -11,6 +11,7 @@ import { Button } from '../../ui/Button.tsx'
 import { Icon } from '../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
 import { TopBar } from '../../ui/TopBar.tsx'
+import { useContentBox } from '../../ui/useContentBox.ts'
 import styles from './HomeScreen.module.css'
 import { CloseLibraryDialog } from '../CloseLibraryDialog.tsx'
 import { importPackFile } from '../packImport.ts'
@@ -42,24 +43,6 @@ function renderResumeThumb() {
     pixelsPerBlock: 16,
     seed: hashString('shape-resume'),
   })
-}
-
-/** The content box of an element, tracked while it resizes. */
-function useContentBox(fallback: { width: number; height: number }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [box, setBox] = useState(fallback)
-  useEffect(() => {
-    const element = ref.current
-    if (!element || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(([entry]) => {
-      if (!entry) return
-      const { width, height } = entry.contentRect
-      if (width > 0 && height > 0) setBox({ width, height })
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-  return [ref, box] as const
 }
 
 export function HomeScreen() {

@@ -1,7 +1,7 @@
 .card {
   position: relative;
   display: grid;
-  grid-template-rows: 170px auto;
+  grid-template-rows: 180px auto;
   min-width: 0;
   border-radius: var(--radius);
   background: var(--panel);
@@ -12,6 +12,23 @@
   background: var(--raised);
 }
 
+.card[data-highlight] {
+  outline: 2px solid var(--ok);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card[data-highlight] {
+    animation: arrive 0.6s ease-out;
+  }
+}
+
+@keyframes arrive {
+  from {
+    transform: scale(0.96);
+  }
+}
+
 .card:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -20,6 +37,7 @@
 .thumb {
   display: grid;
   place-items: center;
+  min-width: 0;
   overflow: hidden;
   border-radius: var(--radius) var(--radius) 0 0;
 }
@@ -121,8 +139,13 @@
   background: var(--bg);
 }
 
-.new {
+.ready {
   background: var(--ok);
+  color: var(--accent-ink);
+}
+
+.changed {
+  background: var(--warn);
   color: var(--accent-ink);
 }
 
@@ -164,6 +187,7 @@
   right: 0;
   display: grid;
   min-width: 140px;
+  max-width: 240px;
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -190,4 +214,18 @@
 
 .danger {
   color: var(--danger);
+}
+
+.disabledItem,
+.disabledItem:hover {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* Above the stretched open button. */
+.add {
+  position: relative;
+  z-index: 1;
+  justify-self: start;
+  margin-top: 6px;
 }

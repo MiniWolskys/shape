@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { canDelete } from '../../domain/library.ts'
-import type { Painting } from '../../domain/types.ts'
+import { useEffect, useId, useRef, useState } from 'react'
+import { canDelete, isChanged, paintingState, readyToExport } from '../../domain/library.ts'
+import type { Library, Painting } from '../../domain/types.ts'
 import { format, plural, useT } from '../../i18n/i18n.ts'
 import { useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
@@ -14,24 +14,21 @@ import { CloseLibraryDialog } from '../CloseLibraryDialog.tsx'
 import { NewLibraryDialog } from '../home/NewLibraryDialog.tsx'
 import { importPackFile } from '../packImport.ts'
 import styles from './LibraryScreen.module.css'
-import { LooseBanner } from './LooseBanner.tsx'
+import { LooseSection } from './LooseSection.tsx'
 import { PaintingCard } from './PaintingCard.tsx'
 
-type Filter = 'all' | 'new' | 'published'
+type Filter = 'all' | 'ready' | 'draft' | 'published'
 
-const isPublished = (p: Painting) => p.status === 'published'
-
+/** The filter chips use the badges' words (R16); Published includes changed paintings. */
 const FILTERS: Record<Filter, (p: Painting) => boolean> = {
   all: () => true,
-  new: (p) => !isPublished(p),
-  published: isPublished,
+  ready: (p) => p.status === 'ready',
+  draft: (p) => p.status === 'draft',
+  published: (p) => p.status === 'published',
 }
 
-/**
- * Loose paintings the player said "Later" to, for this page session. A loose painting not in
- * the set brings the banner back.
- */
-let dismissedLoose = new Set<string>()
+/** How long a fresh duplicate stays outlined (I17). */
+const HIGHLIGHT_MS = 2500
 
 /** Lower case without accents, so "zoe" finds "Zoé". */
 function normalize(text: string): string {
@@ -43,50 +40,72 @@ function matches(p: Painting, query: string): boolean {
   return q === '' || normalize(p.title).includes(q) || normalize(p.author).includes(q)
 }
 
+/** "Export · 2 ready" (+ " · 1 changed"): what Export will pick by itself (R16, I25). */
+function exportLabel(library: Library, t: ReturnType<typeof useT>) {
+  const ready = readyToExport(library).length
+  const changed = library.paintings.filter((p) => isChanged(p, library)).length
+  const label = plural(t, t.library.exportReady, ready)
+  return {
+    label: changed > 0 ? `${label} · ${plural(t, t.library.exportChanged, changed)}` : label,
+    worthIt: ready + changed > 0,
+  }
+}
+
 export function LibraryScreen() {
   const t = useT()
   const go = useNavigation((s) => s.go)
   const library = useWorkspace((s) => s.library)
   const loose = useWorkspace((s) => s.loose)
+  const demo = useWorkspace((s) => s.demo)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
-  const [dismissed, setDismissed] = useState(() => dismissedLoose)
   const [deleting, setDeleting] = useState<Painting | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [libraryDialog, setLibraryDialog] = useState({ open: false, key: 0 })
+  /** A new library waiting for the close-library confirm (R15). */
+  const [replaceWith, setReplaceWith] = useState<{ name: string; namespace: string } | null>(null)
+  const [highlight, setHighlight] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const demoNoteId = useId()
+  const emptyId = useId()
 
   const nothingToShow = !library && loose.length === 0
   useEffect(() => {
     if (nothingToShow) go({ name: 'home' }, { replace: true })
   }, [nothingToShow, go])
+  useEffect(() => {
+    if (highlight === null) return
+    const timer = setTimeout(() => setHighlight(null), HIGHLIGHT_MS)
+    return () => clearTimeout(timer)
+  }, [highlight])
   if (nothingToShow) return null
 
   const paintings = library ? library.paintings : loose
-  const showLooseBanner = loose.some((p) => !dismissed.has(p.id))
-
-  function dismissLoose() {
-    dismissedLoose = new Set(loose.map((p) => p.id))
-    setDismissed(dismissedLoose)
-  }
   const count = (f: Filter) => paintings.filter(FILTERS[f]).length
   const visible = paintings.filter((p) => FILTERS[filter](p) && matches(p, query))
-  const newCount = library ? library.paintings.filter(FILTERS.new).length : 0
+  const exportButton = library && exportLabel(library, t)
 
   /** A new painting only enters the workspace once it is changed (R18). */
   function createPainting() {
     go({ name: 'editor', paintingId: null })
   }
 
-  function addLoose() {
+  function addLoose(ids?: string[]) {
     const name = library?.name ?? ''
-    const added = useWorkspace.getState().addLooseToLibrary()
+    const added = useWorkspace.getState().addLooseToLibrary(ids)
     toast(plural(t, t.library.looseAdded, added, { name }))
   }
 
   function duplicate(p: Painting) {
     try {
-      useWorkspace.getState().duplicatePainting(p.id, t.library.copySuffix)
+      const id = useWorkspace.getState().duplicatePainting(p.id, t.library.copySuffix)
+      // The copy is ready: keep it in view whatever the filter (I17).
+      setFilter((f) => (f === 'all' || f === 'ready' ? f : 'all'))
+      setHighlight(id)
+      toast(t.library.duplicated, 'info', {
+        label: t.common.edit,
+        run: () => go({ name: 'editor', paintingId: id }),
+      })
     } catch (error) {
       toast(errorMessage(error, t), 'error')
     }
@@ -109,9 +128,19 @@ export function LibraryScreen() {
   }
 
   function createLibrary(name: string, namespace: string) {
-    useWorkspace.getState().createLibrary(name, namespace)
     setLibraryDialog((d) => ({ ...d, open: false }))
+    // From the demo banner: the demo is replaced, after asking (R15).
+    if (library) setReplaceWith({ name, namespace })
+    else useWorkspace.getState().createLibrary(name, namespace)
   }
+
+  function confirmReplace() {
+    if (replaceWith) useWorkspace.getState().createLibrary(replaceWith.name, replaceWith.namespace)
+    setReplaceWith(null)
+  }
+
+  const openNewLibrary = () => setLibraryDialog((d) => ({ open: true, key: d.key + 1 }))
+  const openPackPicker = () => fileInput.current?.click()
 
   const packInput = (
     <input
@@ -136,6 +165,28 @@ export function LibraryScreen() {
     })
 
   const deletingTitle = deleting ? deleting.title || t.library.untitled : ''
+  const emptyLibrary = library !== null && library.paintings.length === 0
+
+  const card = (p: Painting, headingLevel: 2 | 3, add?: boolean) => (
+    <PaintingCard
+      key={p.id}
+      painting={p}
+      state={paintingState(p, library)}
+      headingLevel={headingLevel}
+      highlighted={highlight === p.id}
+      onEdit={() => go({ name: 'editor', paintingId: p.id })}
+      onDuplicate={() => duplicate(p)}
+      onDelete={canDelete(p) ? () => setDeleting(p) : undefined}
+      add={
+        add && library
+          ? {
+              label: format(t.library.addLoose, { name: library.name }),
+              onAdd: () => addLoose([p.id]),
+            }
+          : undefined
+      }
+    />
+  )
 
   return (
     <div className={styles.page}>
@@ -145,15 +196,20 @@ export function LibraryScreen() {
         menu={
           library
             ? [
-                { label: t.library.importPack, onSelect: () => fileInput.current?.click() },
+                { label: t.library.importPack, onSelect: openPackPicker },
                 { label: t.library.closeLibrary, onSelect: () => setConfirmClose(true) },
               ]
             : []
         }
         right={
-          library && (
-            <Button variant="primary" onClick={() => go({ name: 'export' })}>
-              {plural(t, t.library.exportNew, newCount)}
+          exportButton && (
+            <Button
+              variant={exportButton.worthIt && !demo ? 'primary' : 'secondary'}
+              disabled={demo}
+              aria-describedby={demo ? demoNoteId : undefined}
+              onClick={() => go({ name: 'export' })}
+            >
+              {exportButton.label}
             </Button>
           )
         }
@@ -168,80 +224,92 @@ export function LibraryScreen() {
             <h1 className={styles.heading}>{t.library.looseTitle}</h1>
             <p className={styles.hint}>{t.library.looseHint}</p>
             <div className={styles.introActions}>
-              <Button icon="folder" onClick={() => fileInput.current?.click()}>
+              <Button icon="folder" onClick={openPackPicker}>
                 {t.home.openPack}
               </Button>
-              <Button
-                icon="plus"
-                onClick={() => setLibraryDialog((d) => ({ open: true, key: d.key + 1 }))}
-              >
+              <Button icon="plus" onClick={openNewLibrary}>
                 {t.home.newLibrary}
               </Button>
             </div>
           </section>
         )}
 
-        {library && showLooseBanner && (
-          <LooseBanner
-            count={loose.length}
-            libraryName={library.name}
-            onAdd={addLoose}
-            onLater={dismissLoose}
-          />
+        {library && demo && (
+          <div className={styles.demo} role="note">
+            <p id={demoNoteId}>{t.library.demoBanner}</p>
+            <Button variant="primary" icon="plus" onClick={openNewLibrary}>
+              {t.library.demoStart}
+            </Button>
+          </div>
         )}
 
-        <div className={styles.bar}>
-          <div className={styles.filters} role="group" aria-label={t.library.filters}>
-            {(
-              [
-                ['all', t.library.filterAll],
-                ['new', t.library.filterNew],
-                ['published', t.library.filterPublished],
-              ] as const
-            ).map(([f, label]) => (
-              <button
-                key={f}
-                type="button"
-                className={styles.filter}
-                aria-pressed={filter === f}
-                onClick={() => setFilter(f)}
-              >
-                {label} <span className={styles.count}>{count(f)}</span>
-              </button>
-            ))}
-          </div>
-          <div className={styles.spacer} />
-          <label className={styles.search}>
-            <Icon name="search" className={styles.searchIcon} />
-            <input
-              type="search"
-              className={styles.searchInput}
-              placeholder={t.library.search}
-              aria-label={t.library.search}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <Button variant="primary" icon="plus" onClick={createPainting}>
-            {t.library.newPainting}
-          </Button>
-        </div>
+        {emptyLibrary ? (
+          <section className={styles.emptyState} aria-labelledby={emptyId}>
+            <Icon name="image" size={48} className={styles.emptyIcon} />
+            <h2 id={emptyId} className={styles.emptyTitle}>
+              {t.library.empty}
+            </h2>
+            <p className={styles.hint}>{t.library.emptyHint}</p>
+            <div className={styles.introActions}>
+              <Button variant="primary" icon="plus" onClick={createPainting}>
+                {t.library.newPainting}
+              </Button>
+              <Button icon="folder" onClick={openPackPicker}>
+                {t.library.importAPack}
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <>
+            <div className={styles.bar}>
+              <div className={styles.filters} role="group" aria-label={t.library.filters}>
+                {(
+                  [
+                    ['all', t.library.filterAll],
+                    ['ready', t.library.filterReady],
+                    ['draft', t.library.filterDraft],
+                    ['published', t.library.filterPublished],
+                  ] as const
+                ).map(([f, label]) => (
+                  <button
+                    key={f}
+                    type="button"
+                    className={styles.filter}
+                    aria-pressed={filter === f}
+                    onClick={() => setFilter(f)}
+                  >
+                    {label} <span className={styles.count}>{count(f)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className={styles.spacer} />
+              <label className={styles.search}>
+                <Icon name="search" className={styles.searchIcon} />
+                <input
+                  type="search"
+                  className={styles.searchInput}
+                  placeholder={t.library.search}
+                  aria-label={t.library.search}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+              <Button variant="primary" icon="plus" onClick={createPainting}>
+                {t.library.newPainting}
+              </Button>
+            </div>
 
-        <ul className={styles.grid} aria-label={t.library.grid}>
-          {visible.map((p) => (
-            <PaintingCard
-              key={p.id}
-              painting={p}
-              onEdit={() => go({ name: 'editor', paintingId: p.id })}
-              onDuplicate={() => duplicate(p)}
-              onDelete={canDelete(p) ? () => setDeleting(p) : undefined}
-            />
-          ))}
-        </ul>
-        {visible.length === 0 && (
-          <p className={styles.empty}>
-            {paintings.length === 0 ? t.library.empty : t.library.noMatches}
-          </p>
+            <ul className={styles.grid} aria-label={t.library.grid}>
+              {visible.map((p) => card(p, 2))}
+            </ul>
+            {visible.length === 0 && <p className={styles.empty}>{t.library.noMatches}</p>}
+          </>
+        )}
+
+        {library && loose.length > 0 && (
+          <LooseSection count={loose.length} libraryName={library.name} onAddAll={() => addLoose()}>
+            {loose.map((p) => card(p, 3, true))}
+          </LooseSection>
         )}
       </main>
 
@@ -270,11 +338,17 @@ export function LibraryScreen() {
         onCancel={() => setConfirmClose(false)}
         onConfirm={closeLibrary}
       />
+      <CloseLibraryDialog
+        open={replaceWith !== null}
+        onCancel={() => setReplaceWith(null)}
+        onConfirm={confirmReplace}
+        confirmLabel={t.home.closeForNew}
+      />
 
       <NewLibraryDialog
         key={libraryDialog.key}
         open={libraryDialog.open}
-        replacing={null}
+        replacing={library?.name ?? null}
         onClose={() => setLibraryDialog((d) => ({ ...d, open: false }))}
         onCreate={createLibrary}
       />
