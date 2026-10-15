@@ -8,6 +8,7 @@ import {
   createPainting as newPainting,
   insertAfter,
   mergeLibraries,
+  notAfter,
   removePainting,
   retitlePainting,
   unexportedPaintings,
@@ -335,7 +336,14 @@ export function createWorkspaceStore(
           const paintings = pack.library.paintings.map((p) =>
             adoptAssets(p, pack.assets, nextAssets),
           )
-          set({ library: { ...pack.library, paintings }, assets: nextAssets, ...NO_DEMO })
+          // A friend's clock may run ahead: a later export time would hide changes made now.
+          const { exportedAt } = pack.library
+          const opened = {
+            ...pack.library,
+            ...(exportedAt === undefined ? {} : { exportedAt: notAfter(exportedAt, new Date()) }),
+            paintings,
+          }
+          set({ library: opened, assets: nextAssets, ...NO_DEMO })
           return { kind: 'opened', added: count, kept: 0, ...source }
         }
         if (library.namespace !== pack.library.namespace) {
@@ -365,7 +373,7 @@ export function createWorkspaceStore(
           })
           return { kind: 'copied', added: count, kept: 0, ...source }
         }
-        const merged = mergeLibraries(library, pack.library)
+        const merged = mergeLibraries(library, pack.library, new Date())
         // Added paintings and published copies that replaced local ones come from the pack.
         const incoming = new Set([...merged.added, ...pack.library.paintings])
         // A local draft replaced by a published copy no longer needs its own assets.

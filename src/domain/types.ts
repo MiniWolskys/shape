@@ -127,6 +127,11 @@ export interface Painting {
   pixelsPerBlock: number
   status: PaintingStatus
   publishedIn?: number
+  /**
+   * Ids the painting had before a new title moved it (R17), oldest first: a pack shared
+   * earlier names it by one of them, and merges recognise it (I4).
+   */
+  formerIds?: string[]
   createdAt: string
   updatedAt: string
   recipe: Recipe

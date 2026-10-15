@@ -322,6 +322,19 @@ describe('library pack checks', () => {
     expect(Object.getPrototypeOf(read.assets)).toBe(Object.prototype)
   })
 
+  it('reads former ids and refuses malformed ones', async () => {
+    const good = await packWith((l) => {
+      firstPainting(l).formerIds = ['painting_abc']
+    })
+    expect(readLibraryPack(good).library.paintings[0]?.formerIds).toEqual(['painting_abc'])
+    for (const bad of ['painting_abc', ['../x'], [1]]) {
+      const pack = await packWith((l) => {
+        firstPainting(l).formerIds = bad
+      })
+      expect(failure(() => readLibraryPack(pack))).toMatch(/^not-a-library-pack: .*formerIds/)
+    }
+  })
+
   it('refuses a version that is not a whole number from 0', async () => {
     for (const bad of [1.5, -3, '2', null]) {
       const pack = await packWith((l) => {

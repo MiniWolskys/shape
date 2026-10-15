@@ -712,6 +712,8 @@ describe('EditorScreen autosave (R19) and new paintings (R18)', () => {
     expect(openId()).toBe(id)
     expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: id })
     expect(allPaintings().map((q) => [q.id, q.title])).toEqual([[id, 'Rosace du soir']])
+    // Packs shared before name it by its old id: the stored painting remembers it (I4).
+    expect(allPaintings()[0]?.formerIds).toEqual([p.id])
     expect(screen.getByRole('heading', { name: 'Rosace du soir', level: 1 })).toBeInTheDocument()
 
     // Undo stays in the session; saving the older title moves the id back.
@@ -719,6 +721,7 @@ describe('EditorScreen autosave (R19) and new paintings (R18)', () => {
     expect(title()).toBe('Sunset Chapel')
     await wait(AUTOSAVE_MS)
     expect(allPaintings().map((q) => q.id)).toEqual([p.id])
+    expect(allPaintings()[0]?.formerIds).toEqual([id])
     expect(openId()).toBe(p.id)
   })
 

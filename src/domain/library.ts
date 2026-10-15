@@ -92,31 +92,47 @@ export interface MergeResult {
 /**
  * Merges an incoming library into the local one. Local order is kept, a published incoming copy
  * replaces an unpublished local one in place, and unknown incoming paintings are appended.
- * `kept` lists local paintings left untouched; replaced ones appear in neither list.
+ * A painting is known by its id or any of its former ids (I4), on either side, so a draft
+ * renamed since a pack was shared never comes back as a copy. `kept` lists local paintings
+ * left untouched; replaced ones appear in neither list. An incoming export time is never
+ * adopted later than `now` (a friend's clock may run ahead).
  */
-export function mergeLibraries(local: Library, incoming: Library): MergeResult {
+export function mergeLibraries(local: Library, incoming: Library, now = new Date()): MergeResult {
   if (local.namespace !== incoming.namespace) {
     throw new ShapeError(
       'namespace-mismatch',
       `namespace mismatch: ${local.namespace} vs ${incoming.namespace}`,
     )
   }
-  const incomingById = new Map(incoming.paintings.map((p) => [p.id, p]))
-  const localIds = new Set(local.paintings.map((p) => p.id))
+  const localByAnyId = new Map(local.paintings.map((p) => [p.id, p]))
+  for (const p of local.paintings) {
+    for (const id of p.formerIds ?? []) if (!localByAnyId.has(id)) localByAnyId.set(id, p)
+  }
+  const theirsFor = new Map<Painting, Painting>()
+  const added: Painting[] = []
+  for (const theirs of incoming.paintings) {
+    const mine = [theirs.id, ...(theirs.formerIds ?? [])]
+      .map((id) => localByAnyId.get(id))
+      .find((p) => p !== undefined)
+    if (!mine) added.push(theirs)
+    // Another incoming version of an already matched painting adds nothing.
+    else if (!theirsFor.has(mine)) theirsFor.set(mine, theirs)
+  }
   const kept: Painting[] = []
   const merged = local.paintings.map((p) => {
-    const theirs = incomingById.get(p.id)
+    const theirs = theirsFor.get(p)
     if (theirs && theirs.status === 'published' && p.status !== 'published') return theirs
     if (theirs) kept.push(p)
     return p
   })
-  const added = incoming.paintings.filter((p) => !localIds.has(p.id))
   // The local export time wins: a later incoming one could hide local changes made since (R15).
   // Without one, the incoming time is adopted only if no local painting is published (a local
   // published painting could carry edits the incoming pack doesn't hold).
-  const exportedAt =
-    local.exportedAt ??
-    (local.paintings.some((p) => p.status === 'published') ? undefined : incoming.exportedAt)
+  const adopted =
+    local.paintings.some((p) => p.status === 'published') || incoming.exportedAt === undefined
+      ? undefined
+      : notAfter(incoming.exportedAt, now)
+  const exportedAt = local.exportedAt ?? adopted
   return {
     library: {
       ...local,
@@ -127,6 +143,11 @@ export function mergeLibraries(local: Library, incoming: Library): MergeResult {
     added,
     kept,
   }
+}
+
+/** The ISO time `time`, or `now` when `time` is later (a clock running ahead). */
+export function notAfter(time: string, now: Date): string {
+  return Date.parse(time) > now.getTime() ? now.toISOString() : time
 }
 
 export function addLoosePaintings(lib: Library, loose: Painting[], random: Random): Library {
@@ -198,8 +219,12 @@ export function unexportedPaintings(lib: Library): Painting[] {
 /**
  * Sets the title (R17). While unpublished the id follows it: `slugify(title)_<suffix>`, keeping
  * the current three-character suffix (an id without one gets a fresh one) unless another painting in `takenIds` already has that id.
- * Published ids never change.
+ * Published ids never change. A changed id is added to `formerIds` (I4); they stay after
+ * publishing, since an older pack may still hold the painting under one of them.
  */
+/** Former ids kept per painting: enough for every rename a shared pack may predate. */
+export const MAX_FORMER_IDS = 32
+
 export function retitlePainting(
   p: Painting,
   title: string,
@@ -212,7 +237,10 @@ export function retitlePainting(
   const suffix = /_([a-z0-9]{3})$/.exec(p.id)?.[1]
   let id = suffix ? `${slugify(title)}_${suffix}` : makePaintingId(title, random)
   while (id !== p.id && takenIds.has(id)) id = makePaintingId(title, random)
-  return { ...titled, id }
+  if (id === p.id) return titled
+  // Packs shared before keep naming it by its old id: merges recognise it by that (I4).
+  const former = [...(p.formerIds ?? []).filter((f) => f !== id && f !== p.id), p.id]
+  return { ...titled, id, formerIds: former.slice(-MAX_FORMER_IDS) }
 }
 
 /** Returns the list with `p` inserted right after the painting `afterId` (or at the end). */
@@ -277,5 +305,7 @@ export function copyAsNew(
     recipe,
   }
   delete painting.publishedIn
+  // A copy is a new painting: no pack ever named it by the original's ids.
+  delete painting.formerIds
   return { painting, assetIds }
 }

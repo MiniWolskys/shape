@@ -7,7 +7,7 @@ import {
   updatePainting,
   upsertPainting,
 } from '../domain/library.ts'
-import { writeLibraryPack } from '../packs/libraryPack.ts'
+import { readLibraryPack, writeLibraryPack } from '../packs/libraryPack.ts'
 import { encodePng } from '../packs/png.ts'
 import { createRaster } from '../imaging/raster.ts'
 import { memoryStorage } from '../storage/persistence.ts'
@@ -789,6 +789,18 @@ describe('demo flag (R23)', () => {
   })
 })
 
+describe('opening packs', () => {
+  it('never adopts an export time from the future (clock skew)', async () => {
+    const s = createWorkspaceStore(memoryStorage())
+    await s.getState().init()
+    const { bytes } = await packFor('ours', ['Sunset'])
+    const pack = readLibraryPack(bytes)
+    const ahead = { ...pack, library: { ...pack.library, exportedAt: '2999-01-01T00:00:00.000Z' } }
+    s.getState().importPack(ahead)
+    expect(Date.parse(s.getState().library?.exportedAt ?? '')).toBeLessThanOrEqual(Date.now())
+  })
+})
+
 describe('assets shared between packs (C2)', () => {
   const bytes = (n: number) => encodePng(createRaster(2, 2, [n, n, n, 255]))
 
@@ -820,6 +832,9 @@ describe('assets shared between packs (C2)', () => {
     // The owner titles the draft (its id follows) and keeps painting over the same asset id.
     const rose = s.getState().retitlePainting('painting_k3x', 'Rose')
     s.getState().setAsset('edits1', bytes(30))
+    // As a library from before former ids were recorded (I4), so the old id comes back as new.
+    const renamed = s.getState().findPainting(rose)!
+    s.getState().savePainting({ ...renamed, formerIds: [] })
     // A friend's pack derived from v1 comes back: it still holds painting_k3x with the v1 edits.
     s.getState().importPack(v1.bytes)
     const { assets } = s.getState()
@@ -832,6 +847,13 @@ describe('assets shared between packs (C2)', () => {
     expect(assets[`${editsId}.mask`]).toEqual(bytes(255))
     // Identical bytes stay shared: the picture was not copied.
     expect(back?.recipe.source?.imageId).toBe('srcimg')
+  })
+
+  it('a renamed draft does not come back as a ghost from an older pack (I4)', async () => {
+    const { s, v1 } = await ownerWithDraft()
+    const rose = s.getState().retitlePainting('painting_k3x', 'Rose')
+    expect(s.getState().importPack(v1.bytes)).toMatchObject({ added: 0, kept: 1 })
+    expect(s.getState().library?.paintings.map((p) => p.id)).toEqual([rose])
   })
 
   it('a pack replacing the demo never overwrites the assets of loose paintings', async () => {

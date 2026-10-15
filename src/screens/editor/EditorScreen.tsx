@@ -100,15 +100,23 @@ function decodeEdits(p: Painting, assets: Assets, t: Dictionary): EditLayer | nu
  * is retitled there; a new one gets an id made from its title. Called last in a save, once
  * nothing else can fail, so a failed save never leaves the editor on an id the workspace dropped.
  */
-function renameForTitle(p: Painting): string {
+function renameForTitle(p: Painting): Painting {
   const workspace = useWorkspace.getState()
   const stored = workspace.findPainting(p.id)
-  if (stored) return stored.title === p.title ? p.id : workspace.retitlePainting(p.id, p.title)
+  if (stored) {
+    if (stored.title === p.title) return p
+    const id = workspace.retitlePainting(p.id, p.title)
+    // The workspace remembered the old id (I4); the editor's copy must keep it too.
+    const { formerIds } = workspace.findPainting(id) ?? {}
+    return { ...p, id, ...(formerIds ? { formerIds } : {}) }
+  }
   // A new painting's id was made for an empty title.
-  if (p.title === '') return p.id
+  if (p.title === '') return p
   const { library, loose } = workspace
   const taken = new Set([...(library?.paintings ?? []), ...loose].map((q) => q.id))
-  return retitlePainting(p, p.title, taken, new Date(), Math.random).id
+  // Never stored, so no pack knows its draft id: nothing to remember.
+  const { formerIds: _, ...renamed } = retitlePainting(p, p.title, taken, new Date(), Math.random)
+  return renamed
 }
 
 /**
@@ -143,8 +151,8 @@ function savePaintingNow(): Painting | null {
     unreadableEditsId = null
   }
   const updated = updatePainting(painting, { recipe: { ...painting.recipe, editsId } }, new Date())
-  const id = renameForTitle(updated)
-  const saved = id === updated.id ? updated : { ...updated, id }
+  const saved = renameForTitle(updated)
+  const { id } = saved
   workspace.savePainting(saved)
   // Older history entries may still name the old id.
   if (id !== painting.id) noteRename(painting.id, id)

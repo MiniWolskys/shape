@@ -122,6 +122,36 @@ describe('library', () => {
     const incoming = { ...lib('B'), exportedAt: '2026-10-09T00:00:00.000Z' }
     expect(mergeLibraries(published, incoming).library.exportedAt).toBeUndefined()
   })
+  it('merge never adopts an export time from the future (clock skew)', () => {
+    const { exportedAt: _, ...never } = lib('A')
+    const ahead = { ...lib('B'), exportedAt: '2027-01-01T00:00:00.000Z' }
+    expect(mergeLibraries(never, ahead, now).library.exportedAt).toBe(now.toISOString())
+  })
+  it('merge knows a renamed draft by its former id, in either direction (I4)', () => {
+    const base = lib('A')
+    const draft = base.paintings[0]!
+    const renamed = retitlePainting(draft, 'Rose', new Set(), now, rnd)
+    expect(renamed.formerIds).toEqual([draft.id])
+    const mine = { ...base, paintings: [renamed] }
+    // An older pack still names it by its old id: no ghost copy comes back.
+    const older = mergeLibraries(mine, base)
+    expect(older.added).toEqual([])
+    expect(older.library.paintings.map((p) => p.id)).toEqual([renamed.id])
+    expect(older.kept).toEqual([renamed])
+    // A friend renamed their copy: still the same painting.
+    const fromFriend = mergeLibraries(base, mine)
+    expect(fromFriend.added).toEqual([])
+    expect(fromFriend.library.paintings.map((p) => p.id)).toEqual([draft.id])
+  })
+  it('merge takes a published copy of a renamed draft in its place', () => {
+    const base = lib('A')
+    const draft = base.paintings[0]!
+    const renamed = retitlePainting(draft, 'Rose', new Set(), now, rnd)
+    const theirs = publish({ ...base, paintings: [renamed] }, [renamed.id], now)
+    const { library, added } = mergeLibraries(base, theirs)
+    expect(added).toEqual([])
+    expect(library.paintings).toEqual(theirs.paintings)
+  })
   it('merge refuses another namespace', () => {
     expect(() => mergeLibraries(lib('A'), createLibrary('Other', 'other'))).toThrow(/namespace/)
   })
@@ -204,6 +234,21 @@ describe('retitlePainting (R17)', () => {
   })
   it('falls back to "painting" for an empty title', () => {
     expect(retitlePainting(fixed('rose_3js'), '  ', new Set(), later, rnd).id).toBe('painting_3js')
+  })
+  it('remembers former ids, newest last, and drops them from copies', () => {
+    const a = retitlePainting(fixed('painting_3js'), 'Rose', new Set(), later, rnd)
+    const b = retitlePainting(a, 'Lily', new Set(), later, rnd)
+    expect(b.formerIds).toEqual(['painting_3js', 'rose_3js'])
+    const back = retitlePainting(b, 'Rose', new Set(), later, rnd)
+    expect(back.formerIds).toEqual(['painting_3js', 'lily_3js'])
+    const copy = copyAsNew(b, {
+      title: 'Copy',
+      takenIds: new Set(),
+      takenAssetIds: new Set(),
+      now,
+      random: rnd,
+    })
+    expect(copy.painting.formerIds).toBeUndefined()
   })
   it('picks a new suffix when the id is taken by another painting', () => {
     const p = retitlePainting(fixed('painting_3js'), 'Rose', new Set(['rose_3js']), later, rnd)

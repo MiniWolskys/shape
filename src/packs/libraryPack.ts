@@ -1,6 +1,6 @@
 import { ShapeError } from '../domain/errors.ts'
 import { isValidAssetId, isValidNamespace } from '../domain/ids.ts'
-import { exportSet, publish } from '../domain/library.ts'
+import { MAX_FORMER_IDS, exportSet, publish } from '../domain/library.ts'
 import {
   FRAME_MATERIAL_IDS,
   MC_COLORS,
@@ -270,6 +270,14 @@ function paintingProblem(p: unknown, version: number): string | null {
   const published = p.status === 'published'
   if (published ? !isIntIn(p.publishedIn, 1, version) : p.publishedIn !== undefined) {
     return 'has an invalid publishedIn'
+  }
+  if (
+    p.formerIds !== undefined &&
+    (!Array.isArray(p.formerIds) ||
+      p.formerIds.length > MAX_FORMER_IDS ||
+      !p.formerIds.every((id) => typeof id === 'string' && PAINTING_ID.test(id)))
+  ) {
+    return 'has invalid formerIds'
   }
   if (!isIsoTime(p.createdAt)) return 'has an invalid createdAt'
   if (!isIsoTime(p.updatedAt)) return 'has an invalid updatedAt'
