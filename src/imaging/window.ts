@@ -73,8 +73,10 @@ export const FRAME_BOUND = 16
 
 /**
  * The pixels a frame up to FRAME_BOUND can change: those classified differently without a frame
- * (`zero`) and with the thickest one (`bounded`). A frame only eats into the shape from its
- * edge, so deeper pixels look the same at every thickness up to the bound.
+ * (`zero`) and with the thickest one (`bounded`). A thicker frame only covers more: it eats
+ * further into the shape from its edge, and its wooden bars (fanlight, four panes, paper
+ * screen) widen around the same lines. So a pixel that some thickness up to the bound changes,
+ * the bound changes too, and every other pixel looks the same at all of them.
  */
 export function shapeEdge(zero: ShapeMap, bounded: ShapeMap): Int32Array {
   const edge: number[] = []

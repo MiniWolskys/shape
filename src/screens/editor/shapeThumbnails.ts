@@ -60,7 +60,7 @@ export function thumbnailSpec(
 export interface ShapeIcon {
   /** SVG path data of the shape's edge, in a ICON_PIXELS-wide box. */
   outline: string
-  /** SVG path data around its lead lines and bars. */
+  /** SVG path data around its lead lines. */
   lead: string
   size: number
 }

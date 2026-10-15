@@ -41,6 +41,21 @@ describe('applyWindow', () => {
     const r = applyWindow(pic(), { ...base, shape: 'full', thickness: 0 })
     expect(r.data).toEqual(pic().data)
   })
+  it.each(['four_panes', 'paper_screen', 'fanlight'] as const)(
+    '%s has no wooden bars with material none, whatever the thickness',
+    (shape) => {
+      const big = createRaster(128, 64, [200, 100, 50, 255])
+      const o = { ...base, shape, pixelsPerBlock: 32, material: 'none' as const }
+      const frameless = applyWindow(big, { ...o, thickness: 0 })
+      expect(applyWindow(big, { ...o, thickness: 8 }).data).toEqual(frameless.data)
+      // Wooden bars and hub are gone: every opaque pixel is the picture itself.
+      for (let y = 0; y < 64; y++)
+        for (let x = 0; x < 128; x++) {
+          const [r, g, b, a] = getPixel(frameless, x, y)
+          if (a === 255) expect([r, g, b], `${x},${y}`).toEqual([200, 100, 50])
+        }
+    },
+  )
   it('is deterministic', () =>
     expect(applyWindow(pic(), { ...base, shape: 'stained_glass' }).data).toEqual(
       applyWindow(pic(), { ...base, shape: 'stained_glass' }).data,

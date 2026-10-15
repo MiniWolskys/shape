@@ -15,9 +15,12 @@ export interface Classified {
 export interface ShapeContext {
   width: number
   height: number
-  /** Outer frame thickness in pixels (0 = no outer frame). */
+  /**
+   * Frame thickness in pixels (0 = no frame): the outer frame, and the wooden bars inside
+   * (fanlight spokes and hub, four-pane cross, paper-screen grid), which disappear at 0.
+   */
   frame: number
-  /** Width of interior lead lines and bars in pixels. */
+  /** Width of interior lead lines in pixels: the shape's own, whatever the frame. */
   lead: number
   pixelsPerBlock: number
   /** Stained-glass cell centres. */
@@ -235,9 +238,15 @@ const stainedGlass: ShapeFn = (x, y, ctx) => {
   return Math.sqrt(q2) - Math.sqrt(q1) < ctx.lead * 0.75 ? LEAD : tinted(id)
 }
 
-const fourPanes: ShapeFn = (x, y, { width: w, height: h, frame, lead }) => {
+/** Whether pixel `i` is in the `t` pixels wide bar centred on `size / 2`. */
+function midBar(i: number, size: number, t: number): boolean {
+  const from = Math.round(size / 2 - t / 2)
+  return i >= from && i < from + t
+}
+
+const fourPanes: ShapeFn = (x, y, { width: w, height: h, frame }) => {
   const c = band(rectIn(x, y, w, h), frame)
-  return c === GLASS && (Math.abs(x - w / 2) < lead / 2 || Math.abs(y - h / 2) < lead / 2)
+  return c === GLASS && (midBar(Math.floor(x), w, frame) || midBar(Math.floor(y), h, frame))
     ? FRAME
     : c
 }
@@ -282,23 +291,25 @@ const octagon: ShapeFn = (x, y, { width: w, height: h, frame }) => {
   return band((i) => m <= r - i, frame)
 }
 
-const fanlight: ShapeFn = (x, y, { width: w, height: h, frame, lead }) => {
+const fanlight: ShapeFn = (x, y, { width: w, height: h, frame }) => {
   const r0 = Math.min(w / 2, h)
   const dx = x - w / 2
   const dy = h - y
   const d = dist(dx, dy)
   const c = band((i) => y <= h - i && d <= r0 - i, frame)
-  if (c !== GLASS) return c
+  // The hub and spokes are wood like the frame: without a frame, it is all glass.
+  if (c !== GLASS || frame <= 0) return c
   if (d < r0 * 0.28) return FRAME
-  return toSpoke(Math.atan2(dy, dx), Math.PI / 7) * d < lead / 2 ? FRAME : GLASS
+  // Distance across to the nearest spoke, so a spoke is exactly `frame` pixels wide.
+  return Math.sin(toSpoke(Math.atan2(dy, dx), Math.PI / 7)) * d < frame / 2 ? FRAME : GLASS
 }
 
-const paperScreen: ShapeFn = (x, y, { width: w, height: h, frame, lead, pixelsPerBlock }) => {
+const paperScreen: ShapeFn = (x, y, { width: w, height: h, frame, pixelsPerBlock }) => {
   const c = band(rectIn(x, y, w, h), frame)
   if (c !== GLASS) return c
+  // The grid bars are as wide as the frame (none without one).
   const s = gridStep(pixelsPerBlock)
-  const bar = Math.max(1, lead / 2)
-  return Math.floor(x) % s < bar || Math.floor(y) % s < bar ? LIGHT_FRAME : PAPER
+  return Math.floor(x) % s < frame || Math.floor(y) % s < frame ? LIGHT_FRAME : PAPER
 }
 
 const porthole: ShapeFn = (x, y, { width: w, height: h, frame }) => {

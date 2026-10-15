@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SHAPE_IDS, type ShapeId } from '../domain/types.ts'
-import { hashString, makeShapeContext, mulberry32, SHAPES } from './shapes.ts'
+import { hashString, makeShapeContext, mulberry32, SHAPES, type Classified } from './shapes.ts'
 
 describe('shapes', () => {
   const ctx = makeShapeContext(64, 64, 32, 4, 1)
@@ -94,5 +94,96 @@ describe('seeded helpers', () => {
     expect(hashString('')).toBe(0x811c9dc5)
     expect(hashString('a')).toBe(0xe40c292c)
     expect(hashString('foobar')).toBe(0xbf9cf968)
+  })
+})
+
+describe('wooden bars follow the frame thickness', () => {
+  const PPB = 64
+  /** Pixels of `kind` along a run of pixel centres, from `from` to `to` (exclusive). */
+  const run = (classify: (i: number) => Classified, from: number, to: number) => {
+    let n = 0
+    for (let i = from; i < to; i++) if (classify(i + 0.5).kind === 'frame') n++
+    return n
+  }
+
+  it.each([2, 6, 12])('four_panes cross bars are %i px wide', (t) => {
+    const ctx = makeShapeContext(256, 256, PPB, t, 1)
+    // Across the vertical bar, and across the horizontal one, far from the outer frame.
+    expect(run((x) => SHAPES.four_panes(x, 64.5, ctx), 64, 192)).toBe(t)
+    expect(run((y) => SHAPES.four_panes(64.5, y, ctx), 64, 192)).toBe(t)
+  })
+
+  it.each([1, 3, 7])('four_panes bars are %i px wide at an odd thickness too', (t) => {
+    const ctx = makeShapeContext(256, 192, PPB, t, 1)
+    expect(run((x) => SHAPES.four_panes(x, 40.5, ctx), 64, 192)).toBe(t)
+    expect(run((y) => SHAPES.four_panes(40.5, y, ctx), 32, 160)).toBe(t)
+  })
+
+  it.each([2, 6, 12])('paper_screen grid bars are %i px wide', (t) => {
+    const ctx = makeShapeContext(256, 256, PPB, t, 1)
+    // One grid step (half a block, 32 px) holds one vertical bar; row 16 is between bars.
+    const lightRun = (classify: (i: number) => Classified) => {
+      let n = 0
+      for (let i = 64; i < 96; i++) if (classify(i + 0.5).light) n++
+      return n
+    }
+    expect(lightRun((x) => SHAPES.paper_screen(x, 80.5, ctx))).toBe(t)
+    expect(lightRun((y) => SHAPES.paper_screen(80.5, y, ctx))).toBe(t)
+  })
+
+  it.each([2, 6, 12])('fanlight spokes are %i px wide', (t) => {
+    const ctx = makeShapeContext(256, 128, PPB, t, 1)
+    // The spoke at 3π/7 from the right, 80 px from the hub's centre (128, 128).
+    const a = (3 * Math.PI) / 7
+    const [cx, cy] = [128 + 80 * Math.cos(a), 128 - 80 * Math.sin(a)]
+    // Its width across, sampled finely along the perpendicular.
+    let inside = 0
+    const step = 0.01
+    for (let s = -20; s < 20; s += step) {
+      const kind = SHAPES.fanlight(cx + s * Math.sin(a), cy + s * Math.cos(a), ctx).kind
+      if (kind === 'frame') inside += step
+    }
+    expect(inside).toBeCloseTo(t, 1)
+    // And in pixels, along the row through it (a near-vertical spoke: t / sin(a) wide).
+    const row = Math.floor(cy) + 0.5
+    expect(Math.abs(run((x) => SHAPES.fanlight(x, row, ctx), 128, 180) - t)).toBeLessThanOrEqual(1)
+  })
+
+  it.each(['four_panes', 'paper_screen', 'fanlight'] as const)(
+    '%s has no wooden bars (nor hub) without a frame',
+    (id) => {
+      const ctx = makeShapeContext(256, 128, PPB, 0, 1)
+      for (let y = 0.5; y < 128; y++)
+        for (let x = 0.5; x < 256; x++) expect(SHAPES[id](x, y, ctx).kind).not.toBe('frame')
+    },
+  )
+
+  it('keeps the fanlight hub solid wood when there is a frame', () => {
+    const ctx = makeShapeContext(256, 128, PPB, 2, 1)
+    expect(SHAPES.fanlight(128.5, 110.5, ctx).kind).toBe('frame')
+  })
+
+  it.each(['gothic_arch', 'rose', 'stained_glass', 'leaded_diamonds'] as const)(
+    '%s lead lines keep their own width at any thickness',
+    (id) => {
+      const thin = makeShapeContext(256, 256, PPB, 2, 3)
+      const thick = makeShapeContext(256, 256, PPB, 12, 3)
+      for (let y = 0.5; y < 256; y++)
+        for (let x = 0.5; x < 256; x++) {
+          const a = SHAPES[id](x, y, thin)
+          const b = SHAPES[id](x, y, thick)
+          // Away from the outer frame, the leads are the same at both thicknesses.
+          if (a.kind !== 'frame' && b.kind !== 'frame' && a.kind !== 'out') expect(b).toBe(a)
+        }
+    },
+  )
+
+  it('the gothic arch mullion stays as wide as a lead', () => {
+    for (const t of [2, 12]) {
+      const ctx = makeShapeContext(256, 256, PPB, t, 1)
+      let n = 0
+      for (let x = 0; x < 256; x++) if (SHAPES.gothic_arch(x + 0.5, 200.5, ctx).kind === 'lead') n++
+      expect(n).toBe(ctx.lead)
+    }
   })
 })

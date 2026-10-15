@@ -194,6 +194,62 @@ describe('staged renderer', () => {
     expect(staged.computed.shaped).toBe(before)
   })
 
+  it.each(['fanlight', 'four_panes', 'paper_screen'] as const)(
+    '%s wooden bars from the cache match a fresh render across thicknesses',
+    (shape) => {
+      const src = source()
+      const staged = createStagedRenderer()
+      const big = recipe({ window: { shape, glassOpacity: 1 } })({
+        ...base,
+        width: 2,
+        height: 2,
+        pixelsPerBlock: 32,
+      })
+      staged.render(src, null, big)
+      for (const _ of staged.prefetch(big)) {
+        // Run the background work to its end.
+      }
+      for (const thickness of [0, 1, 4, 16, 24, 4, 0]) {
+        const p = recipe({ frame: { material: 'oak', thickness } })(big)
+        expect(staged.render(src, null, p).data, `${thickness}`).toEqual(
+          reference(src, null, p).data,
+        )
+      }
+    },
+  )
+
+  it('four_panes bars are as wide as the frame through the cache', () => {
+    const src = source()
+    const staged = createStagedRenderer()
+    const big = recipe({ window: { shape: 'four_panes', glassOpacity: 1 } })({
+      ...base,
+      width: 4,
+      height: 4,
+      pixelsPerBlock: 32,
+    })
+    for (const _ of staged.prefetch(big)) {
+      // The edge first, so thicknesses come from reframing.
+    }
+    for (const thickness of [2, 12, 16]) {
+      const p = recipe({ frame: { material: 'oak', thickness } })(big)
+      const out = staged.render(src, null, p)
+      // Across the vertical bar at row 32: opaque wood where the picture shows elsewhere.
+      let wood = 0
+      for (let x = 32; x < 96; x++) {
+        const i = (32 * out.width + x) * 4
+        const [r, g, b] = FRAME_MATERIALS.oak.color
+        if (
+          Math.abs((out.data[i] ?? 0) - r) <= 9 &&
+          Math.abs((out.data[i + 1] ?? 0) - g) <= 9 &&
+          Math.abs((out.data[i + 2] ?? 0) - b) <= 9 &&
+          out.data[i + 3] === 255
+        )
+          wood++
+      }
+      expect(wood, `${thickness}`).toBe(thickness)
+    }
+  })
+
   describe('reuses the stages a change does not reach', () => {
     const src = source()
     const edits = editsFor(16, 8)
