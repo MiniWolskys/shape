@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ShapeError } from '../domain/errors.ts'
 import { createLibrary, createPainting, upsertPainting } from '../domain/library.ts'
+import type { Recipe } from '../domain/types.ts'
 import { createEditLayer } from '../imaging/edits.ts'
 import { createRaster, getPixel } from '../imaging/raster.ts'
 import { decodePng, encodeEditLayer, encodePng } from './png.ts'
@@ -305,6 +306,94 @@ describe('library pack checks', () => {
     expect(failure(() => readLibraryPack(twice))).toMatch(/painting 1 repeats/)
   })
 
+  it('refuses asset ids that name object properties', async () => {
+    for (const id of ['__proto__', 'constructor', 'prototype']) {
+      const pack = await packWith((l) => {
+        const recipe = firstPainting(l).recipe as Record<string, unknown>
+        recipe.editsId = id
+      })
+      expect(failure(() => readLibraryPack(pack))).toMatch(/^not-a-library-pack: .*editsId/)
+    }
+    const { lib, p, assets } = sample()
+    const entries = unzipEntries((await writeLibraryPack(lib, [p.id], assets, now)).bytes)
+    entries['images/__proto__.png'] = entries['images/img1.png'] ?? new Uint8Array()
+    const read = readLibraryPack(zipDeterministic(entries))
+    expect(Object.hasOwn(read.assets, '__proto__')).toBe(false)
+    expect(Object.getPrototypeOf(read.assets)).toBe(Object.prototype)
+  })
+
+  it('refuses a version that is not a whole number from 0', async () => {
+    for (const bad of [1.5, -3, '2', null]) {
+      const pack = await packWith((l) => {
+        l.version = bad
+      })
+      expect(failure(() => readLibraryPack(pack))).toMatch(/^not-a-library-pack: .*version/)
+    }
+  })
+
+  it('refuses every malformed or out-of-range recipe field', async () => {
+    const cases: Array<[string, (r: Record<string, unknown>) => void]> = [
+      ['crop', (r) => delete r.crop],
+      ['crop', (r) => (r.crop = { x: -1, y: 0, width: 4, height: 4 })],
+      ['crop', (r) => (r.crop = { x: 0, y: 0, width: 'big', height: 4 })],
+      ['rotation', (r) => (r.rotation = 45)],
+      ['flipX', (r) => (r.flipX = 'no')],
+      ['flipY', (r) => delete r.flipY],
+      ['scaling', (r) => (r.scaling = 'blurry')],
+      ['adjust', (r) => (r.adjust = { brightness: 0, contrast: 500, saturation: 0 })],
+      ['adjust', (r) => delete r.adjust],
+      [
+        'mcLook',
+        (r) => (r.mcLook = { enabled: true, colors: 1000, palette: 'auto', dither: false }),
+      ],
+      ['mcLook', (r) => (r.mcLook = { enabled: true, colors: 16, palette: 'x', dither: false })],
+      ['glassOpacity', (r) => (r.window = { shape: 'full', glassOpacity: 3 })],
+      ['thickness', (r) => (r.frame = { material: 'oak', thickness: 17 })],
+      ['thickness', (r) => (r.frame = { material: 'oak', thickness: 1.5 })],
+      ['source', (r) => (r.source = { imageId: 'img1', width: 0, height: 4 })],
+      ['source', (r) => (r.source = { imageId: 'img1', width: 8 })],
+    ]
+    for (const [field, edit] of cases) {
+      const pack = await packWith((l) => edit(firstPainting(l).recipe as Record<string, unknown>))
+      expect(
+        failure(() => readLibraryPack(pack)),
+        field,
+      ).toMatch(new RegExp(`^not-a-library-pack: .*painting 0 .*${field}`))
+    }
+  })
+
+  it('refuses malformed painting dates and publication', async () => {
+    const cases: Array<[string, (p: Record<string, unknown>) => void]> = [
+      ['createdAt', (p) => (p.createdAt = 'yesterday')],
+      ['updatedAt', (p) => delete p.updatedAt],
+      ['publishedIn', (p) => (p.publishedIn = 0)],
+      ['publishedIn', (p) => (p.publishedIn = 9)],
+      ['publishedIn', (p) => delete p.publishedIn],
+    ]
+    for (const [field, edit] of cases) {
+      const pack = await packWith((l) => edit(firstPainting(l)))
+      expect(
+        failure(() => readLibraryPack(pack)),
+        field,
+      ).toMatch(new RegExp(`^not-a-library-pack: .*painting 0 .*${field}`))
+    }
+  })
+
+  it('names the painting when its recipe cannot be rendered during export', async () => {
+    const { lib, p, assets } = sample()
+    // As a hand-edited pack held it before packs were fully checked.
+    const broken = { ...p, recipe: { ...p.recipe, crop: undefined as unknown as Recipe['crop'] } }
+    const error: unknown = await writeLibraryPack(
+      upsertPainting(lib, broken),
+      [p.id],
+      assets,
+      now,
+    ).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ShapeError)
+    expect(error).toMatchObject({ code: 'export-failed', painting: 'Sunset' })
+    expect(String((error as Error).message)).toContain(p.id)
+  })
+
   it('refuses an image and an edit layer with the same asset name', async () => {
     const { lib, p, assets } = sample()
     const entries = unzipEntries((await writeLibraryPack(lib, [p.id], assets, now)).bytes)
@@ -323,7 +412,7 @@ describe('library pack checks', () => {
       now,
     ).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ShapeError)
-    expect(error).toMatchObject({ code: 'export-failed' })
+    expect(error).toMatchObject({ code: 'export-failed', painting: 'Sunset' })
     expect(String((error as Error).message)).toContain('Sunset')
     expect(String((error as Error).message)).toContain(p.id)
   })

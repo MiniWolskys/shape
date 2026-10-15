@@ -52,7 +52,8 @@ export function buildSampleLibrary(
     while (takenIds.has(id)) id = makePaintingId(title, random)
     takenIds.add(id)
     let imageId = makeAssetId(random)
-    while (imageId in assets || takenAssetIds.has(imageId)) imageId = makeAssetId(random)
+    while (Object.hasOwn(assets, imageId) || takenAssetIds.has(imageId))
+      imageId = makeAssetId(random)
     const width = s.width * PIXELS_PER_BLOCK
     const height = s.height * PIXELS_PER_BLOCK
     assets[imageId] = encodePng(renderScene(s.scene, width, height))

@@ -101,7 +101,8 @@ function ExportView({ library }: { library: Library }) {
 
   async function runExport() {
     const state = useWorkspace.getState()
-    if (!state.library || busy) return
+    // `busy` is this render's: a second click in the same frame still sees the build running.
+    if (!state.library || building.current) return
     const build = new AbortController()
     building.current = build
     const planned = plan
@@ -131,11 +132,17 @@ function ExportView({ library }: { library: Library }) {
       if (error instanceof ShapeError && error.code === 'export-failed') {
         // The message is developer text in English; players get a translated reason.
         console.error('Export failed', error)
-        toast(errorMessage(error, t, { reason: t.export.failedReason }), 'error')
+        const reason =
+          error.painting === undefined
+            ? t.export.failedReason
+            : format(t.export.failedPainting, { title: error.painting })
+        toast(errorMessage(error, t, { reason }), 'error')
       } else {
         toast(errorMessage(error, t), 'error')
       }
       setPhase({ kind: 'choose' })
+    } finally {
+      if (building.current === build) building.current = null
     }
   }
 

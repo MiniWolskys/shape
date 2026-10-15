@@ -492,6 +492,7 @@ export const fr: Dictionary = {
     issues: 'Vérifications',
     issue: {
       noImage: '« {title} » n’a pas d’image.',
+      editsMissing: 'Les retouches de « {title} » sont introuvables. Il sera exporté sans elles.',
       duplicateId: '« {title} » a le même identifiant ({id}) qu’un autre tableau.',
       noTitle: 'Le tableau {id} n’a pas de titre.',
       noAuthor: '« {title} » n’a pas d’auteur.',
@@ -521,6 +522,8 @@ export const fr: Dictionary = {
     againNote: 'Rien de nouveau : les fichiers du serveur sont exactement ceux de la v{version}.',
     exporting: 'Création du pack…',
     rendering: 'Rendu {done}/{total}…',
+    failedPainting:
+      'impossible de fabriquer « {title} ». Ouvrez-le, choisissez à nouveau son image (et repeignez les retouches abîmées), puis exportez.',
     failedReason:
       'l’image ou les retouches d’un tableau sont illisibles. Ouvrez-le, choisissez à nouveau son image, puis exportez.',
     started: 'Le téléchargement de {file} a commencé.',

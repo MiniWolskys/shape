@@ -16,7 +16,7 @@ export interface PackRequest {
 export type PackReply =
   | { kind: 'progress'; done: number; total: number }
   | { kind: 'packed'; result: LibraryPackResult }
-  | { kind: 'failed'; code: ShapeErrorCode | null; message: string }
+  | { kind: 'failed'; code: ShapeErrorCode | null; message: string; painting?: string }
 
 type Progress = (done: number, total: number) => void
 
@@ -72,7 +72,8 @@ export function buildLibraryPack(
       worker.terminate()
       signal?.removeEventListener('abort', stop)
       if (reply.kind === 'packed') resolve(reply.result)
-      else reject(reply.code ? new ShapeError(reply.code, reply.message) : new Error(reply.message))
+      else if (reply.code) reject(new ShapeError(reply.code, reply.message, reply.painting))
+      else reject(new Error(reply.message))
     }
     const stop = () => {
       worker.terminate()

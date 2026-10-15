@@ -478,6 +478,47 @@ describe('ExportScreen', () => {
     await waitFor(() => expect(downloadButton()).toBeEnabled())
   })
 
+  it('names the painting that could not be built, so the player knows which to open', async () => {
+    vi.spyOn(libraryPack, 'writeLibraryPack').mockRejectedValue(
+      new ShapeError('export-failed', 'The recipe cannot be rendered', 'Sunset Chapel'),
+    )
+    vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    renderExport()
+    await userEvent.click(downloadButton())
+    expect(
+      await screen.findByText(/The export failed: "Sunset Chapel" can’t be built/),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(downloadButton()).toBeEnabled())
+  })
+
+  it('starts one build however fast the button is clicked', async () => {
+    let finish: () => void = () => {}
+    const write = vi.spyOn(libraryPack, 'writeLibraryPack').mockImplementation(
+      (lib) =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({ bytes: new Uint8Array([1]), fileName: 'x.zip', sha1: 'ab', library: lib })
+        }),
+    )
+    const save = vi.spyOn(download, 'downloadBytes').mockImplementation(() => {})
+    await startWith(library([painting('Sunset Chapel', 'Sam')]))
+    renderExport()
+    const button = downloadButton()
+    // Both clicks land in the same frame, before React renders the busy state.
+    act(() => {
+      button.click()
+      button.click()
+    })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+      finish()
+    })
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
   it('sends players without a library home with an explanation', async () => {
     await startWith(null)
     renderExport()

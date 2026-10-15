@@ -21,6 +21,25 @@ describe('validateForExport', () => {
       { code: 'no-image', paintingId: p.id, blocking: true },
     ])
   })
+  it('does not take an inherited property for a stored picture', () => {
+    const p0 = withSource('A')
+    const p = {
+      ...p0,
+      recipe: { ...p0.recipe, source: { imageId: 'constructor', width: 1, height: 1 } },
+    }
+    const l = upsertPainting(createLibrary('L', 'l'), p)
+    expect(validateForExport(l, [p.id], {})).toEqual([
+      { code: 'no-image', paintingId: p.id, blocking: true },
+    ])
+  })
+  it('warns when the pixel edits of a painting are missing', () => {
+    const p0 = withSource('A')
+    const p = { ...p0, recipe: { ...p0.recipe, editsId: 'e1' } }
+    const l = upsertPainting(createLibrary('L', 'l'), p)
+    expect(validateForExport(l, [p.id], { img1: new Uint8Array(), e1: new Uint8Array() })).toEqual([
+      { code: 'edits-missing', paintingId: p.id, blocking: false },
+    ])
+  })
   it('blocks paintings whose image asset is missing', () => {
     const p = withSource('A')
     const l = upsertPainting(createLibrary('L', 'l'), p)

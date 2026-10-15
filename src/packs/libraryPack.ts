@@ -1,5 +1,5 @@
 import { ShapeError } from '../domain/errors.ts'
-import { isValidNamespace } from '../domain/ids.ts'
+import { isValidAssetId, isValidNamespace } from '../domain/ids.ts'
 import { exportSet, publish } from '../domain/library.ts'
 import {
   FRAME_MATERIAL_IDS,
@@ -12,6 +12,7 @@ import {
 import type { EditLayer } from '../imaging/edits.ts'
 import { renderPainting } from '../imaging/pipeline.ts'
 import type { Raster } from '../imaging/raster.ts'
+import { FRAME_BOUND } from '../imaging/window.ts'
 import { buildDatapackFiles } from './datapack.ts'
 import { jsonBytes } from './formats.ts'
 import { decodeEditLayer, decodePng, encodePng } from './png.ts'
@@ -70,16 +71,29 @@ function readme(ns: string, sha1: string): string {
   ].join('\n')
 }
 
+/** An export-failed error naming the painting, so the player knows which one to open. */
+function paintingFailed(p: Painting, what: string, cause: unknown): ShapeError {
+  const why = cause instanceof Error ? cause.message : String(cause)
+  return new ShapeError(
+    'export-failed',
+    `The ${what} for painting "${p.title}" (${p.id}): ${why}. Open it, choose the picture again, then export.`,
+    p.title.trim() || p.id,
+  )
+}
+
+const assetOf = (assets: Assets, key: string): Uint8Array | undefined =>
+  Object.hasOwn(assets, key) ? assets[key] : undefined
+
 function decodeAsset(assets: Assets, key: string): Raster | null {
-  const bytes = assets[key]
+  const bytes = assetOf(assets, key)
   return bytes ? decodePng(bytes) : null
 }
 
 function editsFor(p: Painting, assets: Assets): EditLayer | null {
   const id = p.recipe.editsId
   if (id === null) return null
-  const values = assets[id]
-  const mask = assets[`${id}.mask`]
+  const values = assetOf(assets, id)
+  const mask = assetOf(assets, `${id}.mask`)
   return values && mask ? decodeEditLayer(values, mask) : null
 }
 
@@ -128,12 +142,16 @@ export async function writeLibraryPack(
       source = p.recipe.source ? decodeAsset(assets, p.recipe.source.imageId) : null
       edits = editsFor(p, assets)
     } catch (e) {
-      throw new ShapeError(
-        'export-failed',
-        `The stored picture or pixel edits of painting "${p.title}" (${p.id}) are damaged: ${e instanceof Error ? e.message : String(e)} Choose the picture again, then export.`,
-      )
+      throw paintingFailed(p, 'stored picture or pixel edits are damaged', e)
     }
-    textures[p.id] = encodePng(renderPainting(source, edits, p))
+    let texture: Raster
+    try {
+      texture = renderPainting(source, edits, p)
+    } catch (e) {
+      // Never a library that can't be exported for good: the player learns which painting it is.
+      throw paintingFailed(p, 'recipe cannot be rendered', e)
+    }
+    textures[p.id] = encodePng(texture)
   }
   const datapack = zipDeterministic(buildDatapackFiles(library, paintings))
   const resources = zipDeterministic(buildResourcePackFiles(library, textures))
@@ -167,22 +185,77 @@ function notALibraryPack(why: string): ShapeError {
 }
 
 const PAINTING_ID = /^[a-z0-9_]+$/
-/** Asset ids become zip paths, so only plain file-name characters are accepted. */
-const ASSET_ID = /^[A-Za-z0-9_-]+$/
 const STATUSES = ['draft', 'ready', 'published']
+const ROTATIONS = [0, 90, 180, 270]
+const SCALINGS = ['sharp', 'smooth']
+const PALETTES = ['auto', 'blocks']
+const CROP_FIELDS = ['x', 'y', 'width', 'height']
+const ADJUST_FIELDS = ['brightness', 'contrast', 'saturation']
 
 type Json = Record<string, unknown>
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isIntIn = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
+const isNumberIn = (v: unknown, min: number, max: number) =>
+  typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
 const isOneOf = (v: unknown, values: readonly string[]) =>
   typeof v === 'string' && values.includes(v)
+const isBoolean = (v: unknown) => typeof v === 'boolean'
 /** An ISO 8601 UTC timestamp exactly as `Date.toISOString` writes it (no impossible dates). */
 const isIsoTime = (v: unknown) =>
   typeof v === 'string' && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString() === v
+const isAssetId = (v: unknown) => typeof v === 'string' && isValidAssetId(v)
+const MAX = Number.MAX_SAFE_INTEGER
+
+/**
+ * Returns the first problem with a recipe, or null when the pipeline can render it: every field
+ * is checked against the range the editor can produce.
+ */
+function recipeProblem(r: unknown): string | null {
+  if (!isObject(r)) return 'has no recipe'
+  const { source, crop, adjust, mcLook, window, frame } = r
+  if (
+    source !== null &&
+    (!isObject(source) ||
+      !isAssetId(source.imageId) ||
+      !isIntIn(source.width, 1, MAX) ||
+      !isIntIn(source.height, 1, MAX))
+  ) {
+    return 'has an invalid source'
+  }
+  if (!isObject(crop) || !CROP_FIELDS.every((k) => isNumberIn(crop[k], 0, MAX))) {
+    return 'has an invalid crop'
+  }
+  if (typeof r.rotation !== 'number' || !ROTATIONS.includes(r.rotation)) {
+    return 'has an invalid rotation'
+  }
+  if (!isBoolean(r.flipX)) return 'has an invalid flipX'
+  if (!isBoolean(r.flipY)) return 'has an invalid flipY'
+  if (!isOneOf(r.scaling, SCALINGS)) return 'has an invalid scaling'
+  if (!isObject(adjust) || !ADJUST_FIELDS.every((k) => isNumberIn(adjust[k], -100, 100))) {
+    return 'has an invalid adjust'
+  }
+  if (
+    !isObject(mcLook) ||
+    !isBoolean(mcLook.enabled) ||
+    !isIntIn(mcLook.colors, 2, 64) ||
+    !isOneOf(mcLook.palette, PALETTES) ||
+    !isBoolean(mcLook.dither)
+  ) {
+    return 'has an invalid mcLook'
+  }
+  if (!isObject(window) || !isOneOf(window.shape, SHAPE_IDS)) return 'has an invalid shape'
+  if (!isNumberIn(window.glassOpacity, 0, 1)) return 'has an invalid glassOpacity'
+  if (!isObject(frame) || !isOneOf(frame.material, FRAME_MATERIAL_IDS)) {
+    return 'has an invalid frame'
+  }
+  if (!isIntIn(frame.thickness, 0, FRAME_BOUND)) return 'has an invalid frame thickness'
+  if (r.editsId !== null && !isAssetId(r.editsId)) return 'has an invalid editsId'
+  return null
+}
 
 /** Returns the first problem with a painting entry, or null when it can be used safely. */
-function paintingProblem(p: unknown): string | null {
+function paintingProblem(p: unknown, version: number): string | null {
   if (!isObject(p)) return 'is not an object'
   if (typeof p.id !== 'string' || !PAINTING_ID.test(p.id)) return 'has an invalid id'
   if (typeof p.title !== 'string') return 'has no title'
@@ -193,24 +266,14 @@ function paintingProblem(p: unknown): string | null {
   if (!isIntIn(p.height, 1, 16)) return 'has an invalid height'
   if (!isIntIn(p.pixelsPerBlock, 1, 64)) return 'has an invalid pixelsPerBlock'
   if (!isOneOf(p.status, STATUSES)) return 'has an invalid status'
-  const r = p.recipe
-  if (!isObject(r)) return 'has no recipe'
-  if (!isObject(r.window) || !isOneOf(r.window.shape, SHAPE_IDS)) return 'has an invalid shape'
-  if (!isObject(r.frame) || !isOneOf(r.frame.material, FRAME_MATERIAL_IDS)) {
-    return 'has an invalid frame'
+  // A published painting names the version that published it; no other painting names one.
+  const published = p.status === 'published'
+  if (published ? !isIntIn(p.publishedIn, 1, version) : p.publishedIn !== undefined) {
+    return 'has an invalid publishedIn'
   }
-  if (r.editsId !== null && (typeof r.editsId !== 'string' || !ASSET_ID.test(r.editsId))) {
-    return 'has an invalid editsId'
-  }
-  if (
-    r.source !== null &&
-    (!isObject(r.source) ||
-      typeof r.source.imageId !== 'string' ||
-      !ASSET_ID.test(r.source.imageId))
-  ) {
-    return 'has an invalid source'
-  }
-  return null
+  if (!isIsoTime(p.createdAt)) return 'has an invalid createdAt'
+  if (!isIsoTime(p.updatedAt)) return 'has an invalid updatedAt'
+  return recipeProblem(p.recipe)
 }
 
 function parseLibrary(bytes: Uint8Array): Library {
@@ -230,13 +293,11 @@ function parseLibrary(bytes: Uint8Array): Library {
       'This library pack was made by a newer Shape. Open it with the latest version of Shape.',
     )
   }
-  if (
-    formatVersion !== FORMAT_VERSION ||
-    typeof name !== 'string' ||
-    typeof version !== 'number' ||
-    !Array.isArray(paintings)
-  ) {
+  if (formatVersion !== FORMAT_VERSION || typeof name !== 'string' || !Array.isArray(paintings)) {
     throw notALibraryPack(`${LIBRARY_ENTRY} is missing library fields`)
+  }
+  if (typeof version !== 'number' || !isIntIn(version, 0, MAX)) {
+    throw notALibraryPack(`${LIBRARY_ENTRY} has an invalid version`)
   }
   if (typeof namespace !== 'string' || !isValidNamespace(namespace)) {
     throw notALibraryPack(`${LIBRARY_ENTRY} has an invalid namespace`)
@@ -246,7 +307,7 @@ function parseLibrary(bytes: Uint8Array): Library {
   }
   const seen = new Set<string>()
   paintings.forEach((p: unknown, i) => {
-    const problem = paintingProblem(p)
+    const problem = paintingProblem(p, version)
     if (problem) throw notALibraryPack(`painting ${i} ${problem}`)
     const id = (p as Json).id as string
     if (seen.has(id)) throw notALibraryPack(`painting ${i} repeats the id ${id}`)
@@ -265,7 +326,8 @@ export function readLibraryPack(bytes: Uint8Array): { library: Library; assets: 
   const assets = new Map<string, Uint8Array>()
   for (const [path, data] of Object.entries(entries)) {
     const key = /^(?:images|edits)\/([^/]+)\.png$/.exec(path)?.[1]
-    if (!key) continue
+    // No painting can name an object's own property (isValidAssetId): such a file is unused.
+    if (!key || !isValidAssetId(key.replace(/\.mask$/, ''))) continue
     if (assets.has(key)) throw notALibraryPack(`two files share the asset name ${key}`)
     assets.set(key, data)
   }

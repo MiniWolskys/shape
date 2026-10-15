@@ -21,10 +21,12 @@ scope.onmessage = async (event) => {
     )
     scope.postMessage({ kind: 'packed', result }, [result.bytes.buffer as ArrayBuffer])
   } catch (error) {
+    const shapeError = error instanceof ShapeError ? error : null
     scope.postMessage({
       kind: 'failed',
-      code: error instanceof ShapeError ? error.code : null,
+      code: shapeError?.code ?? null,
       message: error instanceof Error ? error.message : String(error),
+      ...(shapeError?.painting === undefined ? {} : { painting: shapeError.painting }),
     })
   }
 }

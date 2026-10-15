@@ -35,7 +35,7 @@ describe('namespaces', () => {
     expect(isValidNamespace('our.paintings-2')).toBe(true)
   })
   it('rejects bad ones', () => {
-    for (const ns of ['', 'Our', 'a b', 'minecraft', 'x'.repeat(65)])
+    for (const ns of ['', 'Our', 'a b', 'minecraft', 'x'.repeat(65), '.', '..', '.hidden', '-x'])
       expect(isValidNamespace(ns)).toBe(false)
   })
   it('derives from a name', () => expect(namespaceFromName('Our Paintings')).toBe('our_paintings'))

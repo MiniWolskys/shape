@@ -74,11 +74,14 @@ describe('buildLibraryPack', () => {
   it('keeps the error code of a failed build', async () => {
     vi.stubGlobal(
       'Worker',
-      fakeWorker([{ kind: 'failed', code: 'export-failed', message: 'damaged' }], []),
+      fakeWorker(
+        [{ kind: 'failed', code: 'export-failed', message: 'damaged', painting: 'Sunset' }],
+        [],
+      ),
     )
     const error: unknown = await buildLibraryPack(lib, [], {}, now, () => {}).catch((e) => e)
     expect(error).toBeInstanceOf(ShapeError)
-    expect(error).toMatchObject({ code: 'export-failed', message: 'damaged' })
+    expect(error).toMatchObject({ code: 'export-failed', message: 'damaged', painting: 'Sunset' })
   })
 
   it('stops the worker when the build is aborted', async () => {

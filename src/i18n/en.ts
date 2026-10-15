@@ -488,6 +488,7 @@ export const en = {
     issues: 'Checks',
     issue: {
       noImage: '"{title}" has no picture.',
+      editsMissing: 'The pixel edits of "{title}" are missing. It will be exported without them.',
       duplicateId: '"{title}" shares its ID ({id}) with another painting.',
       noTitle: 'The painting {id} has no title.',
       noAuthor: '"{title}" has no author.',
@@ -516,6 +517,8 @@ export const en = {
     },
     exporting: 'Building the pack…',
     rendering: 'Rendering {done}/{total}…',
+    failedPainting:
+      '"{title}" can’t be built. Open it, choose its picture again (and paint over damaged pixel edits), then export.',
     failedReason:
       "a painting's picture or pixel edits couldn't be read. Open it, choose its picture again, then export.",
     started: 'Your download of {file} started.',

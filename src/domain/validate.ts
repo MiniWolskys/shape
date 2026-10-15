@@ -1,7 +1,8 @@
 import { exportSet, isChanged } from './library.ts'
 import type { Assets, Library } from './types.ts'
 
-export type IssueCode = 'no-image' | 'duplicate-id' | 'no-title' | 'no-author' | 'nothing-new'
+export type IssueCode =
+  'no-image' | 'edits-missing' | 'duplicate-id' | 'no-title' | 'no-author' | 'nothing-new'
 export interface Issue {
   code: IssueCode
   paintingId?: string
@@ -22,8 +23,16 @@ export function validateForExport(lib: Library, ids: string[], assets: Assets): 
     }
     seen.add(p.id)
     const source = p.recipe.source
-    if (!source || !(source.imageId in assets)) {
+    if (!source || !Object.hasOwn(assets, source.imageId)) {
       issues.push({ code: 'no-image', paintingId: p.id, blocking: true })
+    }
+    // The texture would be built without them: say so instead of dropping them silently.
+    const edits = p.recipe.editsId
+    if (
+      edits !== null &&
+      !(Object.hasOwn(assets, edits) && Object.hasOwn(assets, `${edits}.mask`))
+    ) {
+      issues.push({ code: 'edits-missing', paintingId: p.id, blocking: false })
     }
     if (p.title.trim() === '') issues.push({ code: 'no-title', paintingId: p.id, blocking: false })
     if (p.author.trim() === '') {

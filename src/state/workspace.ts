@@ -112,7 +112,7 @@ function assetIdsOf(p: Painting): string[] {
 /** Drops the candidate asset ids unless a remaining painting still references them. */
 function pruneAssets(assets: Assets, candidates: string[], remaining: Painting[]): Assets {
   const used = new Set(remaining.flatMap(assetIdsOf))
-  const drop = candidates.filter((id) => !used.has(id) && id in assets)
+  const drop = candidates.filter((id) => !used.has(id) && Object.hasOwn(assets, id))
   if (drop.length === 0) return assets
   const next = { ...assets }
   for (const id of drop) delete next[id]
@@ -144,7 +144,7 @@ export function createWorkspaceStore(
     }
     const freshAssetId = (assets: Assets) => {
       let id = makeAssetId(Math.random)
-      while (id in assets) id = makeAssetId(Math.random)
+      while (Object.hasOwn(assets, id)) id = makeAssetId(Math.random)
       return id
     }
 

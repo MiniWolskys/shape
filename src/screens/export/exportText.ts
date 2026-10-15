@@ -44,6 +44,8 @@ export function issueMessage(issue: Issue, lib: Library, t: Dictionary): string 
   switch (issue.code) {
     case 'no-image':
       return format(t.export.issue.noImage, values)
+    case 'edits-missing':
+      return format(t.export.issue.editsMissing, values)
     case 'duplicate-id':
       return format(t.export.issue.duplicateId, values)
     case 'no-title':
