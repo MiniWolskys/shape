@@ -12,6 +12,7 @@ import {
 import type { EditLayer } from '../imaging/edits.ts'
 import { renderPainting } from '../imaging/pipeline.ts'
 import type { Raster } from '../imaging/raster.ts'
+import { FRAME_BOUND } from '../imaging/window.ts'
 import { buildDatapackFiles } from './datapack.ts'
 import { jsonBytes } from './formats.ts'
 import { decodeEditLayer, decodePng, encodePng } from './png.ts'
@@ -280,9 +281,10 @@ function paintingProblem(p: unknown, version: number): string | null {
   }
   if (!isIsoTime(p.createdAt)) return 'has an invalid createdAt'
   if (!isIsoTime(p.updatedAt)) return 'has an invalid updatedAt'
-  // A resize scales the thickness with the pixels per block (R4): up to half the shorter side.
+  // A resize scales the thickness with the pixels per block (R4): up to half the shorter side,
+  // and never less than the 16 px every painting could always have (small ones included).
   const shorter = Math.min(p.width as number, p.height as number) * (p.pixelsPerBlock as number)
-  return recipeProblem(p.recipe, Math.floor(shorter / 2))
+  return recipeProblem(p.recipe, Math.max(FRAME_BOUND, Math.floor(shorter / 2)))
 }
 
 function parseLibrary(bytes: Uint8Array): Library {

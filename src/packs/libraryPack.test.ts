@@ -396,6 +396,13 @@ describe('library pack checks', () => {
     expect(failure(() => readLibraryPack(tooThick))).toMatch(/painting 0 .*thickness/)
   })
 
+  it('keeps accepting the usual 0-16 px frames on tiny paintings', async () => {
+    const { lib, p, assets } = sample()
+    const tiny = { ...p, width: 1, height: 1, pixelsPerBlock: 2 }
+    const pack = await writeLibraryPack(upsertPainting(lib, tiny), [p.id], assets, now)
+    expect(readLibraryPack(pack.bytes).library.paintings[0]?.recipe.frame.thickness).toBe(2)
+  })
+
   it('refuses malformed painting dates and publication', async () => {
     const cases: Array<[string, (p: Record<string, unknown>) => void]> = [
       ['createdAt', (p) => (p.createdAt = 'yesterday')],
