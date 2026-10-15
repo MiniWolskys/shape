@@ -1,4 +1,5 @@
 import { useId, useRef } from 'react'
+import { defaultRecipe } from '../../../domain/library.ts'
 import type { Recipe } from '../../../domain/types.ts'
 import { format, useT } from '../../../i18n/i18n.ts'
 import { NO_CROP, useEditor } from '../../../state/editor.ts'
@@ -9,6 +10,9 @@ import { Segmented } from '../../../ui/Segmented.tsx'
 import { Slider } from '../../../ui/Slider.tsx'
 import { IMAGE_TYPES, loadPicture, noticeCropReset } from '../pictureActions.ts'
 import styles from './steps.module.css'
+
+/** What a double-click on a slider puts back. */
+const DEFAULTS = defaultRecipe()
 
 type Adjust = Recipe['adjust']
 type McLook = Recipe['mcLook']
@@ -128,6 +132,7 @@ export function ImageStep() {
           min={-100}
           max={100}
           value={adjust.brightness}
+          defaultValue={DEFAULTS.adjust.brightness}
           onChange={setAdjust('brightness')}
         />
         <Slider
@@ -136,6 +141,7 @@ export function ImageStep() {
           min={-100}
           max={100}
           value={adjust.contrast}
+          defaultValue={DEFAULTS.adjust.contrast}
           onChange={setAdjust('contrast')}
         />
         <Slider
@@ -144,6 +150,7 @@ export function ImageStep() {
           min={-100}
           max={100}
           value={adjust.saturation}
+          defaultValue={DEFAULTS.adjust.saturation}
           onChange={setAdjust('saturation')}
         />
       </section>
@@ -183,6 +190,7 @@ export function ImageStep() {
                 min={2}
                 max={64}
                 value={mcLook.colors}
+                defaultValue={DEFAULTS.mcLook.colors}
                 onChange={(colors) => setLook({ colors }, 'mcLook.colors')}
               />
             )}

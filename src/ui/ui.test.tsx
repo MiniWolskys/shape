@@ -75,28 +75,71 @@ describe('Segmented', () => {
 })
 
 describe('Slider', () => {
-  it('shows the value with its unit and reports changes as numbers', () => {
-    const onChange = vi.fn()
-    render(
+  function Harness(props: { initial?: number; onChange?: (v: number) => void }) {
+    const [value, setValue] = useState(props.initial ?? 4)
+    return (
       <Slider
         id="thickness"
         label="Frame thickness"
         min={0}
         max={8}
-        value={4}
+        value={value}
+        defaultValue={2}
         unit="px"
-        onChange={onChange}
-      />,
+        onChange={(v) => {
+          props.onChange?.(v)
+          setValue(v)
+        }}
+      />
     )
-    expect(screen.getByText('4 px')).toBeInTheDocument()
+  }
+
+  it('shows the value with its unit and reports changes as numbers', () => {
+    const onChange = vi.fn()
+    render(<Harness onChange={onChange} />)
+    expect(screen.getByRole('spinbutton', { name: 'Frame thickness (px)' })).toHaveValue(4)
+    expect(screen.getByText('px')).toBeInTheDocument()
     const input = screen.getByRole('slider', { name: 'Frame thickness' })
     fireEvent.change(input, { target: { value: '6' } })
     expect(onChange).toHaveBeenCalledWith(6)
+    expect(screen.getByRole('spinbutton', { name: 'Frame thickness (px)' })).toHaveValue(6)
   })
 
   it('shows the bare value without a unit', () => {
     render(<Slider id="s" label="Size" min={1} max={16} value={3} onChange={() => {}} />)
-    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Size' })).toHaveValue(3)
+  })
+
+  it('takes an exact value typed in its number field, kept within its range', async () => {
+    const onChange = vi.fn()
+    render(<Harness onChange={onChange} />)
+    const field = screen.getByRole('spinbutton', { name: 'Frame thickness (px)' })
+    await userEvent.clear(field)
+    await userEvent.type(field, '7')
+    expect(onChange).toHaveBeenLastCalledWith(7)
+    await userEvent.clear(field)
+    await userEvent.type(field, '50{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith(8)
+    expect(field).toHaveValue(8)
+    // An empty field goes back to the value on blur, without a change.
+    onChange.mockClear()
+    await userEvent.clear(field)
+    await userEvent.tab()
+    expect(onChange).not.toHaveBeenCalled()
+    expect(field).toHaveValue(8)
+  })
+
+  it('a double-click on the label or the slider puts the default back', async () => {
+    const onChange = vi.fn()
+    render(<Harness onChange={onChange} />)
+    await userEvent.dblClick(screen.getByText('Frame thickness'))
+    expect(onChange).toHaveBeenLastCalledWith(2)
+    fireEvent.change(screen.getByRole('slider', { name: 'Frame thickness' }), {
+      target: { value: '5' },
+    })
+    fireEvent.doubleClick(screen.getByRole('slider', { name: 'Frame thickness' }))
+    expect(onChange).toHaveBeenLastCalledWith(2)
+    expect(screen.getByRole('slider', { name: 'Frame thickness' })).toHaveValue('2')
   })
 })
 
