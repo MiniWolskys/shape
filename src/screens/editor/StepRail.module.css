@@ -1,4 +1,6 @@
+/* Positioned, so visually hidden text inside is clipped by the rail instead of widening the page. */
 .rail {
+  position: relative;
   display: grid;
   align-content: start;
   gap: 18px;
