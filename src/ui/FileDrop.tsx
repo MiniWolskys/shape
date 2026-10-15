@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+  type ReactNode,
+} from 'react'
 import styles from './FileDrop.module.css'
 
 interface FileDropProps {
@@ -6,8 +12,6 @@ interface FileDropProps {
   accept: string
   onFiles(files: File[]): void
   children: ReactNode
-  /** Accept drops anywhere in the window instead of only on this element. */
-  fullWindow?: boolean
 }
 
 function matchesAccept(file: File, accept: string): boolean {
@@ -43,16 +47,102 @@ function insideLocalZone(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(`[${ZONE_ATTR}]`) !== null
 }
 
+/** The MIME types of the files being dragged (often empty, e.g. for zips on some systems). */
+function draggedTypes(transfer: DataTransfer | null): string[] {
+  return Array.from(transfer?.items ?? [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.type)
+}
+
+interface WindowFileDropProps {
+  /** Gets every file dropped outside a local zone, or pasted while focus is outside one. */
+  onFiles(files: File[]): void
+  /** The overlay's words for files of these MIME types (empty strings when unknown). */
+  label(types: readonly string[]): string
+}
+
 /**
- * Drop target for files (highlighted while dragging); pasted files are accepted too.
- * A local zone handles drops on itself and pastes while focus is inside it; a `fullWindow`
- * instance handles every other drop and paste.
+ * The app's one window-wide file handler (C4): every file drag is kept from the browser (which
+ * would open the file in place of the app), shows an overlay saying what the drop will do, and
+ * ends in `onFiles` unless a local zone takes it. Pasted files go the same way.
  */
-export function FileDrop({ accept, onFiles, children, fullWindow = false }: FileDropProps) {
+export function WindowFileDrop({ onFiles, label }: WindowFileDropProps) {
+  const [types, setTypes] = useState<string[] | null>(null)
+  const depth = useRef(0)
+  // The latest handler for the window listeners without re-subscribing every render.
+  const latest = useRef(onFiles)
+  useEffect(() => {
+    latest.current = onFiles
+  })
+
+  useEffect(() => {
+    function reset() {
+      depth.current = 0
+      setTypes(null)
+    }
+    function deliver(list: FileList | null | undefined): boolean {
+      const files = Array.from(list ?? [])
+      if (files.length > 0) latest.current(files)
+      return files.length > 0
+    }
+    function onPaste(event: ClipboardEvent) {
+      if (event.defaultPrevented || isEditable(event.target)) return
+      if (insideLocalZone(document.activeElement)) return
+      if (deliver(event.clipboardData?.files)) event.preventDefault()
+    }
+    function onEnter(event: DragEvent) {
+      if (!hasFiles(event.dataTransfer)) return
+      event.preventDefault()
+      depth.current += 1
+      setTypes(draggedTypes(event.dataTransfer))
+    }
+    function onOver(event: DragEvent) {
+      if (hasFiles(event.dataTransfer)) event.preventDefault()
+    }
+    function onLeave() {
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setTypes(null)
+    }
+    // Capture phase: runs before any local zone, so the overlay always clears.
+    function onDrop(event: DragEvent) {
+      reset()
+      if (!hasFiles(event.dataTransfer)) return
+      event.preventDefault()
+      if (!insideLocalZone(event.target)) deliver(event.dataTransfer?.files)
+    }
+    document.addEventListener('paste', onPaste)
+    window.addEventListener('dragenter', onEnter)
+    window.addEventListener('dragover', onOver)
+    window.addEventListener('dragleave', onLeave)
+    window.addEventListener('drop', onDrop, true)
+    window.addEventListener('dragend', reset, true)
+    return () => {
+      document.removeEventListener('paste', onPaste)
+      window.removeEventListener('dragenter', onEnter)
+      window.removeEventListener('dragover', onOver)
+      window.removeEventListener('dragleave', onLeave)
+      window.removeEventListener('drop', onDrop, true)
+      window.removeEventListener('dragend', reset, true)
+    }
+  }, [])
+
+  if (types === null) return null
+  return (
+    <div className={styles.overlay} data-drop-overlay aria-hidden="true">
+      <p className={styles.label}>{label(types)}</p>
+    </div>
+  )
+}
+
+/**
+ * A local drop target for files (highlighted while dragging): it takes drops on itself and
+ * pastes while focus is inside it; WindowFileDrop leaves both to it.
+ */
+export function FileDrop({ accept, onFiles, children }: FileDropProps) {
   const [active, setActive] = useState(false)
   const depth = useRef(0)
   const zone = useRef<HTMLDivElement>(null)
-  // Latest props for the document/window listeners without re-subscribing every render.
+  // Latest props for the document listener without re-subscribing every render.
   const latest = useRef({ accept, onFiles })
   useEffect(() => {
     latest.current = { accept, onFiles }
@@ -72,71 +162,27 @@ export function FileDrop({ accept, onFiles, children, fullWindow = false }: File
   useEffect(() => {
     function onPaste(event: ClipboardEvent) {
       if (event.defaultPrevented || isEditable(event.target)) return
-      const focusInside = zone.current?.contains(document.activeElement) ?? false
-      if (fullWindow ? insideLocalZone(document.activeElement) : !focusInside) return
+      if (!(zone.current?.contains(document.activeElement) ?? false)) return
       if (deliver(event.clipboardData?.files)) event.preventDefault()
     }
     document.addEventListener('paste', onPaste)
-    if (!fullWindow) return () => document.removeEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [])
 
-    function onEnter(event: globalThis.DragEvent) {
-      if (!hasFiles(event.dataTransfer)) return
-      event.preventDefault()
-      depth.current += 1
-      setActive(true)
-    }
-    function onOver(event: globalThis.DragEvent) {
-      if (hasFiles(event.dataTransfer)) event.preventDefault()
-    }
-    function onLeave() {
-      depth.current = Math.max(0, depth.current - 1)
-      if (depth.current === 0) setActive(false)
-    }
-    // Capture phase: runs before any local zone, so the overlay always clears.
-    function onDrop(event: globalThis.DragEvent) {
-      reset()
-      if (!hasFiles(event.dataTransfer) || insideLocalZone(event.target)) return
-      event.preventDefault()
-      deliver(event.dataTransfer?.files)
-    }
-    window.addEventListener('dragenter', onEnter)
-    window.addEventListener('dragover', onOver)
-    window.addEventListener('dragleave', onLeave)
-    window.addEventListener('drop', onDrop, true)
-    window.addEventListener('dragend', reset, true)
-    return () => {
-      document.removeEventListener('paste', onPaste)
-      window.removeEventListener('dragenter', onEnter)
-      window.removeEventListener('dragover', onOver)
-      window.removeEventListener('dragleave', onLeave)
-      window.removeEventListener('drop', onDrop, true)
-      window.removeEventListener('dragend', reset, true)
-    }
-  }, [fullWindow])
-
-  if (fullWindow) {
-    return (
-      <>
-        {children}
-        {active && <div className={styles.overlay} data-drop-overlay aria-hidden="true" />}
-      </>
-    )
-  }
-
-  function onDragEnter(event: DragEvent<HTMLDivElement>) {
+  function onDragEnter(event: ReactDragEvent<HTMLDivElement>) {
     if (!hasFiles(event.dataTransfer)) return
     event.preventDefault()
     depth.current += 1
     setActive(true)
   }
-  function onDragOver(event: DragEvent<HTMLDivElement>) {
+  function onDragOver(event: ReactDragEvent<HTMLDivElement>) {
     if (hasFiles(event.dataTransfer)) event.preventDefault()
   }
   function onDragLeave() {
     depth.current = Math.max(0, depth.current - 1)
     if (depth.current === 0) setActive(false)
   }
-  function onDrop(event: DragEvent<HTMLDivElement>) {
+  function onDrop(event: ReactDragEvent<HTMLDivElement>) {
     reset()
     if (!hasFiles(event.dataTransfer)) return
     event.preventDefault()

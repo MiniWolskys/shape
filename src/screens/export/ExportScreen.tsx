@@ -160,7 +160,7 @@ export function ExportScreen() {
     // StrictMode runs effects twice; only the first run still sees the export screen.
     if (useNavigation.getState().screen.name !== 'export') return
     toast(t.export.needsLibrary)
-    go(hasLoose ? { name: 'library' } : { name: 'home' })
+    go(hasLoose ? { name: 'library' } : { name: 'home' }, { replace: true })
   }, [library, hasLoose, go, t])
 
   if (!library) return null

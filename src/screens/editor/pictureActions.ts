@@ -11,18 +11,24 @@ import { toast } from '../../ui/toastStore.ts'
 export const IMAGE_TYPES = 'image/*'
 
 /**
+ * What `loadPicture` did: `loaded` the picture, `sized` it as a first picture (the toast saying
+ * so is shown), `failed` (an error toast is shown) or nothing, the editor having moved on.
+ */
+export type PictureResult = 'loaded' | 'sized' | 'failed' | 'stale'
+
+/**
  * Uses a file as the open painting's picture. A first picture sizes the painting to fit (R20),
  * which a toast says, with a way to Size & crop.
  */
-export async function loadPicture(file: File): Promise<void> {
+export async function loadPicture(file: File): Promise<PictureResult> {
   // Decoding takes a while: the result only belongs to the session that asked for it.
   const session = useEditor.getState().session
   try {
     const raster = await fileToRaster(file)
-    if (useEditor.getState().session !== session) return
+    if (useEditor.getState().session !== session) return 'stale'
     const imageId = useWorkspace.getState().putAsset(encodePng(raster))
     const { autoSized } = useEditor.getState().setSource(raster, imageId)
-    if (!autoSized) return
+    if (!autoSized) return 'loaded'
     const t = currentDictionary()
     toast(format(t.editor.image.autoSized, autoSized), 'info', {
       label: t.editor.image.change,
@@ -30,8 +36,10 @@ export async function loadPicture(file: File): Promise<void> {
         if (useEditor.getState().session === session) useEditor.getState().setStep('size')
       },
     })
+    return 'sized'
   } catch (error) {
     toast(errorMessage(error, currentDictionary()), 'error')
+    return 'failed'
   }
 }
 

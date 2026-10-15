@@ -12,6 +12,7 @@ import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
 import { useToasts } from '../../ui/toastStore.ts'
+import { AppFileDrop } from '../AppFileDrop.tsx'
 import { HomeScreen } from './HomeScreen.tsx'
 
 const now = new Date('2026-10-15T12:00:00Z')
@@ -26,6 +27,7 @@ function renderHome() {
   return render(
     <>
       <HomeScreen />
+      <AppFileDrop />
       <Toasts />
     </>,
   )
@@ -89,10 +91,17 @@ describe('HomeScreen', () => {
     expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: null })
   })
 
-  it('shows a translated error when the dropped file is not a library pack', async () => {
+  it('shows a translated error when the dropped zip is not a library pack', async () => {
+    renderHome()
+    dropFile(new File(['hello'], 'photos.zip', { type: 'application/zip' }))
+    expect(await screen.findByText("This file isn't a Shape library pack.")).toBeInTheDocument()
+    expect(useNavigation.getState().screen).toEqual({ name: 'home' })
+  })
+
+  it('explains that other files are not taken here (C4)', async () => {
     renderHome()
     dropFile(new File(['hello'], 'notes.txt', { type: 'text/plain' }))
-    expect(await screen.findByText("This file isn't a Shape library pack.")).toBeInTheDocument()
+    expect(await screen.findByText(/Shape can't use this file/)).toBeInTheDocument()
     expect(useNavigation.getState().screen).toEqual({ name: 'home' })
   })
 

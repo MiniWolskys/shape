@@ -4,7 +4,6 @@ import type { Recipe } from '../../../domain/types.ts'
 import { format, useT } from '../../../i18n/i18n.ts'
 import { NO_CROP, useEditor } from '../../../state/editor.ts'
 import { Button } from '../../../ui/Button.tsx'
-import { FileDrop } from '../../../ui/FileDrop.tsx'
 import { Icon, type IconName } from '../../../ui/Icon.tsx'
 import { Segmented } from '../../../ui/Segmented.tsx'
 import { Slider } from '../../../ui/Slider.tsx'
@@ -64,13 +63,7 @@ export function ImageStep() {
   ]
 
   return (
-    <FileDrop
-      accept={IMAGE_TYPES}
-      fullWindow
-      onFiles={([file]) => {
-        if (file) void loadPicture(file)
-      }}
-    >
+    <>
       <section className={styles.section}>
         <h2 className={styles.heading}>{t.editor.image.heading}</h2>
         <div className={styles.dropZone}>
@@ -205,6 +198,6 @@ export function ImageStep() {
           </>
         )}
       </section>
-    </FileDrop>
+    </>
   )
 }

@@ -11,6 +11,7 @@ import { Icon } from '../../ui/Icon.tsx'
 import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
 import { NewLibraryDialog } from '../home/NewLibraryDialog.tsx'
+import { importPackFile } from '../packImport.ts'
 import styles from './LibraryScreen.module.css'
 import { LooseBanner } from './LooseBanner.tsx'
 import { PaintingCard } from './PaintingCard.tsx'
@@ -56,7 +57,7 @@ export function LibraryScreen() {
 
   const nothingToShow = !library && loose.length === 0
   useEffect(() => {
-    if (nothingToShow) go({ name: 'home' })
+    if (nothingToShow) go({ name: 'home' }, { replace: true })
   }, [nothingToShow, go])
   if (nothingToShow) return null
 
@@ -74,17 +75,6 @@ export function LibraryScreen() {
   /** A new painting only enters the workspace once it is changed (R18). */
   function createPainting() {
     go({ name: 'editor', paintingId: null })
-  }
-
-  async function openPack(file: File) {
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const { added } = useWorkspace.getState().importPack(bytes)
-      toast(plural(t, t.home.packAdded, added))
-    } catch (error) {
-      const namespace = useWorkspace.getState().library?.namespace ?? ''
-      toast(errorMessage(error, t, { namespace }), 'error')
-    }
   }
 
   function addLoose() {
@@ -132,7 +122,7 @@ export function LibraryScreen() {
       onChange={(event) => {
         const [file] = Array.from(event.target.files ?? [])
         event.target.value = ''
-        if (file) void openPack(file)
+        if (file) void importPackFile(file)
       }}
     />
   )

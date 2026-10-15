@@ -8,7 +8,7 @@ import { isEmptyLayer, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster } from '../../imaging/raster.ts'
 import { decodeEditLayer, decodePng, encodeEditLayer } from '../../packs/png.ts'
 import { useEditor, type EditorStep, type Tool } from '../../state/editor.ts'
-import { useNavigation } from '../../state/navigation.ts'
+import { setLeaveGuard, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
 import { errorMessage } from '../../ui/errors.ts'
@@ -146,7 +146,8 @@ function savePaintingNow(): Painting | null {
     screen.paintingId !== id &&
     (screen.paintingId === null || screen.paintingId === painting.id)
   ) {
-    navigation.go({ name: 'editor', paintingId: id })
+    // The same page under its new name: Back must not lead to the old id or a new draft.
+    navigation.go({ name: 'editor', paintingId: id }, { replace: true })
   }
   return saved
 }
@@ -219,7 +220,7 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
     const p = workspace.findPainting(paintingId)
     if (!p) {
       toast(t.editor.notFound, 'error')
-      go({ name: 'library' })
+      go({ name: 'library' }, { replace: true })
       return
     }
     editor.open(p, decodeSource(p, workspace.assets, t), decodeEdits(p, workspace.assets, t))
@@ -239,6 +240,12 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
       // save they may be all that is left of the work, so they stay.
       if (saved) useWorkspace.getState().pruneUnreferencedAssets()
     }
+  }, [])
+
+  // Browser Back and Forward leave like Back does: save first, and stay when that fails.
+  useEffect(() => {
+    setLeaveGuard(() => autosave.current?.flush() !== false)
+    return () => setLeaveGuard(null)
   }, [])
 
   // Hiding or closing the page saves at once and writes the workspace to storage.
@@ -374,7 +381,8 @@ export function EditorScreen({ paintingId }: { paintingId: string | null }) {
           </div>
         }
       />
-      <div className={styles.editor}>
+      {/* A new grid for each opened painting: nothing local to the last one carries over. */}
+      <div key={session} className={styles.editor} data-editor-session={session}>
         <StepRail />
         <Stage />
         <aside className={styles.inspector} aria-label={t.editor.steps[step]}>

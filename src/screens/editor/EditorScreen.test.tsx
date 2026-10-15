@@ -9,7 +9,7 @@ import { createRaster } from '../../imaging/raster.ts'
 import { decodeEditLayer, encodePng } from '../../packs/png.ts'
 import * as png from '../../packs/png.ts'
 import { forgetLastSteps, useEditor } from '../../state/editor.ts'
-import { useNavigation } from '../../state/navigation.ts'
+import { startHashRouting, useNavigation } from '../../state/navigation.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { memoryStorage } from '../../storage/persistence.ts'
 import { Toasts } from '../../ui/Toasts.tsx'
@@ -273,6 +273,94 @@ describe('EditorScreen', () => {
     expect(useWorkspace.getState().assets[imageId]).toBeDefined()
     await userEvent.click(screen.getByRole('button', { name: 'Shape · Home' }))
     expect(useNavigation.getState().screen.name).toBe('editor')
+  })
+
+  describe('with the browser history (I10)', () => {
+    let stop: () => void = () => {}
+    beforeEach(() => {
+      history.replaceState(null, '', '#/library')
+    })
+    afterEach(() => stop())
+
+    /** Opens the editor the way the app does, so the URL follows the screen. */
+    function openRouted(id: string) {
+      useNavigation.setState({ screen: { name: 'library' } })
+      stop = startHashRouting()
+      act(() => useNavigation.getState().go({ name: 'editor', paintingId: id }))
+      return render(
+        <>
+          <Routed />
+          <Toasts />
+        </>,
+      )
+    }
+    function browserGoesTo(hash: string) {
+      act(() => {
+        history.replaceState(null, '', hash)
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      })
+    }
+
+    it('browser Back saves what is pending, then shows the library', async () => {
+      const p = painting()
+      await startWith(p)
+      openRouted(p.id)
+      expect(location.hash).toBe(`#/edit/${p.id}`)
+      act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+      browserGoesTo('#/library')
+      expect(useNavigation.getState().screen).toEqual({ name: 'library' })
+      expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+    })
+
+    it('browser Back stays in the editor, URL included, when that save fails', async () => {
+      const p = painting()
+      await startWith(p)
+      openRouted(p.id)
+      act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+      const realSave = useWorkspace.getState().savePainting
+      useWorkspace.setState({
+        savePainting: () => {
+          throw new Error('disk on fire')
+        },
+      })
+      onTestFinished(() => useWorkspace.setState({ savePainting: realSave }))
+      browserGoesTo('#/library')
+      expect(useNavigation.getState().screen).toEqual({ name: 'editor', paintingId: p.id })
+      expect(location.hash).toBe(`#/edit/${p.id}`)
+      expect(screen.getByText('Something went wrong: disk on fire')).toBeInTheDocument()
+    })
+
+    it('Back and Forward between two paintings saves the first and opens the second afresh', async () => {
+      const p = painting()
+      const other = painting({ id: 'other_abc', title: 'Other' })
+      await startWith(p)
+      useWorkspace.getState().savePainting(other)
+      openRouted(p.id)
+      const grid = document.querySelector('[data-editor-session]')
+      act(() => useEditor.getState().change((q) => ({ ...q, author: 'Ana' })))
+      browserGoesTo(`#/edit/${other.id}`)
+      expect(useWorkspace.getState().findPainting(p.id)?.author).toBe('Ana')
+      expect(screen.getByRole('heading', { name: 'Other', level: 1 })).toBeInTheDocument()
+      // A new editor grid: nothing local to the first painting is left over.
+      expect(document.querySelector('[data-editor-session]')).not.toBe(grid)
+    })
+
+    it('a new painting gets its id in the URL in place of #/edit/new', async () => {
+      await startWith(painting())
+      useNavigation.setState({ screen: { name: 'library' } })
+      stop = startHashRouting()
+      const before = history.length
+      act(() => useNavigation.getState().go({ name: 'editor', paintingId: null }))
+      render(<Routed />)
+      expect(location.hash).toBe('#/edit/new')
+      retitle('Rose')
+      fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+      const id = openId()
+      expect(id).toMatch(/^rose_/)
+      expect(location.hash).toBe(`#/edit/${id}`)
+      // Replaced, not pushed: Back goes to the library, not to a new blank painting.
+      expect(history.length).toBe(before + 1)
+    })
   })
 
   it('a save that fails half-way leaves the id alone, and the next one adds no copy', async () => {

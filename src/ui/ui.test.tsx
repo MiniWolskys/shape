@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { createRaster } from '../imaging/raster.ts'
@@ -7,7 +7,7 @@ import { autoBackdrop } from './backdrop.ts'
 import { Button } from './Button.tsx'
 import { Dialog } from './Dialog.tsx'
 import { downloadBytes } from './download.ts'
-import { FileDrop } from './FileDrop.tsx'
+import { FileDrop, WindowFileDrop } from './FileDrop.tsx'
 import { LanguageSwitch } from './LanguageSwitch.tsx'
 import { PaintingCanvas } from './PaintingCanvas.tsx'
 import { Segmented } from './Segmented.tsx'
@@ -383,16 +383,17 @@ describe('FileDrop', () => {
     expect(onFiles).toHaveBeenCalledWith([png, zip])
   })
 
-  function renderBoth() {
+  function renderBoth(label: (types: readonly string[]) => string = () => 'Drop it') {
     const full = vi.fn()
     const local = vi.fn()
     render(
-      <FileDrop fullWindow accept="image/*" onFiles={full}>
+      <>
+        <WindowFileDrop label={label} onFiles={full} />
         <p>Page</p>
         <FileDrop accept="image/*" onFiles={local}>
           <button type="button">Local zone</button>
         </FileDrop>
-      </FileDrop>,
+      </>,
     )
     return { full, local }
   }
@@ -412,16 +413,45 @@ describe('FileDrop', () => {
     expect(overlay()).toBeNull()
   })
 
-  it('delivers a drop elsewhere to the full-window handler only', () => {
+  it('delivers any file dropped elsewhere to the window handler, and keeps the page (C4)', () => {
     const { full, local } = renderBoth()
     const page = screen.getByText('Page')
     fireEvent.dragEnter(page, { dataTransfer: { files: [], types: ['Files'] } })
-    const file = png()
-    fireEvent.drop(page, { dataTransfer: { files: [file], types: ['Files'] } })
+    const over = createEvent.dragOver(page, { dataTransfer: { files: [], types: ['Files'] } })
+    fireEvent(page, over)
+    expect(over.defaultPrevented).toBe(true)
+    const file = new File(['x'], 'notes.txt', { type: 'text/plain' })
+    const drop = createEvent.drop(page, { dataTransfer: { files: [file], types: ['Files'] } })
+    fireEvent(page, drop)
+    // The browser never opens the file in place of the app.
+    expect(drop.defaultPrevented).toBe(true)
     expect(full).toHaveBeenCalledTimes(1)
     expect(full).toHaveBeenCalledWith([file])
     expect(local).not.toHaveBeenCalled()
     expect(overlay()).toBeNull()
+  })
+
+  it('labels the overlay with what the drop will do, from the dragged types', () => {
+    renderBoth((types) => `Will take ${types.join(',') || 'anything'}`)
+    fireEvent.dragEnter(screen.getByText('Page'), {
+      dataTransfer: {
+        files: [],
+        types: ['Files'],
+        items: [{ kind: 'file', type: 'image/png' }],
+      },
+    })
+    expect(overlay()).toHaveTextContent('Will take image/png')
+  })
+
+  it('leaves drags of text and links alone', () => {
+    const { full } = renderBoth()
+    const page = screen.getByText('Page')
+    fireEvent.dragEnter(page, { dataTransfer: { types: ['text/plain'] } })
+    expect(overlay()).toBeNull()
+    const drop = createEvent.drop(page, { dataTransfer: { types: ['text/plain'] } })
+    fireEvent(page, drop)
+    expect(drop.defaultPrevented).toBe(false)
+    expect(full).not.toHaveBeenCalled()
   })
 
   it('clears the overlay when the drag ends without a drop', () => {
@@ -432,7 +462,7 @@ describe('FileDrop', () => {
     expect(overlay()).toBeNull()
   })
 
-  it('gives a paste to the full-window handler unless focus is inside a local zone', () => {
+  it('gives a pasted file to the window handler unless focus is inside a local zone', () => {
     const { full, local } = renderBoth()
     const first = png()
     fireEvent.paste(document.body, { clipboardData: { files: [first] } })
@@ -447,17 +477,13 @@ describe('FileDrop', () => {
     expect(full).toHaveBeenCalledTimes(1)
   })
 
-  it('ignores pastes into editable content', () => {
-    const onFiles = vi.fn()
-    render(
-      <FileDrop fullWindow accept="image/*" onFiles={onFiles}>
-        <div>Editable</div>
-      </FileDrop>,
-    )
-    const editable = screen.getByText('Editable')
+  it('ignores pastes into editable content and pastes without files', () => {
+    const { full } = renderBoth()
+    const editable = screen.getByText('Page')
     Object.defineProperty(editable, 'isContentEditable', { value: true })
     fireEvent.paste(editable, { clipboardData: { files: [png()] } })
-    expect(onFiles).not.toHaveBeenCalled()
+    fireEvent.paste(document.body, { clipboardData: { files: [] } })
+    expect(full).not.toHaveBeenCalled()
   })
 })
 

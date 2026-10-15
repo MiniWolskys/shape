@@ -9,13 +9,11 @@ import { openSampleLibrary } from '../../state/sample.ts'
 import { useWorkspace } from '../../state/workspace.ts'
 import { Button } from '../../ui/Button.tsx'
 import { Dialog } from '../../ui/Dialog.tsx'
-import { errorMessage } from '../../ui/errors.ts'
-import { FileDrop } from '../../ui/FileDrop.tsx'
 import { Icon } from '../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../ui/PaintingCanvas.tsx'
-import { toast } from '../../ui/toastStore.ts'
 import { TopBar } from '../../ui/TopBar.tsx'
 import styles from './HomeScreen.module.css'
+import { importPackFile } from '../packImport.ts'
 import { NewLibraryDialog } from './NewLibraryDialog.tsx'
 
 const SHOWCASE = { width: 3, height: 4, ppb: 32 }
@@ -90,20 +88,7 @@ export function HomeScreen() {
   }
 
   async function openPack(file: File) {
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const { added } = useWorkspace.getState().importPack(bytes)
-      toast(plural(t, t.home.packAdded, added))
-      go({ name: 'library' })
-    } catch (error) {
-      const namespace = useWorkspace.getState().library?.namespace ?? ''
-      toast(errorMessage(error, t, { namespace }), 'error')
-    }
-  }
-
-  function onFiles(files: File[]) {
-    const [file] = files
-    if (file) void openPack(file)
+    if (await importPackFile(file)) go({ name: 'library' })
   }
 
   function resume() {
@@ -149,7 +134,7 @@ export function HomeScreen() {
   const packFile = library ? `${library.namespace}-v${library.version}.zip` : t.home.anyPackFile
 
   return (
-    <FileDrop accept="" onFiles={onFiles} fullWindow>
+    <>
       <div className={styles.page}>
         <TopBar />
         <main className={styles.home}>
@@ -203,8 +188,9 @@ export function HomeScreen() {
                     accept=".zip,application/zip"
                     hidden
                     onChange={(event) => {
-                      onFiles(Array.from(event.target.files ?? []))
+                      const [file] = Array.from(event.target.files ?? [])
                       event.target.value = ''
+                      if (file) void openPack(file)
                     }}
                   />
                 </div>
@@ -288,6 +274,6 @@ export function HomeScreen() {
           {format(t.home.replaceWarning, { name: library?.name ?? '' })}
         </p>
       </Dialog>
-    </FileDrop>
+    </>
   )
 }
