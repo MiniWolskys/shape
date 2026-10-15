@@ -60,6 +60,13 @@ describe('Segmented', () => {
     expect(onChange).toHaveBeenLastCalledWith('nomod')
   })
 
+  it('does not report a change when the selected option is clicked again', async () => {
+    const onChange = vi.fn()
+    render(<SegmentedHarness onChange={onChange} />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Editor' }))
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('only the selected option is in the tab order', () => {
     render(<SegmentedHarness onChange={() => {}} />)
     expect(screen.getByRole('radio', { name: 'Editor' })).toHaveAttribute('tabindex', '0')
@@ -108,18 +115,46 @@ describe('Dialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('closes when open becomes false', () => {
+  it('closes when open becomes false, without calling onClose', () => {
+    const onClose = vi.fn()
     const { rerender } = render(
-      <Dialog open title="Rename" onClose={() => {}} actions={null}>
+      <Dialog open title="Rename" onClose={onClose} actions={null}>
         body
       </Dialog>,
     )
     rerender(
-      <Dialog open={false} title="Rename" onClose={() => {}} actions={null}>
+      <Dialog open={false} title="Rename" onClose={onClose} actions={null}>
         body
       </Dialog>,
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('calls onClose once when the browser closes the dialog itself', () => {
+    const onClose = vi.fn()
+    render(
+      <Dialog open title="Rename" onClose={onClose} actions={null}>
+        body
+      </Dialog>,
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Rename' }) as HTMLDialogElement
+    act(() => dialog.close())
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores Escape while an input method is composing', () => {
+    const onClose = vi.fn()
+    render(
+      <Dialog open title="Rename" onClose={onClose} actions={null}>
+        <input aria-label="Name" />
+      </Dialog>,
+    )
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Name' }), {
+      key: 'Escape',
+      isComposing: true,
+    })
+    expect(onClose).not.toHaveBeenCalled()
   })
 })
 
@@ -244,6 +279,83 @@ describe('FileDrop', () => {
     })
     expect(onFiles).toHaveBeenCalledWith([png, zip])
   })
+
+  function renderBoth() {
+    const full = vi.fn()
+    const local = vi.fn()
+    render(
+      <FileDrop fullWindow accept="image/*" onFiles={full}>
+        <p>Page</p>
+        <FileDrop accept="image/*" onFiles={local}>
+          <button type="button">Local zone</button>
+        </FileDrop>
+      </FileDrop>,
+    )
+    return { full, local }
+  }
+  const overlay = () => document.querySelector('[data-drop-overlay]')
+  const png = () => new File(['x'], 'a.png', { type: 'image/png' })
+
+  it('delivers a drop on a local zone once, to that zone, and clears the window overlay', () => {
+    const { full, local } = renderBoth()
+    const zone = screen.getByText('Local zone')
+    fireEvent.dragEnter(zone, { dataTransfer: { files: [], types: ['Files'] } })
+    expect(overlay()).not.toBeNull()
+    const file = png()
+    fireEvent.drop(zone, { dataTransfer: { files: [file], types: ['Files'] } })
+    expect(local).toHaveBeenCalledTimes(1)
+    expect(local).toHaveBeenCalledWith([file])
+    expect(full).not.toHaveBeenCalled()
+    expect(overlay()).toBeNull()
+  })
+
+  it('delivers a drop elsewhere to the full-window handler only', () => {
+    const { full, local } = renderBoth()
+    const page = screen.getByText('Page')
+    fireEvent.dragEnter(page, { dataTransfer: { files: [], types: ['Files'] } })
+    const file = png()
+    fireEvent.drop(page, { dataTransfer: { files: [file], types: ['Files'] } })
+    expect(full).toHaveBeenCalledTimes(1)
+    expect(full).toHaveBeenCalledWith([file])
+    expect(local).not.toHaveBeenCalled()
+    expect(overlay()).toBeNull()
+  })
+
+  it('clears the overlay when the drag ends without a drop', () => {
+    renderBoth()
+    fireEvent.dragEnter(screen.getByText('Page'), { dataTransfer: { files: [], types: ['Files'] } })
+    expect(overlay()).not.toBeNull()
+    fireEvent.dragEnd(screen.getByText('Page'))
+    expect(overlay()).toBeNull()
+  })
+
+  it('gives a paste to the full-window handler unless focus is inside a local zone', () => {
+    const { full, local } = renderBoth()
+    const first = png()
+    fireEvent.paste(document.body, { clipboardData: { files: [first] } })
+    expect(full).toHaveBeenCalledWith([first])
+    expect(local).not.toHaveBeenCalled()
+
+    const button = screen.getByRole('button', { name: 'Local zone' })
+    button.focus()
+    const second = png()
+    fireEvent.paste(button, { clipboardData: { files: [second] } })
+    expect(local).toHaveBeenCalledWith([second])
+    expect(full).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores pastes into editable content', () => {
+    const onFiles = vi.fn()
+    render(
+      <FileDrop fullWindow accept="image/*" onFiles={onFiles}>
+        <div>Editable</div>
+      </FileDrop>,
+    )
+    const editable = screen.getByText('Editable')
+    Object.defineProperty(editable, 'isContentEditable', { value: true })
+    fireEvent.paste(editable, { clipboardData: { files: [png()] } })
+    expect(onFiles).not.toHaveBeenCalled()
+  })
 })
 
 describe('downloadBytes', () => {
@@ -261,7 +373,9 @@ describe('downloadBytes', () => {
       const anchor = click.mock.contexts[0] as HTMLAnchorElement
       expect(anchor.download).toBe('pack.zip')
       expect(anchor.isConnected).toBe(false)
-      vi.runAllTimers()
+      vi.advanceTimersByTime(9_999)
+      expect(revoke).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(1)
       expect(revoke).toHaveBeenCalledWith('blob:fake')
     } finally {
       click.mockRestore()

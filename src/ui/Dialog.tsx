@@ -16,6 +16,11 @@ const FOCUSABLE = `${FIELDS}, button:not([disabled]), [href], [tabindex]:not([ta
 export function Dialog({ open, title, onClose, children, actions }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
+  // What the owner last asked for; a native close only needs reporting while it says open.
+  const wantsOpen = useRef(open)
+  useEffect(() => {
+    wantsOpen.current = open
+  }, [open])
 
   useEffect(() => {
     const dialog = ref.current
@@ -31,7 +36,7 @@ export function Dialog({ open, title, onClose, children, actions }: DialogProps)
   }, [open])
 
   function onKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
-    if (event.key !== 'Escape') return
+    if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
     // Stops the browser closing the dialog itself: `open` stays the source of truth.
     event.preventDefault()
     onClose()
@@ -45,6 +50,12 @@ export function Dialog({ open, title, onClose, children, actions }: DialogProps)
       onKeyDown={onKeyDown}
       onCancel={(event) => {
         event.preventDefault()
+        onClose()
+      }}
+      onClose={() => {
+        // The browser closed it (e.g. a form with method="dialog"): tell the owner once.
+        if (!wantsOpen.current) return
+        wantsOpen.current = false
         onClose()
       }}
     >

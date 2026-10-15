@@ -22,7 +22,7 @@ export function Segmented<T extends string>({
   function select(index: number) {
     const option = options[index]
     if (!option) return
-    onChange(option.value)
+    if (option.value !== value) onChange(option.value)
     buttons.current[index]?.focus()
   }
 

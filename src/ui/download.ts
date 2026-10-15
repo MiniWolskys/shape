@@ -1,3 +1,5 @@
+const REVOKE_AFTER_MS = 10_000
+
 /** Saves bytes as a file through a temporary link to an object URL. */
 export function downloadBytes(bytes: Uint8Array, fileName: string, mime: string): void {
   const blob = new Blob([bytes as Uint8Array<ArrayBuffer>], { type: mime })
@@ -9,6 +11,6 @@ export function downloadBytes(bytes: Uint8Array, fileName: string, mime: string)
   document.body.append(link)
   link.click()
   link.remove()
-  // Revoke on the next task so the browser has started the download.
-  setTimeout(() => URL.revokeObjectURL(url), 0)
+  // Some browsers read the URL lazily; give the download time to start before revoking.
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS)
 }
