@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SHAPE_IDS, type Painting, type ShapeId } from '../../domain/types.ts'
-import { renderPicture } from '../../imaging/pipeline.ts'
+import { createStagedRenderer } from '../../imaging/pipeline.ts'
 import type { Raster } from '../../imaging/raster.ts'
 import { hashString } from '../../imaging/shapes.ts'
 import { applyWindow } from '../../imaging/window.ts'
@@ -13,6 +13,12 @@ const CACHE_LIMIT = SHAPE_IDS.length * 6
 
 /** Shape thumbnails by `${pictureKey}|${shape}`, oldest first. */
 const cache = new Map<string, Raster>()
+
+/** Keeps the turned and resized picture, so a new glass or frame does not redo them. */
+const pictures = createStagedRenderer()
+useEditor.subscribe((state) => {
+  if (!state.painting) pictures.clear()
+})
 
 /** Stable ids for pictures, so a key can name one without hashing its pixels. */
 const pictureIds = new WeakMap<Raster, number>()
@@ -111,7 +117,7 @@ export function useShapeThumbnails(): Partial<Record<ShapeId, Raster>> {
       // A newer painting state has its own key and its own run.
       if (!p || !shape || keyOf(p, s) !== key) return
       try {
-        picture ??= renderPicture(s, { ...p, pixelsPerBlock: thumbnailPpb(p) })
+        picture ??= pictures.picture(s, { ...p, pixelsPerBlock: thumbnailPpb(p) })
         store(`${key}|${shape}`, renderShape(picture, p, shape))
         setDrawn((n) => n + 1)
       } catch (error) {

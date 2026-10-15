@@ -77,7 +77,8 @@ export function selectSimilar(
   return mask
 }
 
-function copyLayer(layer: EditLayer): EditLayer {
+/** A fresh layer holding the same edits. */
+export function copyLayer(layer: EditLayer): EditLayer {
   const out = createEditLayer(layer.values.width, layer.values.height)
   out.values.data.set(layer.values.data)
   out.mask.set(layer.mask)
@@ -167,7 +168,15 @@ function drawLine(
 
 /** Draws Bresenham lines through consecutive points; out-of-bounds pixels are ignored. */
 export function pencil(layer: EditLayer, points: Array<[number, number]>, color: RGBA): EditLayer {
-  const out = copyLayer(layer)
+  return pencilInto(copyLayer(layer), points, color)
+}
+
+/** `pencil`, drawing into `out` itself (a stroke's own working layer); returns `out`. */
+export function pencilInto(
+  out: EditLayer,
+  points: Array<[number, number]>,
+  color: RGBA,
+): EditLayer {
   const w = out.values.width
   const h = out.values.height
   const plot = (x: number, y: number): void => {

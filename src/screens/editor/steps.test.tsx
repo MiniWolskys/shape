@@ -206,6 +206,31 @@ describe('editor steps', () => {
       expect(useEditor.getState().edits).toBeNull()
     })
 
+    it('two strokes are two undo steps and never change the edits from before them', async () => {
+      await open(flatPainting(), 'pixels')
+      act(() => useEditor.getState().setTool('pencil'))
+      mockRect(8, 12)
+      const el = surface()
+      const stroke = (y: number) => {
+        fireEvent.pointerDown(el, { button: 0, pointerId: 1, clientX: 0, clientY: y })
+        fireEvent.pointerMove(el, { pointerId: 1, clientX: 5, clientY: y })
+        fireEvent.pointerUp(el, { pointerId: 1, clientX: 5, clientY: y })
+      }
+      stroke(1)
+      const first = useEditor.getState().edits
+      const firstMask = Array.from(first?.mask ?? [])
+      stroke(4)
+      expect(useEditor.getState().edits?.mask[4 * 8]).toBe(1)
+      // The first stroke's layer still holds only the first stroke.
+      expect(Array.from(first?.mask ?? [])).toEqual(firstMask)
+      expect(first?.mask[4 * 8]).toBe(0)
+      expect(useEditor.getState().past).toHaveLength(2)
+      act(() => useEditor.getState().undo())
+      expect(useEditor.getState().edits).toBe(first)
+      // What is on screen is the render of the edits now in place.
+      expect(cachedRender()?.data).toEqual(rendered().data)
+    })
+
     it('a stroke leaving the painting does not paint along its edge', async () => {
       await open(flatPainting(), 'pixels')
       act(() => useEditor.getState().setTool('pencil'))

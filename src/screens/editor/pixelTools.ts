@@ -1,9 +1,13 @@
-import { create } from 'zustand'
 import { createEditLayer, resampleEdits, type EditLayer } from '../../imaging/edits.ts'
 import type { Raster, RGBA } from '../../imaging/raster.ts'
-import { eyedropper, paintMask, pencil, selectSimilar } from '../../imaging/tools.ts'
+import { copyLayer, eyedropper, paintMask, pencilInto, selectSimilar } from '../../imaging/tools.ts'
 import { useEditor, type Tool } from '../../state/editor.ts'
-import { currentRaster } from '../../state/useRenderedPainting.ts'
+import {
+  beginStroke,
+  currentRaster,
+  endStroke,
+  previewStroke,
+} from '../../state/useRenderedPainting.ts'
 import { TRANSPARENT } from './color.ts'
 import type { PixelPhase } from './CanvasStage.tsx'
 
@@ -50,10 +54,38 @@ function union(a: Uint8Array | null, b: Uint8Array): Uint8Array {
   return out
 }
 
-/** Whether a pencil or eraser stroke is in progress (previews that can wait pause meanwhile). */
-export const useStroke = create<{ active: boolean }>(() => ({ active: false }))
-
 type Point = [number, number]
+
+/**
+ * Paints a stroke segment into the edits (one undo step per stroke) and shows it at once over
+ * the last render: no full render until the stroke ends.
+ *
+ * A stroke paints into its own copy of the edits, made when it starts, instead of copying the
+ * whole layer on every frame (which made the garbage collector stall the stroke). Each frame
+ * still commits a new layer object around those pixels, so identity checks see the change; the
+ * history only keeps the layer from before the stroke (its moves merge into one undo step),
+ * so no layer anything else holds changes underneath it.
+ */
+function paintStroke(stroke: Stroke, points: Point[]): void {
+  if (!stroke.layer || useEditor.getState().edits !== stroke.committed) {
+    // First paint, or the edits changed meanwhile (an undo): start from what is there now.
+    const base = editableLayer()
+    if (!base) return
+    stroke.layer = copyLayer(base)
+  }
+  pencilInto(stroke.layer, points, stroke.color)
+  const layer: EditLayer = { values: stroke.layer.values, mask: stroke.layer.mask }
+  useEditor.getState().setEdits(layer, STROKE)
+  stroke.committed = layer
+  const xs = points.map((p) => Math.round(p[0]))
+  const ys = points.map((p) => Math.round(p[1]))
+  previewStroke(layer, {
+    x0: Math.min(...xs),
+    y0: Math.min(...ys),
+    x1: Math.max(...xs),
+    y1: Math.max(...ys),
+  })
+}
 
 /** A pencil or eraser stroke in progress. */
 export interface Stroke {
@@ -63,6 +95,9 @@ export interface Stroke {
   pending: Point[]
   color: RGBA
   cancelFrame: (() => void) | null
+  /** The stroke's own working copy of the edits, and the layer it last committed. */
+  layer: EditLayer | null
+  committed: EditLayer | null
 }
 
 export const newStroke = (): Stroke => ({
@@ -70,6 +105,8 @@ export const newStroke = (): Stroke => ({
   pending: [],
   color: TRANSPARENT,
   cancelFrame: null,
+  layer: null,
+  committed: null,
 })
 
 function nextFrame(task: () => void): () => void {
@@ -90,8 +127,7 @@ function flushStroke(stroke: Stroke): void {
   if (!last || !end) return
   stroke.pending = []
   stroke.last = end
-  const base = editableLayer()
-  if (base) useEditor.getState().setEdits(pencil(base, [last, ...pending], stroke.color), STROKE)
+  paintStroke(stroke, [last, ...pending])
 }
 
 export interface ToolContext {
@@ -119,9 +155,8 @@ export function applyToolAt(x: number, y: number, phase: PixelPhase, ctx: ToolCo
         last: [x, y],
         color: tool === 'eraser' ? TRANSPARENT : editor.color,
       })
-      useStroke.setState({ active: true })
-      const base = editableLayer()
-      if (base) editor.setEdits(pencil(base, [[x, y]], stroke.color), STROKE)
+      beginStroke()
+      paintStroke(stroke, [[x, y]])
       return
     }
     if (!stroke.last) return
@@ -130,7 +165,7 @@ export function applyToolAt(x: number, y: number, phase: PixelPhase, ctx: ToolCo
     if (phase === 'up') {
       flushStroke(stroke)
       stroke.last = null
-      useStroke.setState({ active: false })
+      endStroke()
     } else if (!stroke.cancelFrame && stroke.pending.length > 0) {
       stroke.cancelFrame = nextFrame(() => {
         stroke.cancelFrame = null

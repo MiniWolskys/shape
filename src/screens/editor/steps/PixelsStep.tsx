@@ -1,11 +1,19 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
+import {
+  useDeferredValue,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { DYE_IDS } from '../../../domain/types.ts'
 import { format, plural, useT } from '../../../i18n/i18n.ts'
 import type { RGBA } from '../../../imaging/raster.ts'
 import { maskSize } from '../../../imaging/tools.ts'
 import { renderWallPreview } from '../../../imaging/wall.ts'
 import { useEditor, type Tool } from '../../../state/editor.ts'
-import { useRenderedPainting } from '../../../state/useRenderedPainting.ts'
+import { endStroke, useRenderedPainting } from '../../../state/useRenderedPainting.ts'
 import { Button } from '../../../ui/Button.tsx'
 import { Icon } from '../../../ui/Icon.tsx'
 import { PaintingCanvas } from '../../../ui/PaintingCanvas.tsx'
@@ -26,7 +34,6 @@ import {
   newStroke,
   outlinePath,
   paintSelection,
-  useStroke,
   type ToolContext,
 } from '../pixelTools.ts'
 import styles from './steps.module.css'
@@ -60,7 +67,7 @@ export function PixelsStage() {
     return () => {
       stroke.cancelFrame?.()
       stroke.cancelFrame = null
-      useStroke.setState({ active: false })
+      endStroke()
     }
   }, [])
 
@@ -154,13 +161,14 @@ export function PixelsPanel() {
   const blocksW = painting?.width ?? 1
   const blocksH = painting?.height ?? 1
   const ppb = painting?.pixelsPerBlock ?? 1
-  // The wall preview waits for the end of a stroke: it would cost as much as the stroke itself.
-  const stroking = useStroke((s) => s.active)
+  // The wall preview waits for a stroke's own render: it would cost as much as the stroke itself.
   const [wallSource, setWallSource] = useState(rendered.raster)
-  if (!stroking && wallSource !== rendered.raster) setWallSource(rendered.raster)
+  if (!rendered.drawing && wallSource !== rendered.raster) setWallSource(rendered.raster)
+  // Drawn in a later, lower-priority render: the painting itself shows first.
+  const wallInput = useDeferredValue(wallSource)
   const wall = useMemo(
-    () => wallSource && renderWallPreview(wallSource, blocksW, blocksH, ppb),
-    [wallSource, blocksW, blocksH, ppb],
+    () => wallInput && renderWallPreview(wallInput, blocksW, blocksH, ppb),
+    [wallInput, blocksW, blocksH, ppb],
   )
   if (!painting) return null
 

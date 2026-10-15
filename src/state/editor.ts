@@ -63,6 +63,8 @@ export interface EditorState {
   /**
    * Pushes history. Tools must pass a fresh layer and never mutate `edits` in place: the
    * history keeps references to earlier layers, and the save and render memos compare by identity.
+   * (A pencil stroke reuses its own working pixels from frame to frame, in a new layer object
+   * each time; its frames merge into one undo step, so the history never holds them.)
    */
   setEdits(layer: EditLayer, options?: ChangeOptions): void
   /** Resamples edits; throws ShapeError('published-locked') via updatePainting. */

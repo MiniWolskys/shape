@@ -10,6 +10,7 @@ import {
 import { format, useT } from '../../i18n/i18n.ts'
 import type { Raster } from '../../imaging/raster.ts'
 import { renderWallPreview } from '../../imaging/wall.ts'
+import { withoutMod } from '../../imaging/window.ts'
 import { useEditor, type BackdropChoice, type CanvasView } from '../../state/editor.ts'
 import { useRenderedPainting } from '../../state/useRenderedPainting.ts'
 import { autoBackdrop, type BackdropKind } from '../../ui/backdrop.ts'
@@ -123,7 +124,12 @@ export function CanvasStage({ onPixel, overlay, footer, tools }: CanvasStageProp
     [view, rendered.raster, blocksW, blocksH, ppb],
   )
 
-  const shown = view === 'nomod' ? rendered.withoutMod : rendered.raster
+  // The no-mod look is only worked out while it is the view.
+  const nomod = useMemo(
+    () => (view === 'nomod' && rendered.raster ? withoutMod(rendered.raster) : null),
+    [view, rendered.raster],
+  )
+  const shown = view === 'nomod' ? nomod : rendered.raster
   const withTools = tools !== undefined && view === 'edit'
   const fitBox = withTools ? { width: box.width - TOOLS_ROOM, height: box.height } : box
   const fit = shown ? fitScale(shown, fitBox) : 1

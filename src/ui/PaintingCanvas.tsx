@@ -23,13 +23,20 @@ function displayScale(raster: Raster, scale?: number, fit?: { width: number; hei
 
 export function PaintingCanvas({ raster, scale, fit, label, backdrop }: PaintingCanvasProps) {
   const ref = useRef<HTMLCanvasElement>(null)
+  // Kept between draws: a big painting redrawn on every stroke frame would otherwise allocate
+  // megabytes per frame and stall on garbage collection.
+  const image = useRef<ImageData | null>(null)
 
   useEffect(() => {
     const ctx = ref.current?.getContext('2d')
     if (!ctx || raster.width === 0 || raster.height === 0) return
-    const image = ctx.createImageData(raster.width, raster.height)
-    image.data.set(raster.data)
-    ctx.putImageData(image, 0, 0)
+    let pixels = image.current
+    if (!pixels || pixels.width !== raster.width || pixels.height !== raster.height) {
+      pixels = ctx.createImageData(raster.width, raster.height)
+      image.current = pixels
+    }
+    pixels.data.set(raster.data)
+    ctx.putImageData(pixels, 0, 0)
   }, [raster])
 
   const s = displayScale(raster, scale, fit)
